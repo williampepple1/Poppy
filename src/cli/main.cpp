@@ -11,7 +11,9 @@
 #include <core/BruParser.h>
 #include <core/VariableResolver.h>
 #include <core/ScriptRunner.h>
+#include <core/assertions/DeclarativeAssertion.h>
 #include <network/CurlNetworkEngine.h>
+#include <QThread>
 
 using namespace poppy;
 
@@ -44,6 +46,9 @@ int main(int argc, char *argv[]) {
     QCommandLineOption reporterOption(QStringList() << "r" << "reporter", "Output format: cli, json, or junit", "reporter", "cli");
     parser.addOption(reporterOption);
 
+    QCommandLineOption delayOption("delay", "Delay between requests in milliseconds", "ms", "0");
+    parser.addOption(delayOption);
+
     QCommandLineOption outputOption(QStringList() << "o" << "output", "Save output report to file", "file");
     parser.addOption(outputOption);
 
@@ -51,7 +56,7 @@ int main(int argc, char *argv[]) {
 
     const QStringList args = parser.positionalArguments();
     if (args.isEmpty() || (args.size() > 0 && args.at(0) != "run")) {
-        std::cout << "Usage: poppy run <path-to-collection> [--env <env-name>] [--reporter cli|json|junit]" << std::endl;
+        std::cout << "Usage: poppy run <path-to-collection> [--env <env-name>] [--reporter cli|json|junit] [--delay <ms>]" << std::endl;
         return 1;
     }
 
@@ -64,6 +69,7 @@ int main(int argc, char *argv[]) {
     QString envName = parser.value(envOption);
     QString reporter = parser.value(reporterOption).toLower();
     QString outputFile = parser.value(outputOption);
+    int delayMs = parser.value(delayOption).toInt();
 
     core::CollectionModel collection;
     QList<core::RequestModel> requestsToRun;
@@ -110,6 +116,9 @@ int main(int argc, char *argv[]) {
         std::cout << " Target:      " << collectionPath.toStdString() << "\n";
         std::cout << " Environment: " << (envName.isEmpty() ? "None" : envName.toStdString()) << "\n";
         std::cout << " Requests:    " << requestsToRun.size() << "\n";
+        if (delayMs > 0) {
+            std::cout << " Delay:       " << delayMs << " ms\n";
+        }
         std::cout << "=======================================================\n\n";
     }
 
@@ -119,9 +128,24 @@ int main(int argc, char *argv[]) {
     int passedTests = 0;
     qint64 totalLatencyMs = 0;
 
+    struct SuiteResult {
+        QString name;
+        QString url;
+        QString method;
+        int statusCode{0};
+        qint64 latencyMs{0};
+        bool success{false};
+        QString errorString;
+        QList<core::TestCaseResult> tests;
+    };
+    QList<SuiteResult> suiteResults;
     QJsonArray jsonResults;
 
     for (int i = 0; i < requestsToRun.size(); ++i) {
+        if (delayMs > 0 && i > 0) {
+            QThread::msleep(delayMs);
+        }
+
         core::RequestModel req = requestsToRun[i];
         core::RequestModel resolvedReq = resolver.resolveRequest(req);
 
@@ -145,6 +169,13 @@ int main(int argc, char *argv[]) {
 
         // Tests
         core::TestReport report = scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, activeEnv);
+
+        // Declarative Assertions
+        auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
+        for (const auto& dr : declResults) {
+            report.results.append(dr);
+        }
+
         totalTests += report.totalCount();
         passedTests += report.passedCount();
 
@@ -169,15 +200,26 @@ int main(int argc, char *argv[]) {
             std::cout << "\n";
         }
 
+        SuiteResult sr;
+        sr.name = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
+        sr.url = resolvedReq.effectiveUrl();
+        sr.method = core::methodToString(resolvedReq.method);
+        sr.statusCode = res.statusCode;
+        sr.latencyMs = res.latencyMs;
+        sr.success = requestPassed;
+        sr.errorString = res.errorString;
+        sr.tests = report.results;
+        suiteResults.append(sr);
+
         if (reporter == "json") {
             QJsonObject reqObj;
-            reqObj["name"] = resolvedReq.name;
-            reqObj["url"] = resolvedReq.effectiveUrl();
-            reqObj["method"] = core::methodToString(resolvedReq.method);
-            reqObj["statusCode"] = res.statusCode;
-            reqObj["latencyMs"] = res.latencyMs;
+            reqObj["name"] = sr.name;
+            reqObj["url"] = sr.url;
+            reqObj["method"] = sr.method;
+            reqObj["statusCode"] = sr.statusCode;
+            reqObj["latencyMs"] = sr.latencyMs;
             reqObj["sizeBytes"] = res.sizeBytes;
-            reqObj["passed"] = requestPassed;
+            reqObj["passed"] = sr.success;
 
             QJsonArray testsArr;
             for (const auto& t : report.results) {
@@ -218,6 +260,81 @@ int main(int argc, char *argv[]) {
             }
         } else {
             std::cout << jsonStr.toStdString() << std::endl;
+        }
+    } else if (reporter == "junit") {
+        auto escapeXml = [](QString s) -> QString {
+            s.replace("&", "&amp;");
+            s.replace("<", "&lt;");
+            s.replace(">", "&gt;");
+            s.replace("\"", "&quot;");
+            s.replace("'", "&apos;");
+            return s;
+        };
+
+        QString xml;
+        xml += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
+        int failedSuites = totalRequests - passedRequests;
+        double totalSeconds = totalLatencyMs / 1000.0;
+        xml += QString("<testsuites name=\"Poppy Collection\" tests=\"%1\" failures=\"%2\" time=\"%3\">\n")
+                   .arg(totalTests > 0 ? totalTests : totalRequests)
+                   .arg(totalTests > 0 ? (totalTests - passedTests) : failedSuites)
+                   .arg(totalSeconds, 0, 'f', 3);
+
+        for (const auto& sr : suiteResults) {
+            int sTests = sr.tests.size();
+            int sFails = 0;
+            for (const auto& t : sr.tests) {
+                if (!t.passed) ++sFails;
+            }
+            if (sTests == 0) {
+                sTests = 1;
+                if (!sr.success) sFails = 1;
+            }
+
+            xml += QString("  <testsuite name=\"%1\" tests=\"%2\" failures=\"%3\" time=\"%4\">\n")
+                       .arg(escapeXml(sr.name))
+                       .arg(sTests)
+                       .arg(sFails)
+                       .arg(sr.latencyMs / 1000.0, 0, 'f', 3);
+
+            if (sr.tests.isEmpty()) {
+                xml += QString("    <testcase name=\"HTTP %1 %2\" classname=\"%3\" time=\"%4\"")
+                           .arg(sr.method, escapeXml(sr.url), escapeXml(sr.name))
+                           .arg(sr.latencyMs / 1000.0, 0, 'f', 3);
+                if (!sr.success) {
+                    xml += ">\n";
+                    QString errMsg = sr.errorString.isEmpty() ? QString("HTTP status %1").arg(sr.statusCode) : sr.errorString;
+                    xml += QString("      <failure message=\"%1\">%1</failure>\n").arg(escapeXml(errMsg));
+                    xml += "    </testcase>\n";
+                } else {
+                    xml += " />\n";
+                }
+            } else {
+                for (const auto& t : sr.tests) {
+                    xml += QString("    <testcase name=\"%1\" classname=\"%2\" time=\"%3\"")
+                               .arg(escapeXml(t.name))
+                               .arg(escapeXml(sr.name))
+                               .arg(t.durationMs / 1000.0, 0, 'f', 3);
+                    if (!t.passed) {
+                        xml += ">\n";
+                        xml += QString("      <failure message=\"%1\">%1</failure>\n").arg(escapeXml(t.errorMessage));
+                        xml += "    </testcase>\n";
+                    } else {
+                        xml += " />\n";
+                    }
+                }
+            }
+            xml += "  </testsuite>\n";
+        }
+        xml += "</testsuites>\n";
+
+        if (!outputFile.isEmpty()) {
+            QFile out(outputFile);
+            if (out.open(QIODevice::WriteOnly | QIODevice::Text)) {
+                out.write(xml.toUtf8());
+            }
+        } else {
+            std::cout << xml.toStdString() << std::endl;
         }
     }
 

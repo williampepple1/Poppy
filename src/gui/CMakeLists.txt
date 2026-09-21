@@ -9,9 +9,13 @@ add_executable(poppy
     editors/BodyEditor.h editors/BodyEditor.cpp
     editors/AuthEditor.h editors/AuthEditor.cpp
     editors/ScriptEditor.h editors/ScriptEditor.cpp
+    editors/AssertionsEditor.h editors/AssertionsEditor.cpp
     inspectors/ResponseInspector.h inspectors/ResponseInspector.cpp
     sidebar/CollectionSidebar.h sidebar/CollectionSidebar.cpp
     dialogs/EnvironmentDialog.h dialogs/EnvironmentDialog.cpp
+    dialogs/CodeSnippetDialog.h dialogs/CodeSnippetDialog.cpp
+    dialogs/ImportDialog.h dialogs/ImportDialog.cpp
+    dialogs/CollectionRunnerDialog.h dialogs/CollectionRunnerDialog.cpp
 )
 
 target_include_directories(poppy PRIVATE

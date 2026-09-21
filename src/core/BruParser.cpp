@@ -92,6 +92,28 @@ RequestModel BruParser::parse(const QString& content) {
                     }
 
                     if (!kvLine.isEmpty() && !kvLine.startsWith('#')) {
+                        if (blockName == "assertions") {
+                            bool enabled = true;
+                            if (kvLine.startsWith('~')) {
+                                enabled = false;
+                                kvLine = kvLine.mid(1).trimmed();
+                            }
+                            QStringList parts = kvLine.split(' ', Qt::SkipEmptyParts);
+                            if (parts.size() >= 3) {
+                                QString target = parts[0];
+                                QString op = parts[1];
+                                QString expected = parts.mid(2).join(' ');
+                                req.assertions.append(AssertionRule{
+                                    .target = target,
+                                    .op = op,
+                                    .expected = expected,
+                                    .enabled = enabled
+                                });
+                            }
+                            ++i;
+                            continue;
+                        }
+
                         int colonIdx = kvLine.indexOf(':');
                         if (colonIdx > 0) {
                             QString key = kvLine.left(colonIdx).trimmed();

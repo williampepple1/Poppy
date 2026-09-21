@@ -35,6 +35,9 @@ private slots:
     void onOpenCollection();
     void onSaveRequest();
     void onCopyAsCurl();
+    void onShowCodeSnippets();
+    void onImport();
+    void onRunCollection();
     void onManageEnvironments();
     void onRequestSelected(core::CollectionItem* item);
     void onEnvironmentChanged(const QString& envName);
@@ -64,6 +67,7 @@ private:
     QPushButton* m_sendBtn;
     QPushButton* m_saveBtn;
     QPushButton* m_curlBtn;
+    QPushButton* m_snippetBtn;
 
     QTabWidget* m_requestTabs;
     ParamsEditor* m_paramsEditor;
@@ -71,6 +75,7 @@ private:
     BodyEditor* m_bodyEditor;
     AuthEditor* m_authEditor;
     ScriptEditor* m_scriptEditor;
+    class AssertionsEditor* m_assertionsEditor;
 
     ResponseInspector* m_responseInspector;
 };

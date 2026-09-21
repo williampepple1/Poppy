@@ -1,0 +1,30 @@
+#pragma once
+
+#include <QString>
+#include <core/RequestModel.h>
+
+namespace poppy::core {
+
+enum class TargetLanguage {
+    PythonRequests,
+    JavaScriptFetch,
+    JavaScriptAxios,
+    GoHttp,
+    CppCurl,
+    Curl
+};
+
+class CodeGenerator {
+public:
+    static QString generate(TargetLanguage lang, const RequestModel& req);
+    static QString languageName(TargetLanguage lang);
+
+private:
+    static QString generatePython(const RequestModel& req);
+    static QString generateJsFetch(const RequestModel& req);
+    static QString generateJsAxios(const RequestModel& req);
+    static QString generateGo(const RequestModel& req);
+    static QString generateCpp(const RequestModel& req);
+};
+
+} // namespace poppy::core

@@ -4,11 +4,12 @@
 #include <QString>
 #include <QList>
 #include <QJSEngine>
-#include "RequestModel.h"
-#include "ResponseModel.h"
-#include "EnvironmentModel.h"
 
 namespace poppy::core {
+
+class RequestModel;
+class ResponseModel;
+class EnvironmentModel;
 
 struct TestCaseResult {
     QString name;

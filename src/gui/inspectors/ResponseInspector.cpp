@@ -4,6 +4,7 @@
 #include <QHeaderView>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QTextBrowser>
 #include <Theme.h>
 
 namespace poppy::gui {
@@ -52,13 +53,35 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     m_tabWidget = new QTabWidget(this);
 
     // Tab 0: Body
-    m_bodyViewer = new QPlainTextEdit(this);
+    m_bodyTab = new QWidget(this);
+    auto* bLayout = new QVBoxLayout(m_bodyTab);
+    bLayout->setContentsMargins(0, 4, 0, 0);
+
+    m_bodySearchFilter = new QLineEdit(m_bodyTab);
+    m_bodySearchFilter->setPlaceholderText("Search in response body...");
+    connect(m_bodySearchFilter, &QLineEdit::textChanged, this, [this](const QString& q) {
+        if (q.isEmpty()) {
+            m_bodyViewer->find("", QTextDocument::FindFlags{});
+        } else {
+            m_bodyViewer->find(q);
+        }
+    });
+    bLayout->addWidget(m_bodySearchFilter);
+
+    m_bodyViewer = new QPlainTextEdit(m_bodyTab);
     m_bodyViewer->setReadOnly(true);
     QFont codeFont("Consolas", 10);
     if (!codeFont.exactMatch()) codeFont = QFont("Courier New", 10);
     m_bodyViewer->setFont(codeFont);
     m_jsonHighlighter = new JsonSyntaxHighlighter(m_bodyViewer->document());
-    m_tabWidget->addTab(m_bodyViewer, "Response Body");
+    bLayout->addWidget(m_bodyViewer);
+
+    m_tabWidget->addTab(m_bodyTab, "Response Body");
+
+    // Tab 1: HTML Preview
+    m_previewBrowser = new QTextBrowser(this);
+    m_previewBrowser->setOpenExternalLinks(false);
+    m_tabWidget->addTab(m_previewBrowser, "Preview (HTML)");
 
     // Tab 1: Headers
     m_headersTab = new QWidget(this);
@@ -116,23 +139,27 @@ void ResponseInspector::clear() {
     m_sizeBadge->setText("SIZE: ---");
     m_timingDetails->clear();
     m_bodyViewer->clear();
+    m_previewBrowser->clear();
+    m_bodySearchFilter->clear();
     m_headersTable->setRowCount(0);
     m_testsTable->setRowCount(0);
     m_testSummaryLabel->setText("No tests run");
-    m_tabWidget->setTabText(2, "Tests (0)");
+    m_tabWidget->setTabText(3, "Tests (0)");
 }
 
 void ResponseInspector::setResponse(const core::ResponseModel& res, const core::TestReport* testReport) {
     m_currentResponse = res;
     updateTelemetryBar(res);
 
-    // Body viewer
+    // Body viewer & HTML Preview
     m_isPretty = true;
     m_prettyRawToggleBtn->setText("Raw");
     if (res.isJson()) {
         m_bodyViewer->setPlainText(res.formattedJson());
+        m_previewBrowser->setHtml("<pre style=\"font-family: Consolas, monospace; color: #f4f4f5; background-color: #18181b;\">" + res.formattedJson().toHtmlEscaped() + "</pre>");
     } else {
         m_bodyViewer->setPlainText(res.bodyAsString());
+        m_previewBrowser->setHtml(res.bodyAsString());
     }
 
     // Headers table
@@ -202,11 +229,11 @@ void ResponseInspector::updateTestsTab(const core::TestReport* testReport) {
     if (!testReport || testReport->results.isEmpty()) {
         m_testSummaryLabel->setText("No tests registered in request.");
         m_testsTable->setRowCount(0);
-        m_tabWidget->setTabText(2, "Tests (0)");
+        m_tabWidget->setTabText(3, "Tests (0)");
         return;
     }
 
-    m_tabWidget->setTabText(2, QString("Tests (%1/%2)").arg(testReport->passedCount()).arg(testReport->totalCount()));
+    m_tabWidget->setTabText(3, QString("Tests (%1/%2)").arg(testReport->passedCount()).arg(testReport->totalCount()));
     QString summaryColor = (testReport->failedCount() == 0) ? "#10b981" : "#ef4444";
     m_testSummaryLabel->setStyleSheet(QString("font-weight: bold; color: %1; padding: 4px;").arg(summaryColor));
     m_testSummaryLabel->setText(QString("Tests Passed: %1 / %2 (Total Time: %3 ms)")

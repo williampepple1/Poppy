@@ -7,6 +7,7 @@
 #include <QTableWidget>
 #include <QPushButton>
 #include <QLineEdit>
+#include <QTextBrowser>
 #include <components/JsonSyntaxHighlighter.h>
 #include <core/ResponseModel.h>
 #include <core/ScriptRunner.h>
@@ -43,10 +44,15 @@ private:
     QTabWidget* m_tabWidget;
 
     // Body Tab
+    QWidget* m_bodyTab;
+    QLineEdit* m_bodySearchFilter;
     QPlainTextEdit* m_bodyViewer;
     JsonSyntaxHighlighter* m_jsonHighlighter;
     bool m_isPretty{true};
     core::ResponseModel m_currentResponse;
+
+    // Preview Tab
+    QTextBrowser* m_previewBrowser;
 
     // Headers Tab
     QWidget* m_headersTab;

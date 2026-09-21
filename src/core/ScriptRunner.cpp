@@ -1,4 +1,7 @@
 #include "ScriptRunner.h"
+#include "RequestModel.h"
+#include "ResponseModel.h"
+#include "EnvironmentModel.h"
 #include <QElapsedTimer>
 #include <QJsonDocument>
 #include <QJsonObject>

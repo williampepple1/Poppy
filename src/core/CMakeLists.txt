@@ -7,6 +7,11 @@ add_library(poppy_core STATIC
     BruWriter.h BruWriter.cpp
     CollectionModel.h CollectionModel.cpp
     ScriptRunner.h ScriptRunner.cpp
+    assertions/DeclarativeAssertion.h assertions/DeclarativeAssertion.cpp
+    importers/CurlImporter.h importers/CurlImporter.cpp
+    importers/PostmanImporter.h importers/PostmanImporter.cpp
+    importers/OpenApiImporter.h importers/OpenApiImporter.cpp
+    codegen/CodeGenerator.h codegen/CodeGenerator.cpp
 )
 
 target_include_directories(poppy_core PUBLIC

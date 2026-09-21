@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QUrl>
 #include <QUrlQuery>
+#include "assertions/AssertionRule.h"
 
 namespace poppy::core {
 
@@ -112,6 +113,7 @@ public:
 
     AuthModel auth;
     ScriptModel scripts;
+    QList<AssertionRule> assertions;
 
     // Computed effective URL after query and path parameter resolution
     QString effectiveUrl() const;

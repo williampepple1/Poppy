@@ -100,6 +100,17 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "}\n\n";
     }
 
+    // assertions
+    if (!req.assertions.isEmpty()) {
+        ts << "assertions {\n";
+        for (const auto& a : req.assertions) {
+            if (!a.target.isEmpty()) {
+                ts << "  " << (a.enabled ? "" : "~") << a.target << " " << a.op << " " << a.expected << "\n";
+            }
+        }
+        ts << "}\n\n";
+    }
+
     // tests
     if (!req.scripts.tests.trimmed().isEmpty()) {
         ts << "tests {\n";

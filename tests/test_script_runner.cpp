@@ -2,6 +2,9 @@
 #include <cassert>
 #include <QCoreApplication>
 #include <core/ScriptRunner.h>
+#include <core/RequestModel.h>
+#include <core/ResponseModel.h>
+#include <core/EnvironmentModel.h>
 
 using namespace poppy::core;
 

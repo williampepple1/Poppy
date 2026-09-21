@@ -11,6 +11,11 @@
 #include <QGuiApplication>
 #include <Theme.h>
 #include "dialogs/EnvironmentDialog.h"
+#include "dialogs/CodeSnippetDialog.h"
+#include "dialogs/ImportDialog.h"
+#include "dialogs/CollectionRunnerDialog.h"
+#include "editors/AssertionsEditor.h"
+#include <core/assertions/DeclarativeAssertion.h>
 
 namespace poppy::gui {
 
@@ -68,6 +73,10 @@ void MainWindow::setupUi() {
     connect(m_curlBtn, &QPushButton::clicked, this, &MainWindow::onCopyAsCurl);
     reqInfoBar->addWidget(m_curlBtn);
 
+    m_snippetBtn = new QPushButton("Generate Code", this);
+    connect(m_snippetBtn, &QPushButton::clicked, this, &MainWindow::onShowCodeSnippets);
+    reqInfoBar->addWidget(m_snippetBtn);
+
     m_saveBtn = new QPushButton("Save", this);
     connect(m_saveBtn, &QPushButton::clicked, this, &MainWindow::onSaveRequest);
     reqInfoBar->addWidget(m_saveBtn);
@@ -108,12 +117,14 @@ void MainWindow::setupUi() {
     m_headersEditor = new HeadersEditor(this);
     m_bodyEditor = new BodyEditor(this);
     m_authEditor = new AuthEditor(this);
+    m_assertionsEditor = new AssertionsEditor(this);
     m_scriptEditor = new ScriptEditor(this);
 
     m_requestTabs->addTab(m_paramsEditor, "Params");
     m_requestTabs->addTab(m_headersEditor, "Headers");
     m_requestTabs->addTab(m_bodyEditor, "Body");
     m_requestTabs->addTab(m_authEditor, "Auth");
+    m_requestTabs->addTab(m_assertionsEditor, "Assertions");
     m_requestTabs->addTab(m_scriptEditor, "Scripts & Tests");
 
     reqLayout->addWidget(m_requestTabs);
@@ -147,6 +158,8 @@ void MainWindow::setupUi() {
 void MainWindow::setupMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction("&Open Collection...", this, &MainWindow::onOpenCollection, QKeySequence::Open);
+    fileMenu->addAction("&Import...", this, &MainWindow::onImport);
+    fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
     fileMenu->addAction("&Save Request", this, &MainWindow::onSaveRequest, QKeySequence::Save);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
@@ -181,6 +194,7 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
     m_headersEditor->loadFromRequest(req);
     m_bodyEditor->loadFromRequest(req);
     m_authEditor->loadFromRequest(req);
+    m_assertionsEditor->loadFromRequest(req);
     m_scriptEditor->loadFromRequest(req);
 
     m_responseInspector->clear();
@@ -195,6 +209,7 @@ void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
     m_headersEditor->saveToRequest(req);
     m_bodyEditor->saveToRequest(req);
     m_authEditor->saveToRequest(req);
+    m_assertionsEditor->saveToRequest(req);
     m_scriptEditor->saveToRequest(req);
 }
 
@@ -249,6 +264,42 @@ void MainWindow::onEnvironmentChanged(const QString& envName) {
     statusBar()->showMessage(envName.isEmpty() ? "No environment active." : ("Active environment: " + envName), 3000);
 }
 
+void MainWindow::onShowCodeSnippets() {
+    saveUiIntoRequest(m_currentRequest);
+    core::VariableResolver resolver;
+    core::EnvironmentModel activeEnv(m_activeEnvName);
+    for (const auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            activeEnv = env;
+            break;
+        }
+    }
+    resolver.setEnvironment(activeEnv);
+    core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
+
+    CodeSnippetDialog dlg(resolvedReq, this);
+    dlg.exec();
+}
+
+void MainWindow::onImport() {
+    ImportDialog dlg(m_collectionModel.rootPath(), this);
+    connect(&dlg, &ImportDialog::curlImported, this, [this](const core::RequestModel& req) {
+        loadRequestIntoUi(req);
+        statusBar()->showMessage("cURL command imported successfully!", 3000);
+    });
+    connect(&dlg, &ImportDialog::collectionImported, this, [this](const QString& dirPath) {
+        m_collectionModel.openDirectory(dirPath);
+        m_sidebar->refreshTree();
+        statusBar()->showMessage("Collection imported successfully!", 3000);
+    });
+    dlg.exec();
+}
+
+void MainWindow::onRunCollection() {
+    CollectionRunnerDialog dlg(&m_collectionModel, &m_networkEngine, &m_scriptRunner, m_activeEnvName, this);
+    dlg.exec();
+}
+
 void MainWindow::onManageEnvironments() {
     EnvironmentDialog dlg(m_collectionModel.environments(), m_activeEnvName, m_collectionModel.rootPath(), this);
     if (dlg.exec() == QDialog::Accepted) {
@@ -293,8 +344,12 @@ void MainWindow::onSendClicked() {
         QString postErr;
         m_scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, activeEnv, &postErr);
 
-        // 7. Tests & Assertions
+        // 7. Tests & Declarative Assertions
         core::TestReport report = m_scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, activeEnv);
+        auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
+        for (const auto& dr : declResults) {
+            report.results.append(dr);
+        }
 
         // 8. Update Response Inspector
         m_responseInspector->setResponse(res, &report);
