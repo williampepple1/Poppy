@@ -25,6 +25,7 @@ add_executable(poppy
     dialogs/CollectionRunnerDialog.h dialogs/CollectionRunnerDialog.cpp
     dialogs/SettingsDialog.h dialogs/SettingsDialog.cpp
     dialogs/OAuth2TokenDialog.h dialogs/OAuth2TokenDialog.cpp
+    dialogs/QuickOpenDialog.h dialogs/QuickOpenDialog.cpp
 )
 
 target_include_directories(poppy PRIVATE

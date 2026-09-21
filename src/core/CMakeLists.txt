@@ -15,6 +15,7 @@ add_library(poppy_core STATIC
     auth/AwsSigV4Signer.h auth/AwsSigV4Signer.cpp
     codegen/CodeGenerator.h codegen/CodeGenerator.cpp
     exporters/OpenApiExporter.h exporters/OpenApiExporter.cpp
+    JsonPathEvaluator.h JsonPathEvaluator.cpp
 )
 
 target_include_directories(poppy_core PUBLIC

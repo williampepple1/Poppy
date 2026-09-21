@@ -21,17 +21,27 @@ public:
 
     void setResponse(const core::ResponseModel& res, const core::TestReport* testReport = nullptr);
     void clear();
+    void openSearch();
 
 private slots:
     void copyBodyToClipboard();
     void saveBodyToFile();
     void togglePrettyRaw();
     void filterHeaders(const QString& text);
+    void onSearchTextChanged(const QString& text);
+    void findNext();
+    void findPrevious();
+    void toggleCaseSensitive();
+    void toggleRegex();
+    void toggleJsonPathMode();
+    void resetFilter();
 
 private:
     void updateTelemetryBar(const core::ResponseModel& res);
     void updateHeadersTable(const core::ResponseModel& res);
     void updateTestsTab(const core::TestReport* testReport);
+    void updateSearchHighlights();
+    void restoreOriginalBody();
 
     // Top Telemetry Bar
     QLabel* m_statusBadge;
@@ -47,11 +57,28 @@ private:
 
     // Body Tab
     QWidget* m_bodyTab;
-    QLineEdit* m_bodySearchFilter;
+    QWidget* m_searchToolbar;
+    QLineEdit* m_searchEdit;
+    QPushButton* m_findPrevBtn;
+    QPushButton* m_findNextBtn;
+    QLabel* m_matchCountLabel;
+    QPushButton* m_caseSensitiveBtn;
+    QPushButton* m_regexBtn;
+    QPushButton* m_jsonPathModeBtn;
+    QPushButton* m_resetFilterBtn;
+
     QPlainTextEdit* m_bodyViewer;
     JsonSyntaxHighlighter* m_jsonHighlighter;
     bool m_isPretty{true};
     core::ResponseModel m_currentResponse;
+
+    // Search & Filter State
+    QList<QTextCursor> m_searchMatches;
+    int m_currentMatchIndex{-1};
+    bool m_isJsonPathMode{false};
+    bool m_isCaseSensitive{false};
+    bool m_isRegex{false};
+    bool m_isFiltered{false};
 
     // Preview Tab
     QTextBrowser* m_previewBrowser;

@@ -48,4 +48,9 @@ add_executable(test_openapi_exporter test_openapi_exporter.cpp)
 target_link_libraries(test_openapi_exporter PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_openapi_exporter COMMAND test_openapi_exporter)
 
+add_executable(test_jsonpath_evaluator test_jsonpath_evaluator.cpp)
+target_link_libraries(test_jsonpath_evaluator PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_jsonpath_evaluator COMMAND test_jsonpath_evaluator)
+
+
 

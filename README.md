@@ -59,6 +59,11 @@
 - **Insomnia v4 Importer**: Ingests Insomnia workspace exports, maintaining nested folder structures and auth profiles.
 - **OpenAPI v3.0 Importer & Exporter**: Ingest OpenAPI specifications into collections, or export entire collections and active requests to valid OpenAPI 3.0.3 JSON specs with a single click.
 
+### ⚡ Developer Ergonomics & Productivity
+- **Quick Open Command Palette (`Ctrl+P`)**: Instant keyboard fuzzy switcher across all requests in the active collection with colored HTTP method badges and directory breadcrumbs.
+- **In-Response Search & JSONPath Filter (`Ctrl+F`)**: Interactive search bar with document match highlighting, previous/next cycling, match counter, case-sensitive/regex toggles, and live JSONPath query filtering (`$.items[*].name`).
+- **Multi-Tab Document Workspace**: Tabbed interface with `Ctrl+N` (New Request), `Ctrl+S` (Save), `Ctrl+W` (Close), and unsaved changes dirty indicators (`*`).
+
 ### 💻 Multi-Language Code Generation
 - Export any request with one click to production-ready code:
   - **Python** (`requests`)
@@ -179,7 +184,7 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 # 3. Compile binaries (GUI and CLI)
 cmake --build build
 
-# 4. Run test suite (12 test suites)
+# 4. Run test suite (13 test suites)
 ctest --test-dir build --output-on-failure
 ```
 

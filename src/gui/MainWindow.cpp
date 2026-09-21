@@ -15,6 +15,7 @@
 #include "dialogs/ImportDialog.h"
 #include "dialogs/CollectionRunnerDialog.h"
 #include "dialogs/SettingsDialog.h"
+#include "dialogs/QuickOpenDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 #include <core/exporters/OpenApiExporter.h>
@@ -187,6 +188,7 @@ void MainWindow::setupUi() {
 void MainWindow::setupMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction("&New Request", QKeySequence::New, this, &MainWindow::onNewRequest);
+    fileMenu->addAction("&Quick Open...", QKeySequence(Qt::CTRL | Qt::Key_P), this, &MainWindow::onQuickOpen);
     fileMenu->addAction("&Open Collection...", QKeySequence::Open, this, &MainWindow::onOpenCollection);
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
     fileMenu->addAction("&Export Collection as OpenAPI 3.0...", this, &MainWindow::onExportOpenApi);
@@ -376,6 +378,13 @@ void MainWindow::onNewRequest() {
 
     int newIdx = m_openRequestsTabBar->addTab("Untitled Request");
     m_openRequestsTabBar->setCurrentIndex(newIdx);
+}
+
+void MainWindow::onQuickOpen() {
+    QuickOpenDialog dialog(&m_collectionModel, this);
+    if (dialog.exec() == QDialog::Accepted && dialog.selectedItem()) {
+        onRequestSelected(dialog.selectedItem());
+    }
 }
 
 void MainWindow::onExportOpenApi() {

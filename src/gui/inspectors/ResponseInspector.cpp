@@ -8,6 +8,9 @@
 #include <QFileDialog>
 #include <QFile>
 #include <QMessageBox>
+#include <QShortcut>
+#include <QRegularExpression>
+#include <core/JsonPathEvaluator.h>
 #include <Theme.h>
 
 namespace poppy::gui {
@@ -89,17 +92,68 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     m_bodyTab = new QWidget(this);
     auto* bLayout = new QVBoxLayout(m_bodyTab);
     bLayout->setContentsMargins(0, 4, 0, 0);
+    bLayout->setSpacing(4);
 
-    m_bodySearchFilter = new QLineEdit(m_bodyTab);
-    m_bodySearchFilter->setPlaceholderText("Search in response body...");
-    connect(m_bodySearchFilter, &QLineEdit::textChanged, this, [this](const QString& q) {
-        if (q.isEmpty()) {
-            m_bodyViewer->find("", QTextDocument::FindFlags{});
-        } else {
-            m_bodyViewer->find(q);
-        }
-    });
-    bLayout->addWidget(m_bodySearchFilter);
+    // Search / Filter Toolbar
+    m_searchToolbar = new QWidget(m_bodyTab);
+    auto* sLayout = new QHBoxLayout(m_searchToolbar);
+    sLayout->setContentsMargins(2, 2, 2, 2);
+    sLayout->setSpacing(6);
+
+    m_searchEdit = new QLineEdit(m_searchToolbar);
+    m_searchEdit->setPlaceholderText("Find in response (Ctrl+F) or type $.jsonpath...");
+    m_searchEdit->setClearButtonEnabled(true);
+    connect(m_searchEdit, &QLineEdit::textChanged, this, &ResponseInspector::onSearchTextChanged);
+    connect(m_searchEdit, &QLineEdit::returnPressed, this, &ResponseInspector::findNext);
+    sLayout->addWidget(m_searchEdit, 1);
+
+    m_findPrevBtn = new QPushButton("▲", m_searchToolbar);
+    m_findPrevBtn->setToolTip("Previous Match (Shift+Enter)");
+    m_findPrevBtn->setFixedWidth(28);
+    connect(m_findPrevBtn, &QPushButton::clicked, this, &ResponseInspector::findPrevious);
+    sLayout->addWidget(m_findPrevBtn);
+
+    m_findNextBtn = new QPushButton("▼", m_searchToolbar);
+    m_findNextBtn->setToolTip("Next Match (Enter)");
+    m_findNextBtn->setFixedWidth(28);
+    connect(m_findNextBtn, &QPushButton::clicked, this, &ResponseInspector::findNext);
+    sLayout->addWidget(m_findNextBtn);
+
+    m_matchCountLabel = new QLabel(m_searchToolbar);
+    m_matchCountLabel->setStyleSheet("color: #a1a1aa; font-size: 11px; padding: 0 4px;");
+    sLayout->addWidget(m_matchCountLabel);
+
+    m_caseSensitiveBtn = new QPushButton("Aa", m_searchToolbar);
+    m_caseSensitiveBtn->setToolTip("Match Case");
+    m_caseSensitiveBtn->setCheckable(true);
+    m_caseSensitiveBtn->setFixedWidth(30);
+    connect(m_caseSensitiveBtn, &QPushButton::clicked, this, &ResponseInspector::toggleCaseSensitive);
+    sLayout->addWidget(m_caseSensitiveBtn);
+
+    m_regexBtn = new QPushButton(".*", m_searchToolbar);
+    m_regexBtn->setToolTip("Regular Expression");
+    m_regexBtn->setCheckable(true);
+    m_regexBtn->setFixedWidth(30);
+    connect(m_regexBtn, &QPushButton::clicked, this, &ResponseInspector::toggleRegex);
+    sLayout->addWidget(m_regexBtn);
+
+    m_jsonPathModeBtn = new QPushButton("{ } JSONPath", m_searchToolbar);
+    m_jsonPathModeBtn->setToolTip("Toggle JSONPath Query Filter");
+    m_jsonPathModeBtn->setCheckable(true);
+    connect(m_jsonPathModeBtn, &QPushButton::clicked, this, &ResponseInspector::toggleJsonPathMode);
+    sLayout->addWidget(m_jsonPathModeBtn);
+
+    m_resetFilterBtn = new QPushButton("Reset View", m_searchToolbar);
+    m_resetFilterBtn->setToolTip("Restore full response body");
+    m_resetFilterBtn->setVisible(false);
+    m_resetFilterBtn->setStyleSheet("background-color: #2563eb; color: #ffffff; border-radius: 4px; font-weight: bold; padding: 4px 8px;");
+    connect(m_resetFilterBtn, &QPushButton::clicked, this, &ResponseInspector::resetFilter);
+    sLayout->addWidget(m_resetFilterBtn);
+
+    bLayout->addWidget(m_searchToolbar);
+
+    auto* searchShortcut = new QShortcut(QKeySequence::Find, this);
+    connect(searchShortcut, &QShortcut::activated, this, &ResponseInspector::openSearch);
 
     m_bodyViewer = new QPlainTextEdit(m_bodyTab);
     m_bodyViewer->setReadOnly(true);
@@ -180,7 +234,12 @@ void ResponseInspector::clear() {
     m_bodyViewer->clear();
     m_previewBrowser->clear();
     m_hexViewer->clear();
-    m_bodySearchFilter->clear();
+    m_searchEdit->clear();
+    m_searchMatches.clear();
+    m_currentMatchIndex = -1;
+    m_isFiltered = false;
+    m_resetFilterBtn->setVisible(false);
+    m_matchCountLabel->clear();
     m_headersTable->setRowCount(0);
     m_testsTable->setRowCount(0);
     m_testSummaryLabel->setText("No tests run");
@@ -345,6 +404,176 @@ void ResponseInspector::saveBodyToFile() {
         } else {
             QMessageBox::warning(this, "Error", "Could not write to file: " + file.errorString());
         }
+    }
+}
+
+void ResponseInspector::openSearch() {
+    m_tabWidget->setCurrentIndex(0);
+    m_searchEdit->setFocus();
+    m_searchEdit->selectAll();
+}
+
+void ResponseInspector::onSearchTextChanged(const QString& text) {
+    QString q = text.trimmed();
+    if (q.isEmpty()) {
+        if (m_isFiltered) {
+            restoreOriginalBody();
+        }
+        m_searchMatches.clear();
+        m_currentMatchIndex = -1;
+        m_bodyViewer->setExtraSelections({});
+        m_matchCountLabel->clear();
+        return;
+    }
+
+    // JSONPath mode
+    if (m_isJsonPathMode || q.startsWith("$.") || q.startsWith("$[")) {
+        QJsonParseError err;
+        QJsonDocument doc = QJsonDocument::fromJson(m_currentResponse.rawBody, &err);
+        if (err.error == QJsonParseError::NoError && !doc.isNull()) {
+            QString res = core::JsonPathEvaluator::evaluateToString(doc, q, true);
+            if (!res.isEmpty()) {
+                m_isFiltered = true;
+                m_bodyViewer->setPlainText(res);
+                m_resetFilterBtn->setVisible(true);
+                m_matchCountLabel->setStyleSheet("color: #10b981; font-weight: bold; font-size: 11px;");
+                m_matchCountLabel->setText("JSONPath Match");
+                m_bodyViewer->setExtraSelections({});
+                return;
+            } else {
+                m_matchCountLabel->setStyleSheet("color: #ef4444; font-size: 11px;");
+                m_matchCountLabel->setText("No JSONPath match");
+                return;
+            }
+        }
+    }
+
+    // Normal text search mode
+    if (m_isFiltered) {
+        restoreOriginalBody();
+    }
+
+    m_searchMatches.clear();
+    m_currentMatchIndex = -1;
+
+    QTextDocument::FindFlags flags;
+    if (m_isCaseSensitive) {
+        flags |= QTextDocument::FindCaseSensitively;
+    }
+
+    if (m_isRegex) {
+        auto patternOptions = m_isCaseSensitive ? QRegularExpression::NoPatternOption : QRegularExpression::CaseInsensitiveOption;
+        QRegularExpression regex(q, patternOptions);
+        if (regex.isValid()) {
+            QTextCursor cur = m_bodyViewer->document()->find(regex, 0);
+            while (!cur.isNull()) {
+                m_searchMatches.append(cur);
+                cur = m_bodyViewer->document()->find(regex, cur.position());
+            }
+        }
+    } else {
+        QTextCursor cur = m_bodyViewer->document()->find(q, 0, flags);
+        while (!cur.isNull()) {
+            m_searchMatches.append(cur);
+            cur = m_bodyViewer->document()->find(q, cur.position(), flags);
+        }
+    }
+
+    if (!m_searchMatches.isEmpty()) {
+        m_currentMatchIndex = 0;
+    }
+    updateSearchHighlights();
+}
+
+void ResponseInspector::findNext() {
+    if (m_searchMatches.isEmpty()) return;
+    m_currentMatchIndex = (m_currentMatchIndex + 1) % m_searchMatches.size();
+    updateSearchHighlights();
+}
+
+void ResponseInspector::findPrevious() {
+    if (m_searchMatches.isEmpty()) return;
+    m_currentMatchIndex = (m_currentMatchIndex - 1 + m_searchMatches.size()) % m_searchMatches.size();
+    updateSearchHighlights();
+}
+
+void ResponseInspector::toggleCaseSensitive() {
+    m_isCaseSensitive = m_caseSensitiveBtn->isChecked();
+    if (m_isCaseSensitive) {
+        m_caseSensitiveBtn->setStyleSheet("background-color: #3b82f6; color: #ffffff; font-weight: bold;");
+    } else {
+        m_caseSensitiveBtn->setStyleSheet("");
+    }
+    onSearchTextChanged(m_searchEdit->text());
+}
+
+void ResponseInspector::toggleRegex() {
+    m_isRegex = m_regexBtn->isChecked();
+    if (m_isRegex) {
+        m_regexBtn->setStyleSheet("background-color: #3b82f6; color: #ffffff; font-weight: bold;");
+    } else {
+        m_regexBtn->setStyleSheet("");
+    }
+    onSearchTextChanged(m_searchEdit->text());
+}
+
+void ResponseInspector::toggleJsonPathMode() {
+    m_isJsonPathMode = m_jsonPathModeBtn->isChecked();
+    if (m_isJsonPathMode) {
+        m_jsonPathModeBtn->setStyleSheet("background-color: #10b981; color: #ffffff; font-weight: bold;");
+    } else {
+        m_jsonPathModeBtn->setStyleSheet("");
+        if (m_isFiltered) {
+            restoreOriginalBody();
+        }
+    }
+    onSearchTextChanged(m_searchEdit->text());
+}
+
+void ResponseInspector::resetFilter() {
+    m_searchEdit->clear();
+    restoreOriginalBody();
+    m_matchCountLabel->clear();
+}
+
+void ResponseInspector::restoreOriginalBody() {
+    m_isFiltered = false;
+    m_resetFilterBtn->setVisible(false);
+    if (m_currentResponse.isJson()) {
+        m_bodyViewer->setPlainText(m_isPretty ? m_currentResponse.formattedJson() : m_currentResponse.bodyAsString());
+    } else {
+        m_bodyViewer->setPlainText(m_currentResponse.bodyAsString());
+    }
+}
+
+void ResponseInspector::updateSearchHighlights() {
+    QList<QTextEdit::ExtraSelection> extraSelections;
+    for (int i = 0; i < m_searchMatches.size(); ++i) {
+        QTextEdit::ExtraSelection sel;
+        sel.cursor = m_searchMatches[i];
+        if (i == m_currentMatchIndex) {
+            sel.format.setBackground(QColor("#f59e0b")); // Active match (amber/orange)
+            sel.format.setForeground(QColor("#000000"));
+        } else {
+            sel.format.setBackground(QColor("#6b4f10")); // Subtle yellow
+            sel.format.setForeground(QColor("#fef08a"));
+        }
+        extraSelections.append(sel);
+    }
+    m_bodyViewer->setExtraSelections(extraSelections);
+
+    if (m_searchMatches.isEmpty()) {
+        if (!m_searchEdit->text().trimmed().isEmpty()) {
+            m_matchCountLabel->setStyleSheet("color: #ef4444; font-size: 11px;");
+            m_matchCountLabel->setText("No matches");
+        } else {
+            m_matchCountLabel->clear();
+        }
+    } else {
+        m_matchCountLabel->setStyleSheet("color: #a1a1aa; font-size: 11px;");
+        m_matchCountLabel->setText(QString("%1 of %2").arg(m_currentMatchIndex + 1).arg(m_searchMatches.size()));
+        m_bodyViewer->setTextCursor(m_searchMatches[m_currentMatchIndex]);
+        m_bodyViewer->centerCursor();
     }
 }
 

@@ -32,6 +32,7 @@ public:
 
 private slots:
     void onNewRequest();
+    void onQuickOpen();
     void onSendClicked();
     void onOpenCollection();
     void onExportOpenApi();
