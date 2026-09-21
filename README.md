@@ -187,12 +187,23 @@ Compiled executables will be available in:
 - `build/bin/poppy` (GUI Desktop Application)
 - `build/bin/poppy-cli` (Headless CLI Runner)
 
-### Packaging for Release (Windows)
+### Packaging for Release
+
+#### Local Standalone Package (Windows)
 Create a standalone, portable `.zip` release bundled with all necessary Qt and MinGW runtime libraries via `windeployqt`:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
 # Generates: dist/Poppy-windows-x64.zip
 ```
+
+#### Automated CI/CD Releases (GitHub Actions)
+The repository includes an automated release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
+- **Tag Trigger**: Push any version tag (e.g. `v1.0.0`) to compile, test, package, and publish a GitHub Release with `Poppy-windows-x64.zip` and `Poppy-linux-x64.tar.gz` attached:
+  ```bash
+  git tag v1.0.0
+  git push origin v1.0.0
+  ```
+- **Manual Trigger**: Navigate to **GitHub Actions -> Release -> Run workflow**, specify the tag name, and trigger on demand.
 
 ---
 
