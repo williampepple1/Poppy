@@ -47,7 +47,6 @@ jobs:
         with:
           version: '6.7.2'
           arch: ${{ matrix.arch }}
-          modules: 'qtdeclarative'
           cache: true
 
       - name: Configure CMake
