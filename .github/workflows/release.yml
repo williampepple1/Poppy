@@ -1,0 +1,162 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release tag (e.g. v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      draft:
+        description: 'Create as draft release'
+        type: boolean
+        default: false
+      prerelease:
+        description: 'Create as pre-release'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build & Package (Windows)
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: choco install ninja -y
+
+      - name: Setup MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          arch: win64_msvc2019_64
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Run CTest
+        run: |
+          ctest --test-dir build --output-on-failure -C Release
+
+      - name: Package Windows Release (windeployqt)
+        shell: pwsh
+        run: |
+          $dist = "dist/Poppy"
+          New-Item -ItemType Directory -Force -Path $dist | Out-Null
+          Copy-Item build/bin/poppy.exe $dist/
+          Copy-Item build/bin/poppy-cli.exe $dist/
+          Copy-Item README.md $dist/
+          Copy-Item LICENSE $dist/
+          if (Test-Path assets) { Copy-Item -Recurse assets $dist/ }
+          if (Test-Path examples) { Copy-Item -Recurse examples $dist/ }
+          windeployqt "$dist/poppy.exe" --no-translations --compiler-runtime
+          Compress-Archive -Path "$dist/*" -DestinationPath "Poppy-windows-x64.zip" -Force
+
+      - name: Upload Windows Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Poppy-windows-x64
+          path: Poppy-windows-x64.zip
+
+  build-linux:
+    name: Build & Package (Linux)
+    runs-on: ubuntu-latest
+
+    env:
+      QT_QPA_PLATFORM: offscreen
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential ninja-build qt6-base-dev qt6-declarative-dev libgl1-mesa-dev libxkbcommon-dev libx11-xcb-dev libssl-dev
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Run CTest
+        run: |
+          ctest --test-dir build --output-on-failure -C Release
+
+      - name: Package Linux Release
+        run: |
+          mkdir -p dist/Poppy
+          cp build/bin/poppy dist/Poppy/
+          cp build/bin/poppy-cli dist/Poppy/
+          cp README.md dist/Poppy/
+          cp LICENSE dist/Poppy/
+          cp -r assets dist/Poppy/
+          cp -r examples dist/Poppy/
+          tar -czvf Poppy-linux-x64.tar.gz -C dist/Poppy .
+
+      - name: Upload Linux Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Poppy-linux-x64
+          path: Poppy-linux-x64.tar.gz
+
+  publish-release:
+    name: Publish GitHub Release
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Determine Release Tag
+        run: |
+          if [ -n "${{ github.event.inputs.tag_name }}" ]; then
+            TAG="${{ github.event.inputs.tag_name }}"
+          else
+            TAG="${{ github.ref_name }}"
+          fi
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+      - name: Download Windows Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Poppy-windows-x64
+          path: release-assets
+
+      - name: Download Linux Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Poppy-linux-x64
+          path: release-assets
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          target_commitish: ${{ github.sha }}
+          name: Poppy ${{ env.RELEASE_TAG }}
+          draft: ${{ github.event.inputs.draft == 'true' }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
+          generate_release_notes: true
+          files: |
+            release-assets/Poppy-windows-x64.zip
+            release-assets/Poppy-linux-x64.tar.gz
