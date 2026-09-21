@@ -1,0 +1,160 @@
+#include "BruParser.h"
+#include <QFile>
+#include <QTextStream>
+#include <QRegularExpression>
+
+namespace poppy::core {
+
+RequestModel BruParser::parseFile(const QString& filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    QTextStream in(&file);
+    return parse(in.readAll());
+}
+
+RequestModel BruParser::parse(const QString& content) {
+    RequestModel req;
+    
+    // Split into lines
+    QStringList lines = content.split('\n');
+    
+    int i = 0;
+    while (i < lines.size()) {
+        QString line = lines[i].trimmed();
+        if (line.isEmpty() || line.startsWith('#')) {
+            ++i;
+            continue;
+        }
+
+        // Look for block header: <block_name> {
+        if (line.endsWith('{')) {
+            QString blockName = line.left(line.length() - 1).trimmed();
+            ++i;
+
+            // Check if this is a freeform / code block:
+            // body:json, body:text, body:xml, script:pre-request, script:post-response, tests
+            bool isCodeBlock = blockName.startsWith("body:") || 
+                               blockName.startsWith("script:") || 
+                               blockName == "tests";
+
+            if (isCodeBlock) {
+                QString blockContent;
+                int braceDepth = 1;
+                while (i < lines.size() && braceDepth > 0) {
+                    QString curLine = lines[i];
+                    QString trimmedCur = curLine.trimmed();
+
+                    // Check brace depth adjustments
+                    for (QChar ch : trimmedCur) {
+                        if (ch == '{') ++braceDepth;
+                        else if (ch == '}') --braceDepth;
+                    }
+
+                    if (braceDepth > 0) {
+                        if (!blockContent.isEmpty()) blockContent.append('\n');
+                        blockContent.append(curLine);
+                    }
+                    ++i;
+                }
+
+                // Assign to model
+                if (blockName == "body:json") {
+                    req.bodyType = BodyType::Json;
+                    req.bodyContent = blockContent.trimmed();
+                } else if (blockName == "body:text") {
+                    req.bodyType = BodyType::Text;
+                    req.bodyContent = blockContent;
+                } else if (blockName == "body:xml") {
+                    req.bodyType = BodyType::Xml;
+                    req.bodyContent = blockContent;
+                } else if (blockName == "body:form-urlencoded") {
+                    req.bodyType = BodyType::FormUrlEncoded;
+                    req.bodyContent = blockContent;
+                } else if (blockName == "body:multipart-form") {
+                    req.bodyType = BodyType::MultipartForm;
+                    req.bodyContent = blockContent;
+                } else if (blockName == "script:pre-request") {
+                    req.scripts.preRequestScript = blockContent;
+                } else if (blockName == "script:post-response") {
+                    req.scripts.postResponseScript = blockContent;
+                } else if (blockName == "tests") {
+                    req.scripts.tests = blockContent;
+                }
+            } else {
+                // Key-value block: meta, get, post, headers, params:query, params:path, auth:bearer, etc.
+                while (i < lines.size()) {
+                    QString kvLine = lines[i].trimmed();
+                    if (kvLine == "}") {
+                        ++i;
+                        break;
+                    }
+
+                    if (!kvLine.isEmpty() && !kvLine.startsWith('#')) {
+                        int colonIdx = kvLine.indexOf(':');
+                        if (colonIdx > 0) {
+                            QString key = kvLine.left(colonIdx).trimmed();
+                            QString val = kvLine.mid(colonIdx + 1).trimmed();
+
+                            bool enabled = true;
+                            if (key.startsWith('~')) {
+                                enabled = false;
+                                key = key.mid(1).trimmed();
+                            }
+
+                            if (blockName == "meta") {
+                                if (key == "name") req.name = val;
+                                else if (key == "seq") req.seq = val.toInt();
+                            } else if (blockName == "get" || blockName == "post" || 
+                                       blockName == "put" || blockName == "delete" || 
+                                       blockName == "patch" || blockName == "head" || 
+                                       blockName == "options") {
+                                req.method = stringToMethod(blockName);
+                                if (key == "url") req.url = val;
+                                else if (key == "body") req.bodyType = stringToBodyType(val);
+                                else if (key == "auth") req.auth.type = stringToAuthType(val);
+                            } else if (blockName == "headers") {
+                                req.headers.append(HttpHeader{
+                                    .name = key,
+                                    .value = val,
+                                    .enabled = enabled
+                                });
+                            } else if (blockName == "params:query") {
+                                req.queryParams.append(HttpParam{
+                                    .key = key,
+                                    .value = val,
+                                    .enabled = enabled
+                                });
+                            } else if (blockName == "params:path") {
+                                req.pathParams.append(HttpParam{
+                                    .key = key,
+                                    .value = val,
+                                    .enabled = enabled
+                                });
+                            } else if (blockName == "auth:bearer") {
+                                if (key == "token") req.auth.bearerToken = val;
+                            } else if (blockName == "auth:basic") {
+                                if (key == "username") req.auth.basicUsername = val;
+                                else if (key == "password") req.auth.basicPassword = val;
+                            } else if (blockName == "auth:apikey") {
+                                if (key == "key") req.auth.apiKeyName = val;
+                                else if (key == "value") req.auth.apiKeyValue = val;
+                                else if (key == "placement") req.auth.apiKeyPlacement = val;
+                            } else if (blockName == "auth:oauth2") {
+                                if (key == "token" || key == "access_token") req.auth.oauth2AccessToken = val;
+                            }
+                        }
+                    }
+                    ++i;
+                }
+            }
+        } else {
+            ++i;
+        }
+    }
+
+    return req;
+}
+
+} // namespace poppy::core

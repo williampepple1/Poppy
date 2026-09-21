@@ -1,0 +1,16 @@
+# Local notes & project documentation
+app.readme
+
+# Build directories
+build/
+bin/
+out/
+.cache/
+
+# IDE files
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosv
+CMakeUserPresets.json
