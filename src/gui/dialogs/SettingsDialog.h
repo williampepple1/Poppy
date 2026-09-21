@@ -4,6 +4,7 @@
 #include <QLineEdit>
 #include <QSpinBox>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QPushButton>
 #include <network/CurlNetworkEngine.h>
 
@@ -17,6 +18,8 @@ public:
 private slots:
     void onApply();
     void onClearCookies();
+    void onBrowseCert();
+    void onBrowseKey();
 
 private:
     network::CurlNetworkEngine* m_engine;
@@ -26,6 +29,14 @@ private:
     QCheckBox* m_sslVerifyChk;
     QCheckBox* m_cookieJarChk;
     QPushButton* m_clearCookiesBtn;
+
+    // mTLS
+    QLineEdit* m_clientCertEdit;
+    QLineEdit* m_clientKeyEdit;
+    QLineEdit* m_clientPassEdit;
+    QComboBox* m_clientCertTypeCombo;
+    QPushButton* m_browseCertBtn;
+    QPushButton* m_browseKeyBtn;
 };
 
 } // namespace poppy::gui

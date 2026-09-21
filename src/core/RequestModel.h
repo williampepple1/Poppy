@@ -61,7 +61,9 @@ enum class AuthType {
     Basic,
     ApiKey,
     OAuth2,
-    AwsSigV4
+    AwsSigV4,
+    Digest,
+    NTLM
 };
 
 QString authTypeToString(AuthType type);
@@ -91,6 +93,16 @@ struct AuthModel {
     QString awsSessionToken;
     QString awsRegion;
     QString awsService;
+
+    // Digest
+    QString digestUsername;
+    QString digestPassword;
+
+    // NTLM
+    QString ntlmUsername;
+    QString ntlmPassword;
+    QString ntlmDomain;
+    QString ntlmWorkstation;
 
     bool operator==(const AuthModel& other) const = default;
 };

@@ -43,19 +43,33 @@ private slots:
     void onEnvironmentChanged(const QString& envName);
     void onMethodChanged(int index);
     void onOpenSettings();
+    void onTabChanged(int index);
+    void onTabCloseRequested(int index);
+    void onCloseCurrentTab();
+    void markCurrentTabDirty();
 
 private:
     void setupUi();
     void setupMenus();
     void loadRequestIntoUi(const core::RequestModel& req);
     void saveUiIntoRequest(core::RequestModel& req);
+    void closeTab(int index);
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
     network::CurlNetworkEngine m_networkEngine;
     core::ScriptRunner m_scriptRunner;
 
-    // Active state
+    // Active state & Tab management
+    struct OpenTabInfo {
+        core::CollectionItem* item{nullptr};
+        core::RequestModel request;
+        bool isDirty{false};
+    };
+    QList<OpenTabInfo> m_openTabs;
+    int m_currentTabIndex{-1};
+    class QTabBar* m_openRequestsTabBar{nullptr};
+
     core::CollectionItem* m_activeItem{nullptr};
     core::RequestModel m_currentRequest;
     QString m_activeEnvName;

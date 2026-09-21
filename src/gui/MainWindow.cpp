@@ -17,6 +17,7 @@
 #include "dialogs/SettingsDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
+#include <QTabBar>
 
 namespace poppy::gui {
 
@@ -29,10 +30,14 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setupUi();
     setupMenus();
 
-    // Set default initial request
+    // Set default initial request tab
     m_currentRequest.name = "Quick Request";
     m_currentRequest.method = core::HttpMethod::GET;
     m_currentRequest.url = "https://httpbin.org/get";
+    OpenTabInfo initTab{nullptr, m_currentRequest, false};
+    m_openTabs.append(initTab);
+    m_openRequestsTabBar->addTab("Quick Request");
+    m_currentTabIndex = 0;
     loadRequestIntoUi(m_currentRequest);
 }
 
@@ -62,7 +67,22 @@ void MainWindow::setupUi() {
     auto* requestEditorWidget = new QWidget(this);
     auto* reqLayout = new QVBoxLayout(requestEditorWidget);
     reqLayout->setContentsMargins(12, 12, 12, 6);
-    reqLayout->setSpacing(10);
+    reqLayout->setSpacing(8);
+
+    // 0. Top Open Requests TabBar
+    m_openRequestsTabBar = new QTabBar(this);
+    m_openRequestsTabBar->setTabsClosable(true);
+    m_openRequestsTabBar->setMovable(true);
+    m_openRequestsTabBar->setExpanding(false);
+    m_openRequestsTabBar->setDrawBase(false);
+    m_openRequestsTabBar->setStyleSheet(
+        "QTabBar::tab { background: #18181b; color: #a1a1aa; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #27272a; font-size: 12px; }"
+        "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; font-weight: bold; border-color: #3f3f46; }"
+        "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
+    );
+    connect(m_openRequestsTabBar, &QTabBar::currentChanged, this, &MainWindow::onTabChanged);
+    connect(m_openRequestsTabBar, &QTabBar::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
+    reqLayout->addWidget(m_openRequestsTabBar);
 
     // Top Request Info Bar
     auto* reqInfoBar = new QHBoxLayout();
@@ -99,10 +119,12 @@ void MainWindow::setupUi() {
     m_methodCombo->addItem("OPTIONS", static_cast<int>(core::HttpMethod::OPTIONS));
     m_methodCombo->setFixedWidth(100);
     connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onMethodChanged);
+    connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { markCurrentTabDirty(); });
     urlBarLayout->addWidget(m_methodCombo);
 
     m_urlEdit = new QLineEdit(this);
     m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path...");
+    connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
     urlBarLayout->addWidget(m_urlEdit, 1);
 
     m_sendBtn = new QPushButton("Send", this);
@@ -164,6 +186,7 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
     fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
     fileMenu->addAction("&Save Request", this, &MainWindow::onSaveRequest, QKeySequence::Save);
+    fileMenu->addAction("&Close Tab", this, &MainWindow::onCloseCurrentTab, QKeySequence::Close);
     fileMenu->addSeparator();
     fileMenu->addAction("&Settings...", this, &MainWindow::onOpenSettings, QKeySequence::Preferences);
     fileMenu->addSeparator();
@@ -218,15 +241,114 @@ void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
     m_scriptEditor->saveToRequest(req);
 }
 
+void MainWindow::markCurrentTabDirty() {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        if (!m_openTabs[m_currentTabIndex].isDirty) {
+            m_openTabs[m_currentTabIndex].isDirty = true;
+            QString title = m_openTabs[m_currentTabIndex].request.name.isEmpty() ? "Untitled" : m_openTabs[m_currentTabIndex].request.name;
+            m_openRequestsTabBar->setTabText(m_currentTabIndex, "* " + title);
+        }
+    }
+}
+
 void MainWindow::onRequestSelected(core::CollectionItem* item) {
-    if (m_activeItem && m_activeItem->request()) {
-        saveUiIntoRequest(*m_activeItem->request());
-        m_collectionModel.saveRequest(m_activeItem);
+    if (!item || !item->request()) return;
+
+    // Check if already open
+    for (int i = 0; i < m_openTabs.size(); ++i) {
+        if (m_openTabs[i].item == item) {
+            m_openRequestsTabBar->setCurrentIndex(i);
+            return;
+        }
     }
 
-    m_activeItem = item;
-    if (item && item->request()) {
+    // If only single tab open and it's the pristine Quick Request, reuse it
+    if (m_openTabs.size() == 1 && m_openTabs[0].item == nullptr && !m_openTabs[0].isDirty) {
+        m_openTabs[0].item = item;
+        m_openTabs[0].request = *item->request();
+        m_openTabs[0].isDirty = false;
+        m_openRequestsTabBar->setTabText(0, item->name());
+        m_activeItem = item;
         loadRequestIntoUi(*item->request());
+        return;
+    }
+
+    // Save current tab before creating new one
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+    }
+
+    OpenTabInfo newTab;
+    newTab.item = item;
+    newTab.request = *item->request();
+    newTab.isDirty = false;
+    m_openTabs.append(newTab);
+    int newIdx = m_openRequestsTabBar->addTab(item->name());
+    m_openRequestsTabBar->setCurrentIndex(newIdx);
+}
+
+void MainWindow::onTabChanged(int index) {
+    if (index < 0 || index >= m_openTabs.size()) return;
+    if (index == m_currentTabIndex) return;
+
+    // Save active tab
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+    }
+
+    m_currentTabIndex = index;
+    m_activeItem = m_openTabs[index].item;
+    loadRequestIntoUi(m_openTabs[index].request);
+}
+
+void MainWindow::onTabCloseRequested(int index) {
+    closeTab(index);
+}
+
+void MainWindow::onCloseCurrentTab() {
+    if (m_currentTabIndex >= 0) {
+        closeTab(m_currentTabIndex);
+    }
+}
+
+void MainWindow::closeTab(int index) {
+    if (index < 0 || index >= m_openTabs.size()) return;
+
+    if (m_openTabs[index].isDirty && m_openTabs[index].item) {
+        auto res = QMessageBox::question(this, "Unsaved Changes",
+            QString("Save changes to '%1' before closing?").arg(m_openTabs[index].request.name),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+        if (res == QMessageBox::Cancel) return;
+        if (res == QMessageBox::Save) {
+            saveUiIntoRequest(m_openTabs[index].request);
+            if (m_openTabs[index].item && m_openTabs[index].item->request()) {
+                *m_openTabs[index].item->request() = m_openTabs[index].request;
+                m_collectionModel.saveRequest(m_openTabs[index].item);
+            }
+        }
+    }
+
+    m_openRequestsTabBar->blockSignals(true);
+    m_openRequestsTabBar->removeTab(index);
+    m_openTabs.removeAt(index);
+    m_openRequestsTabBar->blockSignals(false);
+
+    if (m_openTabs.isEmpty()) {
+        core::RequestModel quickReq;
+        quickReq.name = "Quick Request";
+        quickReq.method = core::HttpMethod::GET;
+        quickReq.url = "https://httpbin.org/get";
+        OpenTabInfo quickTab{nullptr, quickReq, false};
+        m_openTabs.append(quickTab);
+        m_openRequestsTabBar->addTab("Quick Request");
+        m_currentTabIndex = 0;
+        m_activeItem = nullptr;
+        loadRequestIntoUi(quickReq);
+    } else {
+        int nextIdx = qBound(0, index == 0 ? 0 : index - 1, m_openTabs.size() - 1);
+        m_currentTabIndex = -1;
+        m_openRequestsTabBar->setCurrentIndex(nextIdx);
+        onTabChanged(nextIdx);
     }
 }
 
@@ -243,6 +365,12 @@ void MainWindow::onOpenCollection() {
 
 void MainWindow::onSaveRequest() {
     saveUiIntoRequest(m_currentRequest);
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        m_openTabs[m_currentTabIndex].request = m_currentRequest;
+        m_openTabs[m_currentTabIndex].isDirty = false;
+        QString title = m_currentRequest.name.isEmpty() ? "Untitled" : m_currentRequest.name;
+        m_openRequestsTabBar->setTabText(m_currentTabIndex, title);
+    }
     if (m_activeItem) {
         if (m_activeItem->request()) {
             *m_activeItem->request() = m_currentRequest;
@@ -253,7 +381,7 @@ void MainWindow::onSaveRequest() {
             statusBar()->showMessage("Failed to save request to disk.", 3000);
         }
     } else {
-        statusBar()->showMessage("No collection item active to save.", 3000);
+        statusBar()->showMessage("Quick request updated.", 3000);
     }
 }
 

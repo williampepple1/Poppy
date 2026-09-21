@@ -41,6 +41,18 @@ public:
 
     void clearCookies();
 
+    void setClientCertPath(const QString& path) { m_clientCertPath = path; }
+    const QString& clientCertPath() const { return m_clientCertPath; }
+
+    void setClientCertType(const QString& type) { m_clientCertType = type; }
+    const QString& clientCertType() const { return m_clientCertType; }
+
+    void setClientKeyPath(const QString& path) { m_clientKeyPath = path; }
+    const QString& clientKeyPath() const { return m_clientKeyPath; }
+
+    void setClientKeyPassword(const QString& pass) { m_clientKeyPassword = pass; }
+    const QString& clientKeyPassword() const { return m_clientKeyPassword; }
+
 signals:
     void requestStarted();
     void requestFinished(const poppy::core::ResponseModel& response);
@@ -55,6 +67,12 @@ private:
     QString m_proxy;
     bool m_cookieJarEnabled{true};
     QString m_cookieJarPath;
+
+    // mTLS
+    QString m_clientCertPath;
+    QString m_clientCertType{"PEM"};
+    QString m_clientKeyPath;
+    QString m_clientKeyPassword;
 };
 
 } // namespace poppy::network

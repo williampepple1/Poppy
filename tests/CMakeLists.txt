@@ -39,3 +39,8 @@ add_test(NAME test_aws_sigv4 COMMAND test_aws_sigv4)
 add_executable(test_insomnia_importer test_insomnia_importer.cpp)
 target_link_libraries(test_insomnia_importer PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_insomnia_importer COMMAND test_insomnia_importer)
+
+add_executable(test_auth_digest_ntlm test_auth_digest_ntlm.cpp)
+target_link_libraries(test_auth_digest_ntlm PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_auth_digest_ntlm COMMAND test_auth_digest_ntlm)
+

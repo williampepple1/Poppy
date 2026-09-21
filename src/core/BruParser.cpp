@@ -176,6 +176,14 @@ RequestModel BruParser::parse(const QString& content) {
                                 else if (key == "sessionToken") req.auth.awsSessionToken = val;
                                 else if (key == "region") req.auth.awsRegion = val;
                                 else if (key == "service") req.auth.awsService = val;
+                            } else if (blockName == "auth:digest") {
+                                if (key == "username") req.auth.digestUsername = val;
+                                else if (key == "password") req.auth.digestPassword = val;
+                            } else if (blockName == "auth:ntlm") {
+                                if (key == "username") req.auth.ntlmUsername = val;
+                                else if (key == "password") req.auth.ntlmPassword = val;
+                                else if (key == "domain") req.auth.ntlmDomain = val;
+                                else if (key == "workstation") req.auth.ntlmWorkstation = val;
                             }
                         }
                     }

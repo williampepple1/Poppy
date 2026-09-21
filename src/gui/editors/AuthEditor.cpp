@@ -24,6 +24,8 @@ AuthEditor::AuthEditor(QWidget* parent) : QWidget(parent) {
     m_typeCombo->addItem("API Key", static_cast<int>(core::AuthType::ApiKey));
     m_typeCombo->addItem("OAuth 2.0", static_cast<int>(core::AuthType::OAuth2));
     m_typeCombo->addItem("AWS SigV4", static_cast<int>(core::AuthType::AwsSigV4));
+    m_typeCombo->addItem("Digest Auth", static_cast<int>(core::AuthType::Digest));
+    m_typeCombo->addItem("NTLM Auth", static_cast<int>(core::AuthType::NTLM));
     topBar->addWidget(m_typeCombo);
     topBar->addStretch();
 
@@ -128,6 +130,42 @@ AuthEditor::AuthEditor(QWidget* parent) : QWidget(parent) {
     awsLayout->addRow("Service Name:", m_awsServiceEdit);
     m_stack->addWidget(m_awsWidget);
 
+    // 6: Digest
+    m_digestWidget = new QWidget(this);
+    auto* digestLayout = new QFormLayout(m_digestWidget);
+    m_digestUserEdit = new QLineEdit(m_digestWidget);
+    m_digestUserEdit->setPlaceholderText("Username or {{username}}");
+    m_digestPassEdit = new QLineEdit(m_digestWidget);
+    m_digestPassEdit->setPlaceholderText("Password or {{password}}");
+    m_digestPassEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    connect(m_digestUserEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_digestPassEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    digestLayout->addRow("Username:", m_digestUserEdit);
+    digestLayout->addRow("Password:", m_digestPassEdit);
+    m_stack->addWidget(m_digestWidget);
+
+    // 7: NTLM
+    m_ntlmWidget = new QWidget(this);
+    auto* ntlmLayout = new QFormLayout(m_ntlmWidget);
+    m_ntlmUserEdit = new QLineEdit(m_ntlmWidget);
+    m_ntlmUserEdit->setPlaceholderText("Username or {{username}}");
+    m_ntlmPassEdit = new QLineEdit(m_ntlmWidget);
+    m_ntlmPassEdit->setPlaceholderText("Password or {{password}}");
+    m_ntlmPassEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    m_ntlmDomainEdit = new QLineEdit(m_ntlmWidget);
+    m_ntlmDomainEdit->setPlaceholderText("Domain (optional)");
+    m_ntlmWorkstationEdit = new QLineEdit(m_ntlmWidget);
+    m_ntlmWorkstationEdit->setPlaceholderText("Workstation (optional)");
+    connect(m_ntlmUserEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_ntlmPassEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_ntlmDomainEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_ntlmWorkstationEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    ntlmLayout->addRow("Username:", m_ntlmUserEdit);
+    ntlmLayout->addRow("Password:", m_ntlmPassEdit);
+    ntlmLayout->addRow("Domain:", m_ntlmDomainEdit);
+    ntlmLayout->addRow("Workstation:", m_ntlmWorkstationEdit);
+    m_stack->addWidget(m_ntlmWidget);
+
     mainLayout->addWidget(m_stack);
 
     connect(m_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &AuthEditor::onTypeChanged);
@@ -165,6 +203,12 @@ void AuthEditor::onTypeChanged(int index) {
         case core::AuthType::AwsSigV4:
             m_stack->setCurrentWidget(m_awsWidget);
             break;
+        case core::AuthType::Digest:
+            m_stack->setCurrentWidget(m_digestWidget);
+            break;
+        case core::AuthType::NTLM:
+            m_stack->setCurrentWidget(m_ntlmWidget);
+            break;
     }
     emit authChanged();
 }
@@ -191,6 +235,14 @@ void AuthEditor::loadFromRequest(const core::RequestModel& req) {
     m_awsSessionTokenEdit->setText(req.auth.awsSessionToken);
     m_awsRegionEdit->setText(req.auth.awsRegion.isEmpty() ? "us-east-1" : req.auth.awsRegion);
     m_awsServiceEdit->setText(req.auth.awsService.isEmpty() ? "execute-api" : req.auth.awsService);
+
+    m_digestUserEdit->setText(req.auth.digestUsername);
+    m_digestPassEdit->setText(req.auth.digestPassword);
+
+    m_ntlmUserEdit->setText(req.auth.ntlmUsername);
+    m_ntlmPassEdit->setText(req.auth.ntlmPassword);
+    m_ntlmDomainEdit->setText(req.auth.ntlmDomain);
+    m_ntlmWorkstationEdit->setText(req.auth.ntlmWorkstation);
 }
 
 void AuthEditor::saveToRequest(core::RequestModel& req) const {
@@ -208,6 +260,14 @@ void AuthEditor::saveToRequest(core::RequestModel& req) const {
     req.auth.awsSessionToken = m_awsSessionTokenEdit->text();
     req.auth.awsRegion = m_awsRegionEdit->text();
     req.auth.awsService = m_awsServiceEdit->text();
+
+    req.auth.digestUsername = m_digestUserEdit->text();
+    req.auth.digestPassword = m_digestPassEdit->text();
+
+    req.auth.ntlmUsername = m_ntlmUserEdit->text();
+    req.auth.ntlmPassword = m_ntlmPassEdit->text();
+    req.auth.ntlmDomain = m_ntlmDomainEdit->text();
+    req.auth.ntlmWorkstation = m_ntlmWorkstationEdit->text();
 }
 
 } // namespace poppy::gui

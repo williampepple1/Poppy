@@ -5,9 +5,38 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QTextBrowser>
+#include <QFileDialog>
+#include <QFile>
+#include <QMessageBox>
 #include <Theme.h>
 
 namespace poppy::gui {
+
+static QString formatHexDump(const QByteArray& data) {
+    QString result;
+    const int bytesPerLine = 16;
+    int limit = qMin(data.size(), 65536);
+    for (int i = 0; i < limit; i += bytesPerLine) {
+        result += QString("%1  ").arg(i, 8, 16, QChar('0')).toUpper();
+        QString hexPart;
+        QString asciiPart;
+        for (int j = 0; j < bytesPerLine; ++j) {
+            if (i + j < limit) {
+                unsigned char c = static_cast<unsigned char>(data.at(i + j));
+                hexPart += QString("%1 ").arg(c, 2, 16, QChar('0')).toUpper();
+                asciiPart += (c >= 32 && c <= 126) ? QChar(c) : '.';
+            } else {
+                hexPart += "   ";
+            }
+            if (j == 7) hexPart += " ";
+        }
+        result += hexPart + " |" + asciiPart + "|\n";
+    }
+    if (data.size() > limit) {
+        result += QString("\n... (%1 bytes remaining truncated in hex view) ...\n").arg(data.size() - limit);
+    }
+    return result;
+}
 
 ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     auto* mainLayout = new QVBoxLayout(this);
@@ -47,6 +76,10 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     connect(m_copyBtn, &QPushButton::clicked, this, &ResponseInspector::copyBodyToClipboard);
     topBar->addWidget(m_copyBtn);
 
+    m_saveToFileBtn = new QPushButton("Save...", this);
+    connect(m_saveToFileBtn, &QPushButton::clicked, this, &ResponseInspector::saveBodyToFile);
+    topBar->addWidget(m_saveToFileBtn);
+
     mainLayout->addLayout(topBar);
 
     // 2. Tabs
@@ -83,7 +116,13 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     m_previewBrowser->setOpenExternalLinks(false);
     m_tabWidget->addTab(m_previewBrowser, "Preview (HTML)");
 
-    // Tab 1: Headers
+    // Tab 2: Hex View
+    m_hexViewer = new QPlainTextEdit(this);
+    m_hexViewer->setReadOnly(true);
+    m_hexViewer->setFont(codeFont);
+    m_tabWidget->addTab(m_hexViewer, "Hex");
+
+    // Tab 3: Headers
     m_headersTab = new QWidget(this);
     auto* hLayout = new QVBoxLayout(m_headersTab);
     hLayout->setContentsMargins(0, 4, 0, 0);
@@ -105,7 +144,7 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
     m_tabWidget->addTab(m_headersTab, "Headers");
 
-    // Tab 2: Test Results
+    // Tab 4: Test Results
     m_testsTab = new QWidget(this);
     auto* tLayout = new QVBoxLayout(m_testsTab);
     tLayout->setContentsMargins(0, 4, 0, 0);
@@ -140,11 +179,12 @@ void ResponseInspector::clear() {
     m_timingDetails->clear();
     m_bodyViewer->clear();
     m_previewBrowser->clear();
+    m_hexViewer->clear();
     m_bodySearchFilter->clear();
     m_headersTable->setRowCount(0);
     m_testsTable->setRowCount(0);
     m_testSummaryLabel->setText("No tests run");
-    m_tabWidget->setTabText(3, "Tests (0)");
+    m_tabWidget->setTabText(4, "Tests (0)");
 }
 
 void ResponseInspector::setResponse(const core::ResponseModel& res, const core::TestReport* testReport) {
@@ -161,6 +201,9 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
         m_bodyViewer->setPlainText(res.bodyAsString());
         m_previewBrowser->setHtml(res.bodyAsString());
     }
+
+    // Hex view
+    m_hexViewer->setPlainText(formatHexDump(res.rawBody));
 
     // Headers table
     updateHeadersTable(res);
@@ -229,11 +272,11 @@ void ResponseInspector::updateTestsTab(const core::TestReport* testReport) {
     if (!testReport || testReport->results.isEmpty()) {
         m_testSummaryLabel->setText("No tests registered in request.");
         m_testsTable->setRowCount(0);
-        m_tabWidget->setTabText(3, "Tests (0)");
+        m_tabWidget->setTabText(4, "Tests (0)");
         return;
     }
 
-    m_tabWidget->setTabText(3, QString("Tests (%1/%2)").arg(testReport->passedCount()).arg(testReport->totalCount()));
+    m_tabWidget->setTabText(4, QString("Tests (%1/%2)").arg(testReport->passedCount()).arg(testReport->totalCount()));
     QString summaryColor = (testReport->failedCount() == 0) ? "#10b981" : "#ef4444";
     m_testSummaryLabel->setStyleSheet(QString("font-weight: bold; color: %1; padding: 4px;").arg(summaryColor));
     m_testSummaryLabel->setText(QString("Tests Passed: %1 / %2 (Total Time: %3 ms)")
@@ -278,6 +321,31 @@ void ResponseInspector::togglePrettyRaw() {
 void ResponseInspector::copyBodyToClipboard() {
     QClipboard* clipboard = QGuiApplication::clipboard();
     clipboard->setText(m_bodyViewer->toPlainText());
+}
+
+void ResponseInspector::saveBodyToFile() {
+    if (m_currentResponse.rawBody.isEmpty()) {
+        QMessageBox::information(this, "Empty Body", "There is no response body to save.");
+        return;
+    }
+
+    QString defaultName = "response";
+    if (m_currentResponse.isJson()) defaultName += ".json";
+    else if (m_currentResponse.contentType().contains("html", Qt::CaseInsensitive)) defaultName += ".html";
+    else if (m_currentResponse.contentType().contains("xml", Qt::CaseInsensitive)) defaultName += ".xml";
+    else defaultName += ".bin";
+
+    QString filePath = QFileDialog::getSaveFileName(this, "Save Response Body", defaultName, "All Files (*.*)");
+    if (!filePath.isEmpty()) {
+        QFile file(filePath);
+        if (file.open(QIODevice::WriteOnly)) {
+            file.write(m_currentResponse.rawBody);
+            file.close();
+            QMessageBox::information(this, "Saved", "Response body saved successfully.");
+        } else {
+            QMessageBox::warning(this, "Error", "Could not write to file: " + file.errorString());
+        }
+    }
 }
 
 } // namespace poppy::gui

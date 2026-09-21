@@ -216,6 +216,39 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         curl_easy_setopt(curl, CURLOPT_COOKIEFILE, pathBytes.constData());
     }
 
+    // Digest and NTLM Authentication
+    if (req.auth.type == core::AuthType::Digest) {
+        curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
+        QString creds = req.auth.digestUsername + ":" + req.auth.digestPassword;
+        curl_easy_setopt(curl, CURLOPT_USERPWD, creds.toUtf8().constData());
+    } else if (req.auth.type == core::AuthType::NTLM) {
+        curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_NTLM);
+        QString creds = req.auth.ntlmUsername;
+        if (!req.auth.ntlmDomain.isEmpty()) {
+            creds = req.auth.ntlmDomain + "\\" + creds;
+        }
+        creds += ":" + req.auth.ntlmPassword;
+        curl_easy_setopt(curl, CURLOPT_USERPWD, creds.toUtf8().constData());
+    }
+
+    // mTLS Client Certificates
+    if (!m_clientCertPath.isEmpty()) {
+        QByteArray certBytes = m_clientCertPath.toUtf8();
+        curl_easy_setopt(curl, CURLOPT_SSLCERT, certBytes.constData());
+        if (!m_clientCertType.isEmpty()) {
+            QByteArray certTypeBytes = m_clientCertType.toUtf8();
+            curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, certTypeBytes.constData());
+        }
+        if (!m_clientKeyPath.isEmpty()) {
+            QByteArray keyBytes = m_clientKeyPath.toUtf8();
+            curl_easy_setopt(curl, CURLOPT_SSLKEY, keyBytes.constData());
+        }
+        if (!m_clientKeyPassword.isEmpty()) {
+            QByteArray passBytes = m_clientKeyPassword.toUtf8();
+            curl_easy_setopt(curl, CURLOPT_KEYPASSWD, passBytes.constData());
+        }
+    }
+
     // 8. Execute request
     CURLcode resCode = curl_easy_perform(curl);
 

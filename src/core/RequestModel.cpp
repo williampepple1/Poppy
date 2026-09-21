@@ -65,6 +65,8 @@ QString authTypeToString(AuthType type) {
         case AuthType::ApiKey: return "apikey";
         case AuthType::OAuth2: return "oauth2";
         case AuthType::AwsSigV4: return "awsv4";
+        case AuthType::Digest: return "digest";
+        case AuthType::NTLM: return "ntlm";
     }
     return "none";
 }
@@ -76,6 +78,8 @@ AuthType stringToAuthType(const QString& str) {
     if (lower == "apikey") return AuthType::ApiKey;
     if (lower == "oauth2") return AuthType::OAuth2;
     if (lower == "awsv4" || lower == "aws" || lower == "awssigv4") return AuthType::AwsSigV4;
+    if (lower == "digest") return AuthType::Digest;
+    if (lower == "ntlm") return AuthType::NTLM;
     if (lower == "inherit") return AuthType::Inherit;
     return AuthType::None;
 }

@@ -24,6 +24,7 @@ public:
 
 private slots:
     void copyBodyToClipboard();
+    void saveBodyToFile();
     void togglePrettyRaw();
     void filterHeaders(const QString& text);
 
@@ -39,6 +40,7 @@ private:
     QLabel* m_timingDetails;
     QPushButton* m_prettyRawToggleBtn;
     QPushButton* m_copyBtn;
+    QPushButton* m_saveToFileBtn;
 
     // Tabs
     QTabWidget* m_tabWidget;
@@ -53,6 +55,9 @@ private:
 
     // Preview Tab
     QTextBrowser* m_previewBrowser;
+
+    // Hex Tab
+    QPlainTextEdit* m_hexViewer;
 
     // Headers Tab
     QWidget* m_headersTab;

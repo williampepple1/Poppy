@@ -84,6 +84,18 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "  region: " << req.auth.awsRegion << "\n";
         ts << "  service: " << req.auth.awsService << "\n";
         ts << "}\n\n";
+    } else if (req.auth.type == AuthType::Digest) {
+        ts << "auth:digest {\n";
+        ts << "  username: " << req.auth.digestUsername << "\n";
+        ts << "  password: " << req.auth.digestPassword << "\n";
+        ts << "}\n\n";
+    } else if (req.auth.type == AuthType::NTLM) {
+        ts << "auth:ntlm {\n";
+        ts << "  username: " << req.auth.ntlmUsername << "\n";
+        ts << "  password: " << req.auth.ntlmPassword << "\n";
+        if (!req.auth.ntlmDomain.isEmpty()) ts << "  domain: " << req.auth.ntlmDomain << "\n";
+        if (!req.auth.ntlmWorkstation.isEmpty()) ts << "  workstation: " << req.auth.ntlmWorkstation << "\n";
+        ts << "}\n\n";
     }
 
     // body block

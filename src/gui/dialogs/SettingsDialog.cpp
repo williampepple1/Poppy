@@ -6,12 +6,14 @@
 #include <QLabel>
 #include <QMessageBox>
 
+#include <QFileDialog>
+
 namespace poppy::gui {
 
 SettingsDialog::SettingsDialog(network::CurlNetworkEngine* engine, QWidget* parent)
     : QDialog(parent), m_engine(engine) {
     setWindowTitle("Poppy Settings");
-    resize(480, 360);
+    resize(520, 520);
 
     auto* mainLayout = new QVBoxLayout(this);
     mainLayout->setSpacing(12);
@@ -46,7 +48,47 @@ SettingsDialog::SettingsDialog(network::CurlNetworkEngine* engine, QWidget* pare
 
     mainLayout->addWidget(secGroup);
 
-    // 3. Cookie Jar Group
+    // 3. Client Certificates (mTLS) Group
+    auto* mtlsGroup = new QGroupBox("Client Certificates (mTLS)", this);
+    auto* mtlsForm = new QFormLayout(mtlsGroup);
+
+    auto* certRow = new QHBoxLayout();
+    m_clientCertEdit = new QLineEdit(mtlsGroup);
+    m_clientCertEdit->setPlaceholderText("Path to client certificate (.pem, .p12, .crt)");
+    if (m_engine) m_clientCertEdit->setText(m_engine->clientCertPath());
+    m_browseCertBtn = new QPushButton("Browse...", mtlsGroup);
+    connect(m_browseCertBtn, &QPushButton::clicked, this, &SettingsDialog::onBrowseCert);
+    certRow->addWidget(m_clientCertEdit, 1);
+    certRow->addWidget(m_browseCertBtn);
+    mtlsForm->addRow("Certificate File:", certRow);
+
+    m_clientCertTypeCombo = new QComboBox(mtlsGroup);
+    m_clientCertTypeCombo->addItems({"PEM", "DER", "P12"});
+    if (m_engine) {
+        int idx = m_clientCertTypeCombo->findText(m_engine->clientCertType());
+        if (idx >= 0) m_clientCertTypeCombo->setCurrentIndex(idx);
+    }
+    mtlsForm->addRow("Format:", m_clientCertTypeCombo);
+
+    auto* keyRow = new QHBoxLayout();
+    m_clientKeyEdit = new QLineEdit(mtlsGroup);
+    m_clientKeyEdit->setPlaceholderText("Path to private key (.key, optional if in cert)");
+    if (m_engine) m_clientKeyEdit->setText(m_engine->clientKeyPath());
+    m_browseKeyBtn = new QPushButton("Browse...", mtlsGroup);
+    connect(m_browseKeyBtn, &QPushButton::clicked, this, &SettingsDialog::onBrowseKey);
+    keyRow->addWidget(m_clientKeyEdit, 1);
+    keyRow->addWidget(m_browseKeyBtn);
+    mtlsForm->addRow("Private Key:", keyRow);
+
+    m_clientPassEdit = new QLineEdit(mtlsGroup);
+    m_clientPassEdit->setPlaceholderText("Passphrase (if key/cert is encrypted)");
+    m_clientPassEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    if (m_engine) m_clientPassEdit->setText(m_engine->clientKeyPassword());
+    mtlsForm->addRow("Passphrase:", m_clientPassEdit);
+
+    mainLayout->addWidget(mtlsGroup);
+
+    // 4. Cookie Jar Group
     auto* cookieGroup = new QGroupBox("Cookie Management", this);
     auto* cookieLayout = new QHBoxLayout(cookieGroup);
 
@@ -79,6 +121,20 @@ SettingsDialog::SettingsDialog(network::CurlNetworkEngine* engine, QWidget* pare
     mainLayout->addLayout(btnLayout);
 }
 
+void SettingsDialog::onBrowseCert() {
+    QString file = QFileDialog::getOpenFileName(this, "Select Client Certificate", "", "Certificates (*.pem *.crt *.p12 *.pfx);;All Files (*.*)");
+    if (!file.isEmpty()) {
+        m_clientCertEdit->setText(file);
+    }
+}
+
+void SettingsDialog::onBrowseKey() {
+    QString file = QFileDialog::getOpenFileName(this, "Select Private Key", "", "Key Files (*.key *.pem);;All Files (*.*)");
+    if (!file.isEmpty()) {
+        m_clientKeyEdit->setText(file);
+    }
+}
+
 void SettingsDialog::onClearCookies() {
     if (m_engine) {
         m_engine->clearCookies();
@@ -92,6 +148,10 @@ void SettingsDialog::onApply() {
         m_engine->setTimeoutMs(m_timeoutSpin->value());
         m_engine->setSslVerifyPeer(m_sslVerifyChk->isChecked());
         m_engine->setCookieJarEnabled(m_cookieJarChk->isChecked());
+        m_engine->setClientCertPath(m_clientCertEdit->text().trimmed());
+        m_engine->setClientCertType(m_clientCertTypeCombo->currentText());
+        m_engine->setClientKeyPath(m_clientKeyEdit->text().trimmed());
+        m_engine->setClientKeyPassword(m_clientPassEdit->text());
     }
     accept();
 }

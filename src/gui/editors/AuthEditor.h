@@ -63,6 +63,18 @@ private:
     QLineEdit* m_awsSessionTokenEdit;
     QLineEdit* m_awsRegionEdit;
     QLineEdit* m_awsServiceEdit;
+
+    // Digest
+    QWidget* m_digestWidget;
+    QLineEdit* m_digestUserEdit;
+    QLineEdit* m_digestPassEdit;
+
+    // NTLM
+    QWidget* m_ntlmWidget;
+    QLineEdit* m_ntlmUserEdit;
+    QLineEdit* m_ntlmPassEdit;
+    QLineEdit* m_ntlmDomainEdit;
+    QLineEdit* m_ntlmWorkstationEdit;
 };
 
 } // namespace poppy::gui
