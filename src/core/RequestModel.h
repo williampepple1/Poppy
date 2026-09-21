@@ -29,7 +29,8 @@ enum class BodyType {
     Xml,
     FormUrlEncoded,
     MultipartForm,
-    Binary
+    Binary,
+    GraphQL
 };
 
 QString bodyTypeToString(BodyType type);
@@ -59,7 +60,8 @@ enum class AuthType {
     Bearer,
     Basic,
     ApiKey,
-    OAuth2
+    OAuth2,
+    AwsSigV4
 };
 
 QString authTypeToString(AuthType type);
@@ -82,6 +84,13 @@ struct AuthModel {
 
     // OAuth2
     QString oauth2AccessToken;
+
+    // AWS SigV4
+    QString awsAccessKey;
+    QString awsSecretKey;
+    QString awsSessionToken;
+    QString awsRegion;
+    QString awsService;
 
     bool operator==(const AuthModel& other) const = default;
 };
@@ -110,6 +119,8 @@ public:
     
     BodyType bodyType{BodyType::None};
     QString bodyContent;
+    QString graphqlQuery;
+    QString graphqlVariables;
 
     AuthModel auth;
     ScriptModel scripts;

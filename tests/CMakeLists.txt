@@ -27,3 +27,15 @@ add_test(NAME test_codegen COMMAND test_codegen)
 add_executable(test_importers test_importers.cpp)
 target_link_libraries(test_importers PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_importers COMMAND test_importers)
+
+add_executable(test_graphql test_graphql.cpp)
+target_link_libraries(test_graphql PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_graphql COMMAND test_graphql)
+
+add_executable(test_aws_sigv4 test_aws_sigv4.cpp)
+target_link_libraries(test_aws_sigv4 PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_aws_sigv4 COMMAND test_aws_sigv4)
+
+add_executable(test_insomnia_importer test_insomnia_importer.cpp)
+target_link_libraries(test_insomnia_importer PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_insomnia_importer COMMAND test_insomnia_importer)

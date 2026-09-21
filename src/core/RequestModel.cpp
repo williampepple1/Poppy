@@ -1,4 +1,5 @@
 #include "RequestModel.h"
+#include "auth/AwsSigV4Signer.h"
 #include <QUuid>
 #include <QUrlQuery>
 #include <QRegularExpression>
@@ -38,6 +39,7 @@ QString bodyTypeToString(BodyType type) {
         case BodyType::FormUrlEncoded: return "form-urlencoded";
         case BodyType::MultipartForm: return "multipart-form";
         case BodyType::Binary: return "binary";
+        case BodyType::GraphQL: return "graphql";
     }
     return "none";
 }
@@ -50,6 +52,7 @@ BodyType stringToBodyType(const QString& str) {
     if (lower == "form-urlencoded" || lower == "form_urlencoded") return BodyType::FormUrlEncoded;
     if (lower == "multipart-form" || lower == "multipart_form" || lower == "form-data") return BodyType::MultipartForm;
     if (lower == "binary") return BodyType::Binary;
+    if (lower == "graphql") return BodyType::GraphQL;
     return BodyType::None;
 }
 
@@ -61,6 +64,7 @@ QString authTypeToString(AuthType type) {
         case AuthType::Basic: return "basic";
         case AuthType::ApiKey: return "apikey";
         case AuthType::OAuth2: return "oauth2";
+        case AuthType::AwsSigV4: return "awsv4";
     }
     return "none";
 }
@@ -71,6 +75,7 @@ AuthType stringToAuthType(const QString& str) {
     if (lower == "basic") return AuthType::Basic;
     if (lower == "apikey") return AuthType::ApiKey;
     if (lower == "oauth2") return AuthType::OAuth2;
+    if (lower == "awsv4" || lower == "aws" || lower == "awssigv4") return AuthType::AwsSigV4;
     if (lower == "inherit") return AuthType::Inherit;
     return AuthType::None;
 }
@@ -138,10 +143,15 @@ QList<HttpHeader> RequestModel::effectiveHeaders() const {
             .value = "Bearer " + auth.oauth2AccessToken,
             .enabled = true
         });
+    } else if (auth.type == AuthType::AwsSigV4) {
+        auto awsHeaders = AwsSigV4Signer::generateAuthHeaders(*this);
+        for (const auto& ah : awsHeaders) {
+            result.append(ah);
+        }
     }
 
-    // Ensure Content-Type is set if body is JSON and not already present
-    if (bodyType == BodyType::Json && !bodyContent.trimmed().isEmpty()) {
+    // Ensure Content-Type is set if body is JSON or GraphQL and not already present
+    if ((bodyType == BodyType::Json && !bodyContent.trimmed().isEmpty()) || bodyType == BodyType::GraphQL) {
         bool hasContentType = false;
         for (const auto& h : result) {
             if (h.enabled && h.name.compare("Content-Type", Qt::CaseInsensitive) == 0) {
@@ -174,7 +184,10 @@ QString RequestModel::toCurlCommand() const {
         parts.append(QString("-H \"%1: %2\"").arg(h.name, val));
     }
 
-    if (bodyType != BodyType::None && !bodyContent.isEmpty()) {
+    if (bodyType == BodyType::GraphQL) {
+        QString escaped = QString("{\"query\": \"%1\"}").arg(graphqlQuery.trimmed().replace("\"", "\\\"").replace("\n", "\\n"));
+        parts.append(QString("-d \"%1\"").arg(escaped));
+    } else if (bodyType != BodyType::None && !bodyContent.isEmpty()) {
         QString escaped = bodyContent;
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "");

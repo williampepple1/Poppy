@@ -7,6 +7,7 @@
 #include <core/importers/CurlImporter.h>
 #include <core/importers/PostmanImporter.h>
 #include <core/importers/OpenApiImporter.h>
+#include <core/importers/InsomniaImporter.h>
 
 namespace poppy::gui {
 
@@ -123,6 +124,46 @@ ImportDialog::ImportDialog(const QString& defaultOutputDir, QWidget* parent)
 
     m_tabWidget->addTab(openApiTab, "OpenAPI (v3)");
 
+    // 4. Tab Insomnia
+    auto* insomniaTab = new QWidget(this);
+    auto* insomniaLayout = new QVBoxLayout(insomniaTab);
+    insomniaLayout->addWidget(new QLabel("Select Insomnia v4 export JSON file:", insomniaTab));
+
+    auto* iFileLayout = new QHBoxLayout();
+    m_insomniaFileEdit = new QLineEdit(insomniaTab);
+    m_insomniaFileEdit->setPlaceholderText("Path to Insomnia JSON file...");
+    iFileLayout->addWidget(m_insomniaFileEdit);
+    auto* browseIFileBtn = new QPushButton("Browse...", insomniaTab);
+    connect(browseIFileBtn, &QPushButton::clicked, this, [this]() {
+        QString f = QFileDialog::getOpenFileName(this, "Select Insomnia Export", QString(), "JSON Files (*.json);;All Files (*.*)");
+        if (!f.isEmpty()) m_insomniaFileEdit->setText(f);
+    });
+    iFileLayout->addWidget(browseIFileBtn);
+    insomniaLayout->addLayout(iFileLayout);
+
+    insomniaLayout->addWidget(new QLabel("Destination Directory for Poppy Collection:", insomniaTab));
+    auto* iDestLayout = new QHBoxLayout();
+    m_insomniaDestEdit = new QLineEdit(m_defaultOutputDir, insomniaTab);
+    iDestLayout->addWidget(m_insomniaDestEdit);
+    auto* browseIDestBtn = new QPushButton("Browse...", insomniaTab);
+    connect(browseIDestBtn, &QPushButton::clicked, this, [this]() {
+        QString d = QFileDialog::getExistingDirectory(this, "Select Destination Directory", m_insomniaDestEdit->text());
+        if (!d.isEmpty()) m_insomniaDestEdit->setText(d);
+    });
+    iDestLayout->addWidget(browseIDestBtn);
+    insomniaLayout->addLayout(iDestLayout);
+
+    insomniaLayout->addStretch();
+    auto* insomniaBtnLayout = new QHBoxLayout();
+    insomniaBtnLayout->addStretch();
+    m_importInsomniaBtn = new QPushButton("Import Insomnia Collection", insomniaTab);
+    m_importInsomniaBtn->setObjectName("primaryBtn");
+    connect(m_importInsomniaBtn, &QPushButton::clicked, this, &ImportDialog::onImportInsomnia);
+    insomniaBtnLayout->addWidget(m_importInsomniaBtn);
+    insomniaLayout->addLayout(insomniaBtnLayout);
+
+    m_tabWidget->addTab(insomniaTab, "Insomnia (v4)");
+
     mainLayout->addWidget(m_tabWidget);
 }
 
@@ -173,6 +214,25 @@ void ImportDialog::onImportOpenApi() {
         accept();
     } else {
         QMessageBox::critical(this, "Import Failed", "Failed to import OpenAPI spec:\n" + err);
+    }
+}
+
+void ImportDialog::onImportInsomnia() {
+    QString file = m_insomniaFileEdit->text().trimmed();
+    QString dest = m_insomniaDestEdit->text().trimmed();
+
+    if (file.isEmpty() || dest.isEmpty()) {
+        QMessageBox::warning(this, "Missing Path", "Please provide both the Insomnia export file and destination directory.");
+        return;
+    }
+
+    QString err;
+    if (core::InsomniaImporter::importCollection(file, dest, &err)) {
+        QMessageBox::information(this, "Import Complete", "Insomnia collection imported successfully!");
+        emit collectionImported(dest);
+        accept();
+    } else {
+        QMessageBox::critical(this, "Import Failed", "Failed to import Insomnia collection:\n" + err);
     }
 }
 

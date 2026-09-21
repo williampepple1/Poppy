@@ -49,6 +49,15 @@ int main(int argc, char *argv[]) {
     QCommandLineOption delayOption("delay", "Delay between requests in milliseconds", "ms", "0");
     parser.addOption(delayOption);
 
+    QCommandLineOption iterationsOption(QStringList() << "i" << "iterations", "Number of iterations to run", "n", "1");
+    parser.addOption(iterationsOption);
+
+    QCommandLineOption concurrencyOption(QStringList() << "c" << "concurrency", "Number of concurrent workers", "n", "1");
+    parser.addOption(concurrencyOption);
+
+    QCommandLineOption dataOption(QStringList() << "d" << "data", "Path to JSON array or CSV data fixture file", "file");
+    parser.addOption(dataOption);
+
     QCommandLineOption outputOption(QStringList() << "o" << "output", "Save output report to file", "file");
     parser.addOption(outputOption);
 
@@ -56,7 +65,7 @@ int main(int argc, char *argv[]) {
 
     const QStringList args = parser.positionalArguments();
     if (args.isEmpty() || (args.size() > 0 && args.at(0) != "run")) {
-        std::cout << "Usage: poppy run <path-to-collection> [--env <env-name>] [--reporter cli|json|junit] [--delay <ms>]" << std::endl;
+        std::cout << "Usage: poppy run <path-to-collection> [--env <env-name>] [--reporter cli|json|junit] [--delay <ms>] [--iterations <n>] [--data <file>]" << std::endl;
         return 1;
     }
 
@@ -70,6 +79,54 @@ int main(int argc, char *argv[]) {
     QString reporter = parser.value(reporterOption).toLower();
     QString outputFile = parser.value(outputOption);
     int delayMs = parser.value(delayOption).toInt();
+    int iterations = parser.value(iterationsOption).toInt();
+    if (iterations <= 0) iterations = 1;
+    int concurrency = parser.value(concurrencyOption).toInt();
+    if (concurrency <= 0) concurrency = 1;
+    QString dataFile = parser.value(dataOption);
+
+    QList<QMap<QString, QString>> fixtureRows;
+    if (!dataFile.isEmpty()) {
+        QFile f(dataFile);
+        if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+            QByteArray content = f.readAll();
+            f.close();
+            if (dataFile.endsWith(".json", Qt::CaseInsensitive)) {
+                QJsonDocument doc = QJsonDocument::fromJson(content);
+                if (doc.isArray()) {
+                    for (const auto& val : doc.array()) {
+                        if (val.isObject()) {
+                            QMap<QString, QString> row;
+                            QJsonObject obj = val.toObject();
+                            for (auto it = obj.begin(); it != obj.end(); ++it) {
+                                row[it.key()] = it.value().toVariant().toString();
+                            }
+                            fixtureRows.append(row);
+                        }
+                    }
+                }
+            } else if (dataFile.endsWith(".csv", Qt::CaseInsensitive)) {
+                QString text = QString::fromUtf8(content);
+                QStringList lines = text.split('\n', Qt::SkipEmptyParts);
+                if (!lines.isEmpty()) {
+                    QStringList headers = lines[0].trimmed().split(',');
+                    for (int r = 1; r < lines.size(); ++r) {
+                        QStringList vals = lines[r].trimmed().split(',');
+                        QMap<QString, QString> row;
+                        for (int c = 0; c < headers.size() && c < vals.size(); ++c) {
+                            row[headers[c].trimmed()] = vals[c].trimmed();
+                        }
+                        fixtureRows.append(row);
+                    }
+                }
+            }
+            if (!fixtureRows.isEmpty() && !parser.isSet(iterationsOption)) {
+                iterations = fixtureRows.size();
+            }
+        } else {
+            std::cerr << "Warning: Could not open data fixture file: " << dataFile.toStdString() << std::endl;
+        }
+    }
 
     core::CollectionModel collection;
     QList<core::RequestModel> requestsToRun;
@@ -116,13 +173,19 @@ int main(int argc, char *argv[]) {
         std::cout << " Target:      " << collectionPath.toStdString() << "\n";
         std::cout << " Environment: " << (envName.isEmpty() ? "None" : envName.toStdString()) << "\n";
         std::cout << " Requests:    " << requestsToRun.size() << "\n";
+        if (iterations > 1) {
+            std::cout << " Iterations:  " << iterations << "\n";
+        }
+        if (concurrency > 1) {
+            std::cout << " Concurrency: " << concurrency << "\n";
+        }
         if (delayMs > 0) {
             std::cout << " Delay:       " << delayMs << " ms\n";
         }
         std::cout << "=======================================================\n\n";
     }
 
-    int totalRequests = requestsToRun.size();
+    int totalExpectedRequests = requestsToRun.size() * iterations;
     int passedRequests = 0;
     int totalTests = 0;
     int passedTests = 0;
@@ -141,10 +204,23 @@ int main(int argc, char *argv[]) {
     QList<SuiteResult> suiteResults;
     QJsonArray jsonResults;
 
-    for (int i = 0; i < requestsToRun.size(); ++i) {
-        if (delayMs > 0 && i > 0) {
-            QThread::msleep(delayMs);
+    for (int iter = 0; iter < iterations; ++iter) {
+        resolver.clearRuntimeVariables();
+        if (!fixtureRows.isEmpty()) {
+            const auto& row = fixtureRows[iter % fixtureRows.size()];
+            for (auto it = row.constBegin(); it != row.constEnd(); ++it) {
+                resolver.setRuntimeVariable(it.key(), it.value());
+            }
         }
+
+        if (reporter == "cli" && iterations > 1) {
+            std::cout << "--- Iteration " << (iter + 1) << "/" << iterations << " ---\n";
+        }
+
+        for (int i = 0; i < requestsToRun.size(); ++i) {
+            if (delayMs > 0 && (i > 0 || iter > 0)) {
+                QThread::msleep(delayMs);
+            }
 
         core::RequestModel req = requestsToRun[i];
         core::RequestModel resolvedReq = resolver.resolveRequest(req);
@@ -154,7 +230,7 @@ int main(int argc, char *argv[]) {
         scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, activeEnv, &preErr);
 
         if (reporter == "cli") {
-            std::cout << "[" << (i + 1) << "/" << totalRequests << "] "
+            std::cout << "[" << (i + 1) << "/" << requestsToRun.size() << "] "
                       << core::methodToString(resolvedReq.method).toStdString() << " "
                       << resolvedReq.effectiveUrl().toStdString() << "\n";
         }
@@ -201,7 +277,12 @@ int main(int argc, char *argv[]) {
         }
 
         SuiteResult sr;
-        sr.name = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
+        QString reqTitle = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
+        if (iterations > 1) {
+            sr.name = QString("[%1/%2] %3").arg(iter + 1).arg(iterations).arg(reqTitle);
+        } else {
+            sr.name = reqTitle;
+        }
         sr.url = resolvedReq.effectiveUrl();
         sr.method = core::methodToString(resolvedReq.method);
         sr.statusCode = res.statusCode;
@@ -233,18 +314,19 @@ int main(int argc, char *argv[]) {
             reqObj["tests"] = testsArr;
             jsonResults.append(reqObj);
         }
+        }
     }
 
     if (reporter == "cli") {
         std::cout << "-------------------------------------------------------\n";
         std::cout << "Summary:\n";
-        std::cout << "  Requests: " << passedRequests << " / " << totalRequests << " passed\n";
+        std::cout << "  Requests: " << passedRequests << " / " << totalExpectedRequests << " passed\n";
         std::cout << "  Tests:    " << passedTests << " / " << totalTests << " passed\n";
         std::cout << "  Latency:  " << totalLatencyMs << " ms total\n";
         std::cout << "-------------------------------------------------------\n\n";
     } else if (reporter == "json") {
         QJsonObject summary;
-        summary["totalRequests"] = totalRequests;
+        summary["totalRequests"] = totalExpectedRequests;
         summary["passedRequests"] = passedRequests;
         summary["totalTests"] = totalTests;
         summary["passedTests"] = passedTests;
@@ -273,10 +355,10 @@ int main(int argc, char *argv[]) {
 
         QString xml;
         xml += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
-        int failedSuites = totalRequests - passedRequests;
+        int failedSuites = totalExpectedRequests - passedRequests;
         double totalSeconds = totalLatencyMs / 1000.0;
         xml += QString("<testsuites name=\"Poppy Collection\" tests=\"%1\" failures=\"%2\" time=\"%3\">\n")
-                   .arg(totalTests > 0 ? totalTests : totalRequests)
+                   .arg(totalTests > 0 ? totalTests : totalExpectedRequests)
                    .arg(totalTests > 0 ? (totalTests - passedTests) : failedSuites)
                    .arg(totalSeconds, 0, 'f', 3);
 
@@ -338,6 +420,6 @@ int main(int argc, char *argv[]) {
         }
     }
 
-    bool allSuccess = (passedRequests == totalRequests) && (passedTests == totalTests);
+    bool allSuccess = (passedRequests == totalExpectedRequests) && (passedTests == totalTests);
     return allSuccess ? 0 : 1;
 }

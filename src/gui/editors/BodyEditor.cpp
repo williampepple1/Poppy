@@ -22,6 +22,7 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     m_typeCombo->addItem("XML", static_cast<int>(core::BodyType::Xml));
     m_typeCombo->addItem("Form URL-Encoded", static_cast<int>(core::BodyType::FormUrlEncoded));
     m_typeCombo->addItem("Multipart Form", static_cast<int>(core::BodyType::MultipartForm));
+    m_typeCombo->addItem("GraphQL", static_cast<int>(core::BodyType::GraphQL));
     topBar->addWidget(m_typeCombo);
 
     m_formatBtn = new QPushButton("Prettify JSON", this);
@@ -58,6 +59,29 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     connect(m_formTable, &KeyValueTable::dataChanged, this, &BodyEditor::bodyChanged);
     m_stack->addWidget(m_formTable);
 
+    // View 3: GraphQL Editor
+    m_gqlWidget = new QWidget(this);
+    auto* gqlLayout = new QVBoxLayout(m_gqlWidget);
+    gqlLayout->setContentsMargins(0, 0, 0, 0);
+    gqlLayout->setSpacing(4);
+
+    gqlLayout->addWidget(new QLabel("Query:", m_gqlWidget));
+    m_gqlQueryEditor = new QPlainTextEdit(m_gqlWidget);
+    m_gqlQueryEditor->setFont(font);
+    m_gqlQueryEditor->setPlaceholderText("query {\n  users {\n    id\n    name\n  }\n}");
+    connect(m_gqlQueryEditor, &QPlainTextEdit::textChanged, this, &BodyEditor::bodyChanged);
+    gqlLayout->addWidget(m_gqlQueryEditor, 2);
+
+    gqlLayout->addWidget(new QLabel("Variables (JSON):", m_gqlWidget));
+    m_gqlVarsEditor = new QPlainTextEdit(m_gqlWidget);
+    m_gqlVarsEditor->setFont(font);
+    m_gqlVarsEditor->setPlaceholderText("{\n  \"limit\": 10\n}");
+    new JsonSyntaxHighlighter(m_gqlVarsEditor->document());
+    connect(m_gqlVarsEditor, &QPlainTextEdit::textChanged, this, &BodyEditor::bodyChanged);
+    gqlLayout->addWidget(m_gqlVarsEditor, 1);
+
+    m_stack->addWidget(m_gqlWidget);
+
     mainLayout->addWidget(m_stack);
 
     connect(m_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &BodyEditor::onFormatChanged);
@@ -71,6 +95,9 @@ void BodyEditor::onFormatChanged(int index) {
         m_formatBtn->setVisible(false);
     } else if (type == core::BodyType::FormUrlEncoded || type == core::BodyType::MultipartForm) {
         m_stack->setCurrentWidget(m_formTable);
+        m_formatBtn->setVisible(false);
+    } else if (type == core::BodyType::GraphQL) {
+        m_stack->setCurrentWidget(m_gqlWidget);
         m_formatBtn->setVisible(false);
     } else {
         m_stack->setCurrentWidget(m_codeEditor);
@@ -96,7 +123,10 @@ void BodyEditor::loadFromRequest(const core::RequestModel& req) {
         m_typeCombo->setCurrentIndex(idx);
     }
 
-    if (req.bodyType == core::BodyType::FormUrlEncoded || req.bodyType == core::BodyType::MultipartForm) {
+    if (req.bodyType == core::BodyType::GraphQL) {
+        m_gqlQueryEditor->setPlainText(req.graphqlQuery);
+        m_gqlVarsEditor->setPlainText(req.graphqlVariables);
+    } else if (req.bodyType == core::BodyType::FormUrlEncoded || req.bodyType == core::BodyType::MultipartForm) {
         // Parse key=val&... lines into table
         QList<core::HttpParam> params;
         QStringList pairs = req.bodyContent.split('&', Qt::SkipEmptyParts);
@@ -117,6 +147,10 @@ void BodyEditor::saveToRequest(core::RequestModel& req) const {
 
     if (req.bodyType == core::BodyType::None) {
         req.bodyContent.clear();
+    } else if (req.bodyType == core::BodyType::GraphQL) {
+        req.graphqlQuery = m_gqlQueryEditor->toPlainText();
+        req.graphqlVariables = m_gqlVarsEditor->toPlainText();
+        req.bodyContent = req.graphqlQuery;
     } else if (req.bodyType == core::BodyType::FormUrlEncoded || req.bodyType == core::BodyType::MultipartForm) {
         QStringList parts;
         for (const auto& p : m_formTable->params()) {

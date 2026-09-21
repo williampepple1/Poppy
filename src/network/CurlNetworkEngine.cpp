@@ -3,6 +3,10 @@
 #include <QRunnable>
 #include <QPointer>
 #include <QDebug>
+#include <QFile>
+#include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <mutex>
 
 namespace poppy::network {
@@ -157,7 +161,19 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
 
     // 4. Request Body
     QByteArray bodyBytes;
-    if (req.bodyType != core::BodyType::None && !req.bodyContent.isEmpty()) {
+    if (req.bodyType == core::BodyType::GraphQL) {
+        QJsonObject gqlObj;
+        gqlObj["query"] = req.graphqlQuery;
+        if (!req.graphqlVariables.trimmed().isEmpty()) {
+            QJsonDocument vDoc = QJsonDocument::fromJson(req.graphqlVariables.toUtf8());
+            if (vDoc.isObject()) {
+                gqlObj["variables"] = vDoc.object();
+            }
+        }
+        bodyBytes = QJsonDocument(gqlObj).toJson(QJsonDocument::Compact);
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
+        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
+    } else if (req.bodyType != core::BodyType::None && !req.bodyContent.isEmpty()) {
         bodyBytes = req.bodyContent.toUtf8();
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
@@ -190,6 +206,14 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
 
     if (!m_proxy.isEmpty()) {
         curl_easy_setopt(curl, CURLOPT_PROXY, m_proxy.toUtf8().constData());
+    }
+
+    // Cookie Jar
+    if (m_cookieJarEnabled) {
+        QString cpath = m_cookieJarPath.isEmpty() ? (QDir::tempPath() + "/poppy_cookies.txt") : m_cookieJarPath;
+        QByteArray pathBytes = cpath.toUtf8();
+        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, pathBytes.constData());
+        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, pathBytes.constData());
     }
 
     // 8. Execute request
@@ -250,6 +274,11 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     curl_easy_cleanup(curl);
 
     return response;
+}
+
+void CurlNetworkEngine::clearCookies() {
+    QString cpath = m_cookieJarPath.isEmpty() ? (QDir::tempPath() + "/poppy_cookies.txt") : m_cookieJarPath;
+    QFile::remove(cpath);
 }
 
 } // namespace poppy::network

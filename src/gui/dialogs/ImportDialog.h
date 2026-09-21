@@ -22,6 +22,7 @@ private slots:
     void onImportCurl();
     void onImportPostman();
     void onImportOpenApi();
+    void onImportInsomnia();
 
 private:
     QString m_defaultOutputDir;
@@ -40,6 +41,11 @@ private:
     QLineEdit* m_openApiFileEdit;
     QLineEdit* m_openApiDestEdit;
     QPushButton* m_importOpenApiBtn;
+
+    // Insomnia tab
+    QLineEdit* m_insomniaFileEdit;
+    QLineEdit* m_insomniaDestEdit;
+    QPushButton* m_importInsomniaBtn;
 };
 
 } // namespace poppy::gui

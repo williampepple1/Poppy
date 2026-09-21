@@ -15,6 +15,7 @@ public:
     void setCollectionVariables(const QMap<QString, QString>& vars) { m_collectionVars = vars; }
     void setEnvironment(const EnvironmentModel& env);
     void setRuntimeVariable(const QString& name, const QString& value) { m_runtimeVars[name] = value; }
+    void clearRuntimeVariables() { m_runtimeVars.clear(); }
 
     // Interpolates {{varName}} in string
     QString resolveString(const QString& input) const;

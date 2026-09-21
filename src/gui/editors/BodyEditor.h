@@ -40,6 +40,11 @@ private:
 
     // View 2: Form Url Encoded / Multipart Form
     KeyValueTable* m_formTable;
+
+    // View 3: GraphQL Editor
+    QWidget* m_gqlWidget;
+    QPlainTextEdit* m_gqlQueryEditor;
+    QPlainTextEdit* m_gqlVarsEditor;
 };
 
 } // namespace poppy::gui

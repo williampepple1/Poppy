@@ -1,8 +1,10 @@
 #include "AuthEditor.h"
+#include "dialogs/OAuth2TokenDialog.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
 #include <QLabel>
+#include <QPushButton>
 
 namespace poppy::gui {
 
@@ -21,6 +23,7 @@ AuthEditor::AuthEditor(QWidget* parent) : QWidget(parent) {
     m_typeCombo->addItem("Basic Auth", static_cast<int>(core::AuthType::Basic));
     m_typeCombo->addItem("API Key", static_cast<int>(core::AuthType::ApiKey));
     m_typeCombo->addItem("OAuth 2.0", static_cast<int>(core::AuthType::OAuth2));
+    m_typeCombo->addItem("AWS SigV4", static_cast<int>(core::AuthType::AwsSigV4));
     topBar->addWidget(m_typeCombo);
     topBar->addStretch();
 
@@ -83,17 +86,61 @@ AuthEditor::AuthEditor(QWidget* parent) : QWidget(parent) {
     // 4: OAuth 2.0
     m_oauth2Widget = new QWidget(this);
     auto* oauthLayout = new QFormLayout(m_oauth2Widget);
+    auto* tokenRow = new QHBoxLayout();
     m_oauth2TokenEdit = new QLineEdit(m_oauth2Widget);
     m_oauth2TokenEdit->setPlaceholderText("Access Token or {{accessToken}}");
     m_oauth2TokenEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
     connect(m_oauth2TokenEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
-    oauthLayout->addRow("Access Token:", m_oauth2TokenEdit);
+    tokenRow->addWidget(m_oauth2TokenEdit, 1);
+
+    m_oauth2GetTokenBtn = new QPushButton("Get Token...", m_oauth2Widget);
+    connect(m_oauth2GetTokenBtn, &QPushButton::clicked, this, &AuthEditor::onGetOAuth2Token);
+    tokenRow->addWidget(m_oauth2GetTokenBtn);
+
+    oauthLayout->addRow("Access Token:", tokenRow);
     m_stack->addWidget(m_oauth2Widget);
+
+    // 5: AWS SigV4
+    m_awsWidget = new QWidget(this);
+    auto* awsLayout = new QFormLayout(m_awsWidget);
+    m_awsAccessKeyEdit = new QLineEdit(m_awsWidget);
+    m_awsAccessKeyEdit->setPlaceholderText("e.g. AKIAIOSFODNN7EXAMPLE or {{awsAccessKey}}");
+    m_awsSecretKeyEdit = new QLineEdit(m_awsWidget);
+    m_awsSecretKeyEdit->setPlaceholderText("e.g. wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY or {{awsSecretKey}}");
+    m_awsSecretKeyEdit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    m_awsSessionTokenEdit = new QLineEdit(m_awsWidget);
+    m_awsSessionTokenEdit->setPlaceholderText("Session Token (optional for IAM roles)");
+    m_awsRegionEdit = new QLineEdit(m_awsWidget);
+    m_awsRegionEdit->setPlaceholderText("e.g. us-east-1");
+    m_awsServiceEdit = new QLineEdit(m_awsWidget);
+    m_awsServiceEdit->setPlaceholderText("e.g. execute-api or s3");
+
+    connect(m_awsAccessKeyEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_awsSecretKeyEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_awsSessionTokenEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_awsRegionEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+    connect(m_awsServiceEdit, &QLineEdit::textChanged, this, &AuthEditor::authChanged);
+
+    awsLayout->addRow("Access Key ID:", m_awsAccessKeyEdit);
+    awsLayout->addRow("Secret Access Key:", m_awsSecretKeyEdit);
+    awsLayout->addRow("Session Token:", m_awsSessionTokenEdit);
+    awsLayout->addRow("AWS Region:", m_awsRegionEdit);
+    awsLayout->addRow("Service Name:", m_awsServiceEdit);
+    m_stack->addWidget(m_awsWidget);
 
     mainLayout->addWidget(m_stack);
 
     connect(m_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &AuthEditor::onTypeChanged);
     onTypeChanged(0);
+}
+
+void AuthEditor::onGetOAuth2Token() {
+    OAuth2TokenDialog dlg(m_networkEngine, this);
+    if (dlg.exec() == QDialog::Accepted) {
+        if (!dlg.acquiredToken().isEmpty()) {
+            m_oauth2TokenEdit->setText(dlg.acquiredToken());
+        }
+    }
 }
 
 void AuthEditor::onTypeChanged(int index) {
@@ -115,6 +162,9 @@ void AuthEditor::onTypeChanged(int index) {
         case core::AuthType::OAuth2:
             m_stack->setCurrentWidget(m_oauth2Widget);
             break;
+        case core::AuthType::AwsSigV4:
+            m_stack->setCurrentWidget(m_awsWidget);
+            break;
     }
     emit authChanged();
 }
@@ -135,6 +185,12 @@ void AuthEditor::loadFromRequest(const core::RequestModel& req) {
     if (placeIdx >= 0) m_apiKeyPlacementCombo->setCurrentIndex(placeIdx);
 
     m_oauth2TokenEdit->setText(req.auth.oauth2AccessToken);
+
+    m_awsAccessKeyEdit->setText(req.auth.awsAccessKey);
+    m_awsSecretKeyEdit->setText(req.auth.awsSecretKey);
+    m_awsSessionTokenEdit->setText(req.auth.awsSessionToken);
+    m_awsRegionEdit->setText(req.auth.awsRegion.isEmpty() ? "us-east-1" : req.auth.awsRegion);
+    m_awsServiceEdit->setText(req.auth.awsService.isEmpty() ? "execute-api" : req.auth.awsService);
 }
 
 void AuthEditor::saveToRequest(core::RequestModel& req) const {
@@ -146,6 +202,12 @@ void AuthEditor::saveToRequest(core::RequestModel& req) const {
     req.auth.apiKeyValue = m_apiKeyValueEdit->text();
     req.auth.apiKeyPlacement = m_apiKeyPlacementCombo->currentData().toString();
     req.auth.oauth2AccessToken = m_oauth2TokenEdit->text();
+
+    req.auth.awsAccessKey = m_awsAccessKeyEdit->text();
+    req.auth.awsSecretKey = m_awsSecretKeyEdit->text();
+    req.auth.awsSessionToken = m_awsSessionTokenEdit->text();
+    req.auth.awsRegion = m_awsRegionEdit->text();
+    req.auth.awsService = m_awsServiceEdit->text();
 }
 
 } // namespace poppy::gui

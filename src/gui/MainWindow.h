@@ -42,6 +42,7 @@ private slots:
     void onRequestSelected(core::CollectionItem* item);
     void onEnvironmentChanged(const QString& envName);
     void onMethodChanged(int index);
+    void onOpenSettings();
 
 private:
     void setupUi();

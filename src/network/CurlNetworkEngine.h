@@ -33,6 +33,14 @@ public:
     void setProxy(const QString& proxy) { m_proxy = proxy; }
     const QString& proxy() const { return m_proxy; }
 
+    void setCookieJarEnabled(bool enabled) { m_cookieJarEnabled = enabled; }
+    bool cookieJarEnabled() const { return m_cookieJarEnabled; }
+
+    void setCookieJarPath(const QString& path) { m_cookieJarPath = path; }
+    const QString& cookieJarPath() const { return m_cookieJarPath; }
+
+    void clearCookies();
+
 signals:
     void requestStarted();
     void requestFinished(const poppy::core::ResponseModel& response);
@@ -45,6 +53,8 @@ private:
     bool m_sslVerifyPeer{true};
     long m_timeoutMs{30000};
     QString m_proxy;
+    bool m_cookieJarEnabled{true};
+    QString m_cookieJarPath;
 };
 
 } // namespace poppy::network

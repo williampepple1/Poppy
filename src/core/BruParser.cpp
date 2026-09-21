@@ -63,6 +63,11 @@ RequestModel BruParser::parse(const QString& content) {
                 if (blockName == "body:json") {
                     req.bodyType = BodyType::Json;
                     req.bodyContent = blockContent.trimmed();
+                } else if (blockName == "body:graphql") {
+                    req.bodyType = BodyType::GraphQL;
+                    req.graphqlQuery = blockContent.trimmed();
+                } else if (blockName == "body:graphql:vars") {
+                    req.graphqlVariables = blockContent.trimmed();
                 } else if (blockName == "body:text") {
                     req.bodyType = BodyType::Text;
                     req.bodyContent = blockContent;
@@ -165,6 +170,12 @@ RequestModel BruParser::parse(const QString& content) {
                                 else if (key == "placement") req.auth.apiKeyPlacement = val;
                             } else if (blockName == "auth:oauth2") {
                                 if (key == "token" || key == "access_token") req.auth.oauth2AccessToken = val;
+                            } else if (blockName == "auth:awsv4" || blockName == "auth:aws") {
+                                if (key == "accessKeyId" || key == "accessKey") req.auth.awsAccessKey = val;
+                                else if (key == "secretAccessKey" || key == "secretKey") req.auth.awsSecretKey = val;
+                                else if (key == "sessionToken") req.auth.awsSessionToken = val;
+                                else if (key == "region") req.auth.awsRegion = val;
+                                else if (key == "service") req.auth.awsService = val;
                             }
                         }
                     }

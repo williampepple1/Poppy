@@ -14,6 +14,7 @@
 #include "dialogs/CodeSnippetDialog.h"
 #include "dialogs/ImportDialog.h"
 #include "dialogs/CollectionRunnerDialog.h"
+#include "dialogs/SettingsDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 
@@ -117,6 +118,7 @@ void MainWindow::setupUi() {
     m_headersEditor = new HeadersEditor(this);
     m_bodyEditor = new BodyEditor(this);
     m_authEditor = new AuthEditor(this);
+    m_authEditor->setNetworkEngine(&m_networkEngine);
     m_assertionsEditor = new AssertionsEditor(this);
     m_scriptEditor = new ScriptEditor(this);
 
@@ -161,6 +163,8 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
     fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
     fileMenu->addAction("&Save Request", this, &MainWindow::onSaveRequest, QKeySequence::Save);
+    fileMenu->addSeparator();
+    fileMenu->addAction("&Settings...", this, &MainWindow::onOpenSettings, QKeySequence::Preferences);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
@@ -354,6 +358,11 @@ void MainWindow::onSendClicked() {
         // 8. Update Response Inspector
         m_responseInspector->setResponse(res, &report);
     });
+}
+
+void MainWindow::onOpenSettings() {
+    SettingsDialog dlg(&m_networkEngine, this);
+    dlg.exec();
 }
 
 } // namespace poppy::gui

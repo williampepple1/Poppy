@@ -76,10 +76,29 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "auth:oauth2 {\n";
         ts << "  token: " << req.auth.oauth2AccessToken << "\n";
         ts << "}\n\n";
+    } else if (req.auth.type == AuthType::AwsSigV4) {
+        ts << "auth:awsv4 {\n";
+        ts << "  accessKeyId: " << req.auth.awsAccessKey << "\n";
+        ts << "  secretAccessKey: " << req.auth.awsSecretKey << "\n";
+        if (!req.auth.awsSessionToken.isEmpty()) ts << "  sessionToken: " << req.auth.awsSessionToken << "\n";
+        ts << "  region: " << req.auth.awsRegion << "\n";
+        ts << "  service: " << req.auth.awsService << "\n";
+        ts << "}\n\n";
     }
 
     // body block
-    if (req.bodyType != BodyType::None && !req.bodyContent.trimmed().isEmpty()) {
+    if (req.bodyType == BodyType::GraphQL) {
+        if (!req.graphqlQuery.trimmed().isEmpty()) {
+            ts << "body:graphql {\n";
+            ts << req.graphqlQuery << "\n";
+            ts << "}\n\n";
+        }
+        if (!req.graphqlVariables.trimmed().isEmpty()) {
+            ts << "body:graphql:vars {\n";
+            ts << req.graphqlVariables << "\n";
+            ts << "}\n\n";
+        }
+    } else if (req.bodyType != BodyType::None && !req.bodyContent.trimmed().isEmpty()) {
         QString bodyBlock = "body:" + bodyTypeToString(req.bodyType);
         ts << bodyBlock << " {\n";
         ts << req.bodyContent << "\n";

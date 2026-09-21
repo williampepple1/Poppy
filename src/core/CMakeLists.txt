@@ -11,6 +11,8 @@ add_library(poppy_core STATIC
     importers/CurlImporter.h importers/CurlImporter.cpp
     importers/PostmanImporter.h importers/PostmanImporter.cpp
     importers/OpenApiImporter.h importers/OpenApiImporter.cpp
+    importers/InsomniaImporter.h importers/InsomniaImporter.cpp
+    auth/AwsSigV4Signer.h auth/AwsSigV4Signer.cpp
     codegen/CodeGenerator.h codegen/CodeGenerator.cpp
 )
 
