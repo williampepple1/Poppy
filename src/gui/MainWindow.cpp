@@ -17,6 +17,7 @@
 #include "dialogs/SettingsDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
+#include <core/exporters/OpenApiExporter.h>
 #include <QTabBar>
 
 namespace poppy::gui {
@@ -168,6 +169,9 @@ void MainWindow::setupUi() {
     setCentralWidget(centralWidget);
 
     // Global Shortcuts
+    auto* newShortcut = new QShortcut(QKeySequence::New, this);
+    connect(newShortcut, &QShortcut::activated, this, &MainWindow::onNewRequest);
+
     auto* sendShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_Return), this);
     connect(sendShortcut, &QShortcut::activated, this, &MainWindow::onSendClicked);
 
@@ -182,18 +186,20 @@ void MainWindow::setupUi() {
 
 void MainWindow::setupMenus() {
     auto* fileMenu = menuBar()->addMenu("&File");
-    fileMenu->addAction("&Open Collection...", this, &MainWindow::onOpenCollection, QKeySequence::Open);
+    fileMenu->addAction("&New Request", QKeySequence::New, this, &MainWindow::onNewRequest);
+    fileMenu->addAction("&Open Collection...", QKeySequence::Open, this, &MainWindow::onOpenCollection);
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
+    fileMenu->addAction("&Export Collection as OpenAPI 3.0...", this, &MainWindow::onExportOpenApi);
     fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
-    fileMenu->addAction("&Save Request", this, &MainWindow::onSaveRequest, QKeySequence::Save);
-    fileMenu->addAction("&Close Tab", this, &MainWindow::onCloseCurrentTab, QKeySequence::Close);
+    fileMenu->addAction("&Save Request", QKeySequence::Save, this, &MainWindow::onSaveRequest);
+    fileMenu->addAction("&Close Tab", QKeySequence::Close, this, &MainWindow::onCloseCurrentTab);
     fileMenu->addSeparator();
-    fileMenu->addAction("&Settings...", this, &MainWindow::onOpenSettings, QKeySequence::Preferences);
+    fileMenu->addAction("&Settings...", QKeySequence::Preferences, this, &MainWindow::onOpenSettings);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
     auto* envMenu = menuBar()->addMenu("&Environments");
-    envMenu->addAction("&Manage Environments...", this, &MainWindow::onManageEnvironments, QKeySequence(Qt::CTRL | Qt::Key_E));
+    envMenu->addAction("&Manage Environments...", QKeySequence(Qt::CTRL | Qt::Key_E), this, &MainWindow::onManageEnvironments);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&About Poppy", this, [this]() {
@@ -349,6 +355,46 @@ void MainWindow::closeTab(int index) {
         m_currentTabIndex = -1;
         m_openRequestsTabBar->setCurrentIndex(nextIdx);
         onTabChanged(nextIdx);
+    }
+}
+
+void MainWindow::onNewRequest() {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+    }
+
+    core::RequestModel newReq;
+    newReq.name = "Untitled Request";
+    newReq.method = core::HttpMethod::GET;
+    newReq.url = "";
+
+    OpenTabInfo tabInfo;
+    tabInfo.item = nullptr;
+    tabInfo.request = newReq;
+    tabInfo.isDirty = false;
+    m_openTabs.append(tabInfo);
+
+    int newIdx = m_openRequestsTabBar->addTab("Untitled Request");
+    m_openRequestsTabBar->setCurrentIndex(newIdx);
+}
+
+void MainWindow::onExportOpenApi() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString defaultName = m_collectionModel.name().isEmpty() ? "openapi.json" : (m_collectionModel.name() + "_openapi.json");
+    QString savePath = QFileDialog::getSaveFileName(this, "Export Collection as OpenAPI 3.0", defaultName, "OpenAPI JSON (*.json);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    QString colName = m_collectionModel.name().isEmpty() ? "Poppy Collection" : m_collectionModel.name();
+    if (core::OpenApiExporter::exportToFile(savePath, requests, colName, "1.0.0", &error)) {
+        QMessageBox::information(this, "Export Succeeded", QString("Collection exported as OpenAPI 3.0 spec successfully to:\n%1").arg(savePath));
+    } else {
+        QMessageBox::warning(this, "Export Failed", QString("Could not export collection:\n%1").arg(error));
     }
 }
 

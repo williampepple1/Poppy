@@ -210,4 +210,20 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
     return true;
 }
 
+static void collectAllRequestsRecursively(const CollectionItem* item, QList<RequestModel>& list) {
+    if (!item) return;
+    if (item->type() == CollectionItemType::Request && item->request()) {
+        list.append(*item->request());
+    }
+    for (const auto* child : item->children()) {
+        collectAllRequestsRecursively(child, list);
+    }
+}
+
+QList<RequestModel> CollectionModel::allRequests() const {
+    QList<RequestModel> list;
+    collectAllRequestsRecursively(m_rootItem.get(), list);
+    return list;
+}
+
 } // namespace poppy::core

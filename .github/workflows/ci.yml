@@ -62,3 +62,11 @@ jobs:
       - name: Run CTest
         run: |
           ctest --test-dir build --output-on-failure -C ${{ matrix.build_type }}
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: poppy-${{ matrix.os }}-${{ matrix.build_type }}
+          path: |
+            build/bin/poppy*
+          if-no-files-found: warn

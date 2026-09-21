@@ -31,8 +31,10 @@ public:
     ~MainWindow() override;
 
 private slots:
+    void onNewRequest();
     void onSendClicked();
     void onOpenCollection();
+    void onExportOpenApi();
     void onSaveRequest();
     void onCopyAsCurl();
     void onShowCodeSnippets();

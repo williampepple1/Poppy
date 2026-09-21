@@ -53,11 +53,11 @@
 - **Sandboxed JavaScript Testing**: Integrated `QJSEngine` runtime exposing a secure `poppy` namespace (`poppy.req`, `poppy.res`, `poppy.setEnvVar`, `poppy.getEnvVar`).
 - **Standard Chai/Mocha-Style Test Suite**: Write custom pre-request and post-response validation scripts using familiar `expect(res.getStatus()).to.equal(200)` assertions.
 
-### 🔄 Migration & Universal Importers
+### 🔄 Migration, Interoperability & Exporters
 - **cURL Importer**: Paste any cURL command to instantly parse methods, URLs, headers, bodies, and auth.
 - **Postman v2.1 Importer**: Recursively converts Postman collections, folders, environments, and requests into `.bru` directory trees.
 - **Insomnia v4 Importer**: Ingests Insomnia workspace exports, maintaining nested folder structures and auth profiles.
-- **OpenAPI v3.0 Importer**: Automatically generates collections from OpenAPI / Swagger specifications.
+- **OpenAPI v3.0 Importer & Exporter**: Ingest OpenAPI specifications into collections, or export entire collections and active requests to valid OpenAPI 3.0.3 JSON specs with a single click.
 
 ### 💻 Multi-Language Code Generation
 - Export any request with one click to production-ready code:
@@ -179,13 +179,20 @@ cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
 # 3. Compile binaries (GUI and CLI)
 cmake --build build
 
-# 4. Run test suite (10 test suites)
+# 4. Run test suite (12 test suites)
 ctest --test-dir build --output-on-failure
 ```
 
 Compiled executables will be available in:
 - `build/bin/poppy` (GUI Desktop Application)
 - `build/bin/poppy-cli` (Headless CLI Runner)
+
+### Packaging for Release (Windows)
+Create a standalone, portable `.zip` release bundled with all necessary Qt and MinGW runtime libraries via `windeployqt`:
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
+# Generates: dist/Poppy-windows-x64.zip
+```
 
 ---
 

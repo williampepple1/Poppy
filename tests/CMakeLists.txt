@@ -44,3 +44,8 @@ add_executable(test_auth_digest_ntlm test_auth_digest_ntlm.cpp)
 target_link_libraries(test_auth_digest_ntlm PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_auth_digest_ntlm COMMAND test_auth_digest_ntlm)
 
+add_executable(test_openapi_exporter test_openapi_exporter.cpp)
+target_link_libraries(test_openapi_exporter PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_openapi_exporter COMMAND test_openapi_exporter)
+
+
