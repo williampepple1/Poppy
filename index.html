@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poppy — Local-first API Client</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #fff;
+      --fg: #000;
+      --muted: #555;
+      --border: #000;
+      --hover-bg: #000;
+      --hover-fg: #fff;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+      font-size: 16px;
+      line-height: 1.6;
+    }
+
+    /* ── NAV ── */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.5rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+    }
+    nav .logo {
+      font-size: 1.25rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+      color: var(--fg);
+    }
+    nav a.gh-link {
+      font-size: 0.875rem;
+      color: var(--fg);
+      text-decoration: none;
+      border-bottom: 1px solid var(--fg);
+      padding-bottom: 1px;
+      transition: opacity 0.15s;
+    }
+    nav a.gh-link:hover { opacity: 0.5; }
+
+    /* ── HERO ── */
+    .hero {
+      max-width: 760px;
+      margin: 6rem auto 4rem;
+      padding: 0 2rem;
+    }
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      letter-spacing: -0.04em;
+      line-height: 1.1;
+      margin-bottom: 1.25rem;
+    }
+    .hero p {
+      font-size: 1.125rem;
+      color: var(--muted);
+      max-width: 560px;
+      margin-bottom: 2.5rem;
+    }
+
+    /* ── DOWNLOAD BUTTONS ── */
+    .downloads {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-bottom: 1rem;
+    }
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.75rem 1.5rem;
+      font-size: 0.9rem;
+      font-weight: 600;
+      letter-spacing: 0.01em;
+      text-decoration: none;
+      border: 1.5px solid var(--border);
+      color: var(--fg);
+      background: var(--bg);
+      transition: background 0.15s, color 0.15s;
+      cursor: pointer;
+    }
+    .btn:hover {
+      background: var(--hover-bg);
+      color: var(--hover-fg);
+    }
+    .btn-primary {
+      background: var(--fg);
+      color: var(--bg);
+    }
+    .btn-primary:hover {
+      background: #333;
+      color: var(--bg);
+    }
+    .version-note {
+      font-size: 0.8rem;
+      color: var(--muted);
+    }
+
+    /* ── DIVIDER ── */
+    hr {
+      border: none;
+      border-top: 1px solid #e0e0e0;
+      margin: 4rem auto;
+      max-width: 760px;
+    }
+
+    /* ── FEATURES ── */
+    .features {
+      max-width: 760px;
+      margin: 0 auto 5rem;
+      padding: 0 2rem;
+    }
+    .features h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 2rem;
+    }
+    .feature-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1.5rem 2rem;
+    }
+    .feature-item h3 {
+      font-size: 0.9rem;
+      font-weight: 700;
+      margin-bottom: 0.25rem;
+      letter-spacing: 0.01em;
+    }
+    .feature-item p {
+      font-size: 0.8rem;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 1.5rem 2.5rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    footer p { font-size: 0.8rem; color: var(--muted); }
+    footer a { color: var(--fg); text-decoration: none; border-bottom: 1px solid var(--fg); padding-bottom: 1px; }
+    footer a:hover { opacity: 0.5; }
+
+    @media (max-width: 600px) {
+      nav { padding: 1rem 1.25rem; }
+      .hero { margin: 3.5rem auto 3rem; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav>
+    <a class="logo" href="#">Poppy</a>
+    <a class="gh-link" href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">
+      GitHub ↗
+    </a>
+  </nav>
+
+  <section class="hero">
+    <h1>The API client<br/>that stays yours.</h1>
+    <p>
+      Poppy is a native, ultra-fast, local-first API client &amp; test runner built with
+      C++20 and Qt 6. All your collections and environments live on your machine — no cloud,
+      no accounts, no lock-in. Inspired by Bruno.
+    </p>
+
+    <div class="downloads">
+      <a class="btn btn-primary"
+         href="https://github.com/williampepple1/Poppy/releases/download/v1.0.0/Poppy-windows-x64.zip"
+         download>
+        ↓ Download for Windows
+      </a>
+      <a class="btn"
+         href="https://github.com/williampepple1/Poppy/releases/download/v1.0.0/Poppy-linux-x64.tar.gz"
+         download>
+        ↓ Download for Linux
+      </a>
+      <a class="btn"
+         href="https://github.com/williampepple1/Poppy/releases/tag/v1.0.0"
+         target="_blank" rel="noopener">
+        All releases ↗
+      </a>
+    </div>
+    <p class="version-note">v1.0.0 · Windows x64 &amp; Linux x64</p>
+  </section>
+
+  <hr />
+
+  <section class="features">
+    <h2>Everything you need. Nothing extra.</h2>
+    <div class="feature-grid">
+
+      <div class="feature-item">
+        <h3>Bruno-compatible Collections</h3>
+        <p>Import and use <code>.bru</code> files directly. Your data stays in plain text on disk.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Multi-tab Workspace</h3>
+        <p>Work across multiple requests simultaneously with a familiar tabbed interface.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Pre &amp; Post Scripts</h3>
+        <p>Run JavaScript snippets before and after requests to dynamically set variables or assert values.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Declarative Assertions</h3>
+        <p>Define pass/fail conditions inline. Run them as a full collection test suite.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>GraphQL Support</h3>
+        <p>First-class GraphQL editor with introspection, variable interpolation, and syntax highlighting.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Auth: AWS, OAuth2, mTLS</h3>
+        <p>AWS SigV4, OAuth 2.0, Digest, NTLM, and mutual TLS — all built in.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Cookie Manager</h3>
+        <p>Inspect, edit, and persist cookies across sessions with a dedicated manager dialog.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Request History</h3>
+        <p>Every executed request is automatically logged with status, latency, and full response.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Code Generators</h3>
+        <p>Export any request as cURL, Python, JavaScript, Go, Rust, C#, Java, PHP, or Ruby.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>OpenAPI 3.0 Export</h3>
+        <p>Generate a full OpenAPI spec from your collection in one click.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Variable Resolution</h3>
+        <p>Environment, collection, and global variables with <code>{{mustache}}</code> syntax.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>Quick Open Palette</h3>
+        <p>Navigate your entire workspace instantly with a fuzzy-search command palette.</p>
+      </div>
+
+    </div>
+  </section>
+
+  <footer>
+    <p>© 2025 Poppy. Open source under the MIT license.</p>
+    <p>
+      <a href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">View on GitHub</a>
+    </p>
+  </footer>
+
+</body>
+</html>
