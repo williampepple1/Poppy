@@ -1,0 +1,6 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource prefix="/icons">
+    <file alias="app_icon.png">resources/icon.png</file>
+    <file alias="app_icon.ico">resources/icon.ico</file>
+</qresource>
+</RCC>

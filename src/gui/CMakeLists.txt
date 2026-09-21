@@ -1,5 +1,12 @@
+set(POPPY_EXTRA_SOURCES)
+if(WIN32)
+    list(APPEND POPPY_EXTRA_SOURCES poppy.rc)
+endif()
+
 add_executable(poppy
     main.cpp
+    resources.qrc
+    ${POPPY_EXTRA_SOURCES}
     MainWindow.h MainWindow.cpp
     Theme.h Theme.cpp
     components/KeyValueTable.h components/KeyValueTable.cpp

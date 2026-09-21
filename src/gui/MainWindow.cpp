@@ -22,6 +22,7 @@ namespace poppy::gui {
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Poppy - Native API Client");
+    setWindowIcon(QIcon(":/icons/app_icon.png"));
     resize(1200, 750);
     setMinimumSize(800, 500);
 
