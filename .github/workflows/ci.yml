@@ -13,43 +13,42 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ windows-latest, ubuntu-latest ]
-        build_type: [ Release ]
+        include:
+          - os: windows-2022
+            build_type: Release
+            arch: win64_msvc2019_64
+          - os: ubuntu-latest
+            build_type: Release
+            arch: gcc_64
+
+    env:
+      QT_QPA_PLATFORM: offscreen
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Ninja
-        uses: aseptic/setup-ninja@v1
-        with:
-          version: '1.11.1'
+      - name: Install Ninja (Windows)
+        if: runner.os == 'Windows'
+        run: choco install ninja -y
+
+      - name: Setup MSVC (Windows)
+        if: runner.os == 'Windows'
+        uses: ilammy/msvc-dev-cmd@v1
 
       - name: Install Linux Dependencies (Ubuntu)
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libgl1-mesa-dev libxkbcommon-dev
+          sudo apt-get install -y build-essential ninja-build libgl1-mesa-dev libxkbcommon-dev libx11-xcb-dev libxkbcommon-x11-0 libxcb-cursor0 libssl-dev
 
       - name: Install Qt
-        uses: jurplel/install-qt-action@v3
+        uses: jurplel/install-qt-action@v4
         with:
-          version: '6.6.3'
-          host: 'windows'
-          target: 'desktop'
-          arch: 'win64_mingw'
-          modules: 'qt5compat'
-        if: runner.os == 'Windows'
-
-      - name: Install Qt (Linux)
-        uses: jurplel/install-qt-action@v3
-        with:
-          version: '6.6.3'
-          host: 'linux'
-          target: 'desktop'
-          arch: 'gcc_64'
-          modules: 'qt5compat'
-        if: runner.os == 'Linux'
+          version: '6.7.2'
+          arch: ${{ matrix.arch }}
+          modules: 'qtdeclarative'
+          cache: true
 
       - name: Configure CMake
         run: |
