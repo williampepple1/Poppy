@@ -16,10 +16,13 @@
 #include "dialogs/CollectionRunnerDialog.h"
 #include "dialogs/SettingsDialog.h"
 #include "dialogs/QuickOpenDialog.h"
+#include "dialogs/CookieManagerDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 #include <core/exporters/OpenApiExporter.h>
+#include <core/CookieJar.h>
 #include <QTabBar>
+#include <QDir>
 
 namespace poppy::gui {
 
@@ -28,6 +31,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowIcon(QIcon(":/icons/app_icon.png"));
     resize(1200, 750);
     setMinimumSize(800, 500);
+
+    m_historyManager.loadFromFile(core::HistoryManager::defaultHistoryFilePath());
 
     setupUi();
     setupMenus();
@@ -55,8 +60,9 @@ void MainWindow::setupUi() {
     auto* mainSplitter = new QSplitter(Qt::Horizontal, this);
 
     // Sidebar
-    m_sidebar = new CollectionSidebar(&m_collectionModel, this);
+    m_sidebar = new CollectionSidebar(&m_collectionModel, &m_historyManager, this);
     connect(m_sidebar, &CollectionSidebar::requestSelected, this, &MainWindow::onRequestSelected);
+    connect(m_sidebar, &CollectionSidebar::historyItemSelected, this, &MainWindow::onHistoryItemSelected);
     connect(m_sidebar, &CollectionSidebar::environmentChanged, this, &MainWindow::onEnvironmentChanged);
     connect(m_sidebar, &CollectionSidebar::manageEnvironmentsRequested, this, &MainWindow::onManageEnvironments);
     connect(m_sidebar, &CollectionSidebar::openCollectionRequested, this, &MainWindow::onOpenCollection);
@@ -202,6 +208,19 @@ void MainWindow::setupMenus() {
 
     auto* envMenu = menuBar()->addMenu("&Environments");
     envMenu->addAction("&Manage Environments...", QKeySequence(Qt::CTRL | Qt::Key_E), this, &MainWindow::onManageEnvironments);
+
+    auto* toolsMenu = menuBar()->addMenu("&Tools");
+    toolsMenu->addAction("&Cookie Manager...", QKeySequence(Qt::CTRL | Qt::Key_K), this, &MainWindow::onManageCookies);
+    toolsMenu->addAction("Clear &Cookie Jar", this, &MainWindow::onClearCookieJar);
+    toolsMenu->addSeparator();
+    toolsMenu->addAction("Clear &History", this, [this]() {
+        if (m_historyManager.count() > 0) {
+            auto res = QMessageBox::question(this, "Clear History", "Clear all request execution history?", QMessageBox::Yes | QMessageBox::No);
+            if (res == QMessageBox::Yes) {
+                m_historyManager.clear();
+            }
+        }
+    });
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&About Poppy", this, [this]() {
@@ -541,7 +560,37 @@ void MainWindow::onSendClicked() {
 
         // 8. Update Response Inspector
         m_responseInspector->setResponse(res, &report);
+
+        // 9. Add to History
+        m_historyManager.addEntry(resolvedReq, res);
     });
+}
+
+void MainWindow::onHistoryItemSelected(const core::HistoryItem& item) {
+    loadRequestIntoUi(item.request);
+    core::ResponseModel res = item.toResponseModel();
+    m_responseInspector->setResponse(res, nullptr);
+    statusBar()->showMessage(QString("Loaded historical request: %1 (%2)").arg(item.request.url).arg(item.statusCode), 3000);
+}
+
+void MainWindow::onManageCookies() {
+    QString cpath = m_networkEngine.cookieJarPath();
+    if (cpath.isEmpty()) {
+        cpath = QDir::tempPath() + "/poppy_cookies.txt";
+    }
+    CookieManagerDialog dlg(cpath, this);
+    dlg.exec();
+}
+
+void MainWindow::onClearCookieJar() {
+    QString cpath = m_networkEngine.cookieJarPath();
+    if (cpath.isEmpty()) {
+        cpath = QDir::tempPath() + "/poppy_cookies.txt";
+    }
+    core::CookieJar jar;
+    jar.clear();
+    jar.saveToFile(cpath);
+    statusBar()->showMessage("Cookie jar cleared.", 3000);
 }
 
 void MainWindow::onOpenSettings() {

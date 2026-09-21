@@ -59,6 +59,27 @@ int main() {
     assert(cppCode.contains("CURLOPT_CUSTOMREQUEST, \"POST\""));
     assert(cppCode.contains("curl_easy_perform(curl)"));
 
+    // 7. Rust reqwest
+    QString rustCode = CodeGenerator::generate(TargetLanguage::RustReqwest, req);
+    assert(rustCode.contains("use reqwest::header"));
+    assert(rustCode.contains("reqwest::Client::new()"));
+    assert(rustCode.contains(".post(\"https://api.example.com/v1/resources\")"));
+    assert(rustCode.contains(".send()"));
+
+    // 8. C# HttpClient
+    QString csCode = CodeGenerator::generate(TargetLanguage::CSharpHttpClient, req);
+    assert(csCode.contains("using System.Net.Http;"));
+    assert(csCode.contains("new HttpRequestMessage"));
+    assert(csCode.contains("client.SendAsync(request)"));
+    assert(csCode.contains("https://api.example.com/v1/resources"));
+
+    // 9. Java HttpClient
+    QString javaCode = CodeGenerator::generate(TargetLanguage::JavaHttpClient, req);
+    assert(javaCode.contains("import java.net.http.HttpClient;"));
+    assert(javaCode.contains("HttpRequest.newBuilder()"));
+    assert(javaCode.contains("client.send(request"));
+    assert(javaCode.contains("https://api.example.com/v1/resources"));
+
     std::cout << "test_codegen PASSED!" << std::endl;
     return 0;
 }

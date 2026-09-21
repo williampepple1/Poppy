@@ -10,6 +10,9 @@ QString CodeGenerator::languageName(TargetLanguage lang) {
         case TargetLanguage::JavaScriptAxios: return "JavaScript (axios)";
         case TargetLanguage::GoHttp: return "Go (net/http)";
         case TargetLanguage::CppCurl: return "C++ (libcurl)";
+        case TargetLanguage::RustReqwest: return "Rust (reqwest)";
+        case TargetLanguage::CSharpHttpClient: return "C# (HttpClient)";
+        case TargetLanguage::JavaHttpClient: return "Java (java.net.http)";
         case TargetLanguage::Curl: return "cURL";
     }
     return "Python (requests)";
@@ -22,6 +25,9 @@ QString CodeGenerator::generate(TargetLanguage lang, const RequestModel& req) {
         case TargetLanguage::JavaScriptAxios: return generateJsAxios(req);
         case TargetLanguage::GoHttp: return generateGo(req);
         case TargetLanguage::CppCurl: return generateCpp(req);
+        case TargetLanguage::RustReqwest: return generateRust(req);
+        case TargetLanguage::CSharpHttpClient: return generateCSharp(req);
+        case TargetLanguage::JavaHttpClient: return generateJava(req);
         case TargetLanguage::Curl: return req.toCurlCommand();
     }
     return generatePython(req);
@@ -233,6 +239,141 @@ QString CodeGenerator::generateCpp(const RequestModel& req) {
     ts << "        curl_easy_cleanup(curl);\n";
     ts << "    }\n";
     ts << "    return 0;\n";
+    ts << "}\n";
+
+    return out;
+}
+
+QString CodeGenerator::generateRust(const RequestModel& req) {
+    QString out;
+    QTextStream ts(&out);
+
+    ts << "// Dependencies in Cargo.toml:\n";
+    ts << "// reqwest = { version = \"0.11\", features = [\"json\"] }\n";
+    ts << "// tokio = { version = \"1\", features = [\"full\"] }\n\n";
+    ts << "use reqwest::header::{HeaderMap, HeaderName, HeaderValue};\n\n";
+    ts << "#[tokio::main]\n";
+    ts << "async fn main() -> Result<(), Box<dyn std::error::Error>> {\n";
+    ts << "    let client = reqwest::Client::new();\n";
+
+    auto headers = req.effectiveHeaders();
+    if (!headers.isEmpty()) {
+        ts << "    let mut headers = HeaderMap::new();\n";
+        for (const auto& h : headers) {
+            if (h.enabled && !h.name.isEmpty()) {
+                ts << "    headers.insert(HeaderName::from_static(\"" << h.name.toLower() << "\"), HeaderValue::from_str(\"" << h.value << "\")?);\n";
+            }
+        }
+        ts << "\n";
+    }
+
+    QString methodStr = methodToString(req.method).toLower();
+    ts << "    let response = client\n";
+    ts << "        ." << (methodStr == "delete" ? "delete" : methodStr) << "(\"" << req.effectiveUrl() << "\")\n";
+    if (!headers.isEmpty()) {
+        ts << "        .headers(headers)\n";
+    }
+
+    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+        QString escaped = req.bodyContent;
+        escaped.replace("\"", "\\\"");
+        escaped.replace("\n", "\\n");
+        ts << "        .body(\"" << escaped << "\")\n";
+    }
+
+    ts << "        .send()\n";
+    ts << "        .await?;\n\n";
+    ts << "    println!(\"Status: {}\", response.status());\n";
+    ts << "    let body = response.text().await?;\n";
+    ts << "    println!(\"Body: {}\", body);\n";
+    ts << "    Ok(())\n";
+    ts << "}\n";
+
+    return out;
+}
+
+QString CodeGenerator::generateCSharp(const RequestModel& req) {
+    QString out;
+    QTextStream ts(&out);
+
+    ts << "using System;\n";
+    ts << "using System.Net.Http;\n";
+    ts << "using System.Text;\n";
+    ts << "using System.Threading.Tasks;\n\n";
+    ts << "class Program {\n";
+    ts << "    static async Task Main() {\n";
+    ts << "        using var client = new HttpClient();\n";
+
+    QString methodStr = methodToString(req.method);
+    ts << "        var request = new HttpRequestMessage(new HttpMethod(\"" << methodStr << "\"), \"" << req.effectiveUrl() << "\");\n";
+
+    auto headers = req.effectiveHeaders();
+    for (const auto& h : headers) {
+        if (h.enabled && !h.name.isEmpty()) {
+            if (h.name.compare("Content-Type", Qt::CaseInsensitive) != 0) {
+                ts << "        request.Headers.TryAddWithoutValidation(\"" << h.name << "\", \"" << h.value << "\");\n";
+            }
+        }
+    }
+
+    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+        QString escaped = req.bodyContent;
+        escaped.replace("\"", "\\\"");
+        escaped.replace("\n", "\\n");
+        QString mediaType = (req.bodyType == BodyType::Json) ? "application/json" : "text/plain";
+        ts << "        request.Content = new StringContent(\"" << escaped << "\", Encoding.UTF8, \"" << mediaType << "\");\n";
+    }
+
+    ts << "\n        var response = await client.SendAsync(request);\n";
+    ts << "        Console.WriteLine((int)response.StatusCode);\n";
+    ts << "        var responseBody = await response.Content.ReadAsStringAsync();\n";
+    ts << "        Console.WriteLine(responseBody);\n";
+    ts << "    }\n";
+    ts << "}\n";
+
+    return out;
+}
+
+QString CodeGenerator::generateJava(const RequestModel& req) {
+    QString out;
+    QTextStream ts(&out);
+
+    ts << "import java.net.URI;\n";
+    ts << "import java.net.http.HttpClient;\n";
+    ts << "import java.net.http.HttpRequest;\n";
+    ts << "import java.net.http.HttpResponse;\n\n";
+    ts << "public class Main {\n";
+    ts << "    public static void main(String[] args) throws Exception {\n";
+    ts << "        HttpClient client = HttpClient.newHttpClient();\n";
+    ts << "        HttpRequest.Builder builder = HttpRequest.newBuilder()\n";
+    ts << "            .uri(URI.create(\"" << req.effectiveUrl() << "\"));\n\n";
+
+    auto headers = req.effectiveHeaders();
+    for (const auto& h : headers) {
+        if (h.enabled && !h.name.isEmpty()) {
+            ts << "        builder.header(\"" << h.name << "\", \"" << h.value << "\");\n";
+        }
+    }
+
+    QString methodStr = methodToString(req.method);
+    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+        QString escaped = req.bodyContent;
+        escaped.replace("\"", "\\\"");
+        escaped.replace("\n", "\\n");
+        ts << "        builder.method(\"" << methodStr << "\", HttpRequest.BodyPublishers.ofString(\"" << escaped << "\"));\n";
+    } else if (req.method == HttpMethod::POST || req.method == HttpMethod::PUT || req.method == HttpMethod::PATCH) {
+        ts << "        builder.method(\"" << methodStr << "\", HttpRequest.BodyPublishers.noBody());\n";
+    } else if (req.method == HttpMethod::GET) {
+        ts << "        builder.GET();\n";
+    } else {
+        ts << "        builder.method(\"" << methodStr << "\", HttpRequest.BodyPublishers.noBody());\n";
+    }
+
+    ts << "        HttpRequest request = builder.build();\n";
+    ts << "        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());\n\n";
+    ts << "        System.out.println(response.statusCode());\n";
+    ts << "        System.out.println(response.body());\n";
+    ts << "    }\n";
     ts << "}\n";
 
     return out;

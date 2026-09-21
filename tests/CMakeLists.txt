@@ -52,5 +52,10 @@ add_executable(test_jsonpath_evaluator test_jsonpath_evaluator.cpp)
 target_link_libraries(test_jsonpath_evaluator PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_jsonpath_evaluator COMMAND test_jsonpath_evaluator)
 
+add_executable(test_cookie_jar test_cookie_jar.cpp)
+target_link_libraries(test_cookie_jar PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_cookie_jar COMMAND test_cookie_jar)
 
-
+add_executable(test_history_manager test_history_manager.cpp)
+target_link_libraries(test_history_manager PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_history_manager COMMAND test_history_manager)

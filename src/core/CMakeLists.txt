@@ -16,6 +16,8 @@ add_library(poppy_core STATIC
     codegen/CodeGenerator.h codegen/CodeGenerator.cpp
     exporters/OpenApiExporter.h exporters/OpenApiExporter.cpp
     JsonPathEvaluator.h JsonPathEvaluator.cpp
+    CookieJar.h CookieJar.cpp
+    HistoryManager.h HistoryManager.cpp
 )
 
 target_include_directories(poppy_core PUBLIC

@@ -10,6 +10,7 @@
 #include <core/RequestModel.h>
 #include <core/ResponseModel.h>
 #include <core/CollectionModel.h>
+#include <core/HistoryManager.h>
 #include <core/VariableResolver.h>
 #include <core/ScriptRunner.h>
 #include <network/CurlNetworkEngine.h>
@@ -50,6 +51,9 @@ private slots:
     void onTabCloseRequested(int index);
     void onCloseCurrentTab();
     void markCurrentTabDirty();
+    void onHistoryItemSelected(const core::HistoryItem& item);
+    void onManageCookies();
+    void onClearCookieJar();
 
 private:
     void setupUi();
@@ -60,6 +64,7 @@ private:
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
+    core::HistoryManager m_historyManager;
     network::CurlNetworkEngine m_networkEngine;
     core::ScriptRunner m_scriptRunner;
 

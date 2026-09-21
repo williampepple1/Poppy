@@ -24,6 +24,9 @@ CodeSnippetDialog::CodeSnippetDialog(const core::RequestModel& req, QWidget* par
     m_langCombo->addItem("JavaScript (fetch)", static_cast<int>(core::TargetLanguage::JavaScriptFetch));
     m_langCombo->addItem("JavaScript (axios)", static_cast<int>(core::TargetLanguage::JavaScriptAxios));
     m_langCombo->addItem("Go (net/http)", static_cast<int>(core::TargetLanguage::GoHttp));
+    m_langCombo->addItem("Rust (reqwest)", static_cast<int>(core::TargetLanguage::RustReqwest));
+    m_langCombo->addItem("C# (HttpClient)", static_cast<int>(core::TargetLanguage::CSharpHttpClient));
+    m_langCombo->addItem("Java (java.net.http)", static_cast<int>(core::TargetLanguage::JavaHttpClient));
     m_langCombo->addItem("C++ (libcurl)", static_cast<int>(core::TargetLanguage::CppCurl));
     m_langCombo->addItem("cURL Command", static_cast<int>(core::TargetLanguage::Curl));
     topLayout->addWidget(m_langCombo, 1);

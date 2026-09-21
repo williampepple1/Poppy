@@ -11,6 +11,9 @@ enum class TargetLanguage {
     JavaScriptAxios,
     GoHttp,
     CppCurl,
+    RustReqwest,
+    CSharpHttpClient,
+    JavaHttpClient,
     Curl
 };
 
@@ -25,6 +28,9 @@ private:
     static QString generateJsAxios(const RequestModel& req);
     static QString generateGo(const RequestModel& req);
     static QString generateCpp(const RequestModel& req);
+    static QString generateRust(const RequestModel& req);
+    static QString generateCSharp(const RequestModel& req);
+    static QString generateJava(const RequestModel& req);
 };
 
 } // namespace poppy::core
