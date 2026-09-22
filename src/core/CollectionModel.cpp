@@ -77,17 +77,22 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
     QFileInfoList entries = dir.entryInfoList(QDir::Dirs | QDir::Files | QDir::NoDotAndDotDot, QDir::DirsFirst | QDir::Name);
 
     for (const auto& entry : entries) {
-        if (entry.fileName().startsWith('.')) continue; // ignore hidden (.git, etc.)
-        if (entry.fileName() == "environments") continue; // handled separately
-
         if (entry.isDir()) {
-            auto* folderItem = new CollectionItem(CollectionItemType::Folder, entry.fileName(), entry.canonicalFilePath());
+            const QString dirName = entry.fileName();
+            if (dirName.startsWith('.') || dirName == "environments") continue;
+
+            auto* folderItem = new CollectionItem(CollectionItemType::Folder, dirName, entry.canonicalFilePath());
             parentItem->appendChild(folderItem);
             m_fileWatcher.addPath(entry.canonicalFilePath());
             scanDirectory(entry.canonicalFilePath(), folderItem);
-        } else if (entry.isFile() && entry.suffix().toLower() == "bru") {
+        } else if (entry.isFile() && entry.fileName().endsWith(QLatin1String(".bru"), Qt::CaseInsensitive)) {
+            const QString fileName = entry.fileName();
+            // Bruno folder/collection metadata files are not requests
+            if (fileName.compare(QLatin1String("folder.bru"), Qt::CaseInsensitive) == 0) continue;
+            if (fileName.compare(QLatin1String("collection.bru"), Qt::CaseInsensitive) == 0) continue;
+
             RequestModel req = BruParser::parseFile(entry.canonicalFilePath());
-            QString reqName = req.name.isEmpty() ? entry.baseName() : req.name;
+            QString reqName = req.name.isEmpty() ? entry.completeBaseName() : req.name;
             auto* reqItem = new CollectionItem(CollectionItemType::Request, reqName, entry.canonicalFilePath());
             reqItem->setRequest(req);
             parentItem->appendChild(reqItem);
@@ -124,8 +129,7 @@ CollectionItem* CollectionModel::addRequest(CollectionItem* parent, const QStrin
     if (!targetParent) return nullptr;
 
     QString parentDir = targetParent->path();
-    QString fileName = name.toLower().replace(' ', '-') + ".bru";
-    QString filePath = QDir(parentDir).filePath(fileName);
+    QString filePath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(name), ".bru");
 
     RequestModel copy = req;
     copy.name = name;
@@ -207,7 +211,7 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
         item->setName(newName);
         item->setPath(newPath);
     } else {
-        QString newPath = parentDir + "/" + newName.toLower().replace(' ', '-') + ".bru";
+        QString newPath = parentDir + "/" + BruWriter::safeFileStem(newName) + ".bru";
         QFile file(item->path());
         if (!file.rename(newPath)) return false;
         item->setName(newName);

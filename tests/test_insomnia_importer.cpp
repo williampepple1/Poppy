@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cassert>
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
@@ -8,11 +9,15 @@
 
 using namespace poppy::core;
 
-int main() {
+int main(int argc, char** argv) {
+    QCoreApplication app(argc, argv);
     std::cout << "Running test_insomnia_importer..." << std::endl;
 
     QTemporaryDir tempDir;
-    assert(tempDir.isValid());
+    if (!tempDir.isValid()) {
+        std::cerr << "Failed to create temp dir" << std::endl;
+        return 1;
+    }
 
     QString insomniaJsonPath = tempDir.path() + "/insomnia_sample.json";
     QString destDir = tempDir.path() + "/imported_collection";
@@ -72,7 +77,11 @@ int main() {
 })";
 
     QFile file(insomniaJsonPath);
-    assert(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        std::cerr << "Failed to write sample export: " << file.errorString().toStdString()
+                  << " path=" << insomniaJsonPath.toStdString() << std::endl;
+        return 1;
+    }
     file.write(sampleContent.toUtf8());
     file.close();
 
@@ -80,8 +89,8 @@ int main() {
     bool success = InsomniaImporter::importCollection(insomniaJsonPath, destDir, &error);
     if (!success) {
         std::cerr << "Import failed: " << error.toStdString() << std::endl;
+        return 1;
     }
-    assert(success);
 
     // Verify manifest
     assert(QFile::exists(destDir + "/poppy.json"));

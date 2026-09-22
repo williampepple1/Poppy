@@ -1,5 +1,7 @@
 #include "BruWriter.h"
 #include <QFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QTextStream>
 
 namespace poppy::core {
@@ -167,6 +169,55 @@ bool BruWriter::writeToFile(const QString& filePath, const RequestModel& req) {
     QTextStream out(&file);
     out << serialize(req);
     return true;
+}
+
+QString BruWriter::safeFileStem(const QString& name, const QString& fallback) {
+    QString s = name.trimmed();
+    static const QString invalid = QStringLiteral("<>:\"/\\|?*");
+    for (QChar c : invalid) {
+        s.replace(c, QLatin1Char('_'));
+    }
+    for (int i = 0; i < s.size(); ++i) {
+        if (s[i].unicode() < 32) {
+            s[i] = QLatin1Char('_');
+        }
+    }
+    while (s.endsWith(QLatin1Char('.')) || s.endsWith(QLatin1Char(' '))) {
+        s.chop(1);
+    }
+    static const QStringList reserved = {
+        QStringLiteral("CON"), QStringLiteral("PRN"), QStringLiteral("AUX"),
+        QStringLiteral("NUL"), QStringLiteral("COM1"), QStringLiteral("COM2"),
+        QStringLiteral("COM3"), QStringLiteral("COM4"), QStringLiteral("COM5"),
+        QStringLiteral("COM6"), QStringLiteral("COM7"), QStringLiteral("COM8"),
+        QStringLiteral("COM9"), QStringLiteral("LPT1"), QStringLiteral("LPT2"),
+        QStringLiteral("LPT3"), QStringLiteral("LPT4"), QStringLiteral("LPT5"),
+        QStringLiteral("LPT6"), QStringLiteral("LPT7"), QStringLiteral("LPT8"),
+        QStringLiteral("LPT9")
+    };
+    for (const auto& r : reserved) {
+        if (s.compare(r, Qt::CaseInsensitive) == 0) {
+            s.append(QLatin1Char('_'));
+            break;
+        }
+    }
+    if (s.size() > 80) {
+        s = s.left(80);
+    }
+    if (s.trimmed().isEmpty()) {
+        return fallback;
+    }
+    return s;
+}
+
+QString BruWriter::uniqueFilePath(const QString& directory, const QString& stem, const QString& extension) {
+    QDir dir(directory);
+    QString path = dir.filePath(stem + extension);
+    int n = 1;
+    while (QFileInfo::exists(path)) {
+        path = dir.filePath(QStringLiteral("%1 (%2)%3").arg(stem).arg(n++).arg(extension));
+    }
+    return path;
 }
 
 } // namespace poppy::core

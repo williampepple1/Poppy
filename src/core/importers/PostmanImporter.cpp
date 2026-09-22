@@ -12,7 +12,14 @@ RequestModel PostmanImporter::parsePostmanItem(const QJsonObject& itemObj) {
     RequestModel req;
     req.name = itemObj.value("name").toString("Untitled Request");
 
-    QJsonObject reqObj = itemObj.value("request").toObject();
+    QJsonValue requestVal = itemObj.value("request");
+    if (requestVal.isString()) {
+        req.method = HttpMethod::GET;
+        req.url = requestVal.toString();
+        return req;
+    }
+
+    QJsonObject reqObj = requestVal.toObject();
     req.method = stringToMethod(reqObj.value("method").toString("GET"));
 
     // URL
@@ -127,28 +134,40 @@ bool PostmanImporter::processItems(const QJsonArray& items, const QString& curre
     for (const auto& itVal : items) {
         QJsonObject itObj = itVal.toObject();
         QString name = itObj.value("name").toString("item");
+        QString safeName = BruWriter::safeFileStem(name);
 
-        if (itObj.contains("item") && itObj.value("item").isArray()) {
-            // Folder
-            QString safeFolderName = name;
-            safeFolderName.replace('/', '_').replace('\\', '_');
-            QString subDirPath = dir.filePath(safeFolderName);
-            if (!processItems(itObj.value("item").toArray(), subDirPath, outError)) {
+        // Postman request items sometimes include an empty `item` array (examples).
+        // Treat anything with a `request` as a request first, then recurse into
+        // non-empty child arrays as folders.
+        const bool hasRequest = itObj.contains("request") &&
+            (itObj.value("request").isObject() || itObj.value("request").isString());
+        const QJsonArray childItems = (itObj.contains("item") && itObj.value("item").isArray())
+            ? itObj.value("item").toArray()
+            : QJsonArray();
+        const bool hasChildren = !childItems.isEmpty();
+
+        if (hasRequest) {
+            RequestModel req = parsePostmanItem(itObj);
+            QString filePath = BruWriter::uniqueFilePath(currentDir, safeName, ".bru");
+            if (!BruWriter::writeToFile(filePath, req)) {
+                if (outError) *outError = "Failed to write request file: " + filePath;
                 return false;
             }
-        } else if (itObj.contains("request")) {
-            // Request
-            RequestModel req = parsePostmanItem(itObj);
-            QString safeFileName = name.toLower().replace(' ', '-').replace('/', '_');
-            QString filePath = dir.filePath(safeFileName + ".bru");
-            BruWriter::writeToFile(filePath, req);
+        }
+
+        if (hasChildren) {
+            QString subDirPath = dir.filePath(safeName);
+            if (!processItems(childItems, subDirPath, outError)) {
+                return false;
+            }
         }
     }
 
     return true;
 }
 
-bool PostmanImporter::importCollection(const QString& postmanJsonFile, const QString& destinationDir, QString* outError) {
+bool PostmanImporter::importCollection(const QString& postmanJsonFile, const QString& destinationDir,
+                                       QString* outError, QString* outCollectionDir) {
     QFile file(postmanJsonFile);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (outError) *outError = "Could not open file: " + postmanJsonFile;
@@ -165,10 +184,21 @@ bool PostmanImporter::importCollection(const QString& postmanJsonFile, const QSt
     QJsonObject root = doc.object();
     QJsonObject info = root.value("info").toObject();
     QString collName = info.value("name").toString("Imported Collection");
+    QString safeCollName = BruWriter::safeFileStem(collName, QStringLiteral("Imported Collection"));
 
     QDir dest(destinationDir);
-    QString collDir = dest.filePath(collName.replace('/', '_'));
-    dest.mkpath(collDir);
+    if (!dest.exists() && !dest.mkpath(".")) {
+        if (outError) *outError = "Failed to create destination: " + destinationDir;
+        return false;
+    }
+    QString collDir = dest.filePath(safeCollName);
+    if (!QDir().mkpath(collDir)) {
+        if (outError) *outError = "Failed to create collection directory: " + collDir;
+        return false;
+    }
+    if (outCollectionDir) {
+        *outCollectionDir = collDir;
+    }
 
     // Write poppy.json metadata
     QJsonObject meta;

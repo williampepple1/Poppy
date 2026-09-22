@@ -189,9 +189,10 @@ void ImportDialog::onImportPostman() {
     }
 
     QString err;
-    if (core::PostmanImporter::importCollection(file, dest, &err)) {
+    QString openedDir;
+    if (core::PostmanImporter::importCollection(file, dest, &err, &openedDir)) {
         QMessageBox::information(this, "Import Complete", "Postman collection imported successfully!");
-        emit collectionImported(dest);
+        emit collectionImported(openedDir.isEmpty() ? dest : openedDir);
         accept();
     } else {
         QMessageBox::critical(this, "Import Failed", "Failed to import Postman collection:\n" + err);
@@ -208,9 +209,10 @@ void ImportDialog::onImportOpenApi() {
     }
 
     QString err;
-    if (core::OpenApiImporter::importSpec(file, dest, &err)) {
+    QString openedDir;
+    if (core::OpenApiImporter::importSpec(file, dest, &err, &openedDir)) {
         QMessageBox::information(this, "Import Complete", "OpenAPI spec imported successfully!");
-        emit collectionImported(dest);
+        emit collectionImported(openedDir.isEmpty() ? dest : openedDir);
         accept();
     } else {
         QMessageBox::critical(this, "Import Failed", "Failed to import OpenAPI spec:\n" + err);
@@ -227,9 +229,10 @@ void ImportDialog::onImportInsomnia() {
     }
 
     QString err;
-    if (core::InsomniaImporter::importCollection(file, dest, &err)) {
+    QString openedDir;
+    if (core::InsomniaImporter::importCollection(file, dest, &err, &openedDir)) {
         QMessageBox::information(this, "Import Complete", "Insomnia collection imported successfully!");
-        emit collectionImported(dest);
+        emit collectionImported(openedDir.isEmpty() ? dest : openedDir);
         accept();
     } else {
         QMessageBox::critical(this, "Import Failed", "Failed to import Insomnia collection:\n" + err);

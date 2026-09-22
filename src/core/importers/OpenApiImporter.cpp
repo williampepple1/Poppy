@@ -4,11 +4,13 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QRegularExpression>
 #include <core/BruWriter.h>
 
 namespace poppy::core {
 
-bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& destinationDir, QString* outError) {
+bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& destinationDir,
+                                 QString* outError, QString* outCollectionDir) {
     QFile file(specFilePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (outError) *outError = "Could not open file: " + specFilePath;
@@ -35,8 +37,19 @@ bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& des
     }
 
     QDir dest(destinationDir);
-    QString collDir = dest.filePath(title.replace('/', '_').replace('\\', '_'));
-    dest.mkpath(collDir);
+    if (!dest.exists() && !dest.mkpath(".")) {
+        if (outError) *outError = "Failed to create destination: " + destinationDir;
+        return false;
+    }
+    QString safeTitle = BruWriter::safeFileStem(title, QStringLiteral("OpenAPI Collection"));
+    QString collDir = dest.filePath(safeTitle);
+    if (!QDir().mkpath(collDir)) {
+        if (outError) *outError = "Failed to create collection directory: " + collDir;
+        return false;
+    }
+    if (outCollectionDir) {
+        *outCollectionDir = collDir;
+    }
 
     // Save poppy.json
     QJsonObject meta;
@@ -71,7 +84,15 @@ bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& des
             QJsonObject opObj = mIt.value().toObject();
             RequestModel req;
             req.method = stringToMethod(methodStr);
-            req.url = "{{baseUrl}}" + pathStr;
+
+            QString convertedPath = pathStr;
+            QRegularExpression pathParamRe(QStringLiteral("\\{([^}]+)\\}"));
+            auto pathMatches = pathParamRe.globalMatch(pathStr);
+            while (pathMatches.hasNext()) {
+                const QString param = pathMatches.next().captured(1);
+                convertedPath.replace("{" + param + "}", ":" + param);
+            }
+            req.url = "{{baseUrl}}" + convertedPath;
 
             QString summary = opObj.value("summary").toString();
             if (summary.isEmpty()) summary = opObj.value("operationId").toString();
@@ -90,9 +111,28 @@ bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& des
                 if (in == "query") {
                     req.queryParams.append(HttpParam{.key = name, .value = "", .enabled = required, .description = desc});
                 } else if (in == "path") {
-                    req.pathParams.append(HttpParam{.key = name, .value = "", .enabled = true, .description = desc});
+                    bool already = false;
+                    for (const auto& existing : req.pathParams) {
+                        if (existing.key == name) { already = true; break; }
+                    }
+                    if (!already) {
+                        req.pathParams.append(HttpParam{.key = name, .value = "", .enabled = true, .description = desc});
+                    }
                 } else if (in == "header") {
                     req.headers.append(HttpHeader{.name = name, .value = "", .enabled = required, .description = desc});
+                }
+            }
+
+            // Path params declared only in the URL template (common in OpenAPI 3)
+            auto leftover = pathParamRe.globalMatch(pathStr);
+            while (leftover.hasNext()) {
+                const QString param = leftover.next().captured(1);
+                bool already = false;
+                for (const auto& existing : req.pathParams) {
+                    if (existing.key == param) { already = true; break; }
+                }
+                if (!already) {
+                    req.pathParams.append(HttpParam{.key = param, .value = "", .enabled = true, .description = QString()});
                 }
             }
 
@@ -109,9 +149,12 @@ bool OpenApiImporter::importSpec(const QString& specFilePath, const QString& des
             // Tests default
             req.scripts.tests = "test(\"Status is 200\", function() {\n  expect(res.getStatus()).to.equal(200);\n});\n";
 
-            QString fileName = summary.toLower().replace(' ', '-').replace('/', '_').replace('{', "").replace('}', "");
-            QString filePath = collDir + "/" + fileName + ".bru";
-            BruWriter::writeToFile(filePath, req);
+            QString fileStem = BruWriter::safeFileStem(summary);
+            QString filePath = BruWriter::uniqueFilePath(collDir, fileStem, ".bru");
+            if (!BruWriter::writeToFile(filePath, req)) {
+                if (outError) *outError = "Failed to write request file: " + filePath;
+                return false;
+            }
         }
     }
 

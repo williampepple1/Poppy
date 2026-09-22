@@ -5,23 +5,10 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QMap>
+#include <functional>
 #include <core/BruWriter.h>
 
 namespace poppy::core {
-
-QString InsomniaImporter::sanitizeFileName(const QString& name) {
-    QString safe = name;
-    safe.replace('/', '_');
-    safe.replace('\\', '_');
-    safe.replace(':', '_');
-    safe.replace('*', '_');
-    safe.replace('?', '_');
-    safe.replace('"', '_');
-    safe.replace('<', '_');
-    safe.replace('>', '_');
-    safe.replace('|', '_');
-    return safe.trimmed().isEmpty() ? "request" : safe.trimmed();
-}
 
 RequestModel InsomniaImporter::parseInsomniaRequest(const QJsonObject& reqObj) {
     RequestModel req;
@@ -121,7 +108,8 @@ RequestModel InsomniaImporter::parseInsomniaRequest(const QJsonObject& reqObj) {
     return req;
 }
 
-bool InsomniaImporter::importCollection(const QString& insomniaJsonFile, const QString& destinationDir, QString* outError) {
+bool InsomniaImporter::importCollection(const QString& insomniaJsonFile, const QString& destinationDir,
+                                        QString* outError, QString* outCollectionDir) {
     QFile file(insomniaJsonFile);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
         if (outError) *outError = "Could not open Insomnia export file: " + insomniaJsonFile;
@@ -172,12 +160,18 @@ bool InsomniaImporter::importCollection(const QString& insomniaJsonFile, const Q
             return destinationDir;
         }
         QString parentFolderDir = getDirPath(pInfo.parentId);
-        QString safeName = sanitizeFileName(pInfo.name);
+        QString safeName = BruWriter::safeFileStem(pInfo.name);
         return parentFolderDir + "/" + safeName;
     };
 
     // Create destination
-    QDir().mkpath(destinationDir);
+    if (!QDir().mkpath(destinationDir)) {
+        if (outError) *outError = "Failed to create destination: " + destinationDir;
+        return false;
+    }
+    if (outCollectionDir) {
+        *outCollectionDir = destinationDir;
+    }
 
     // Create poppy.json collection manifest
     QString manifestPath = destinationDir + "/poppy.json";
@@ -199,20 +193,11 @@ bool InsomniaImporter::importCollection(const QString& insomniaJsonFile, const Q
             QDir().mkpath(folderPath);
 
             RequestModel req = parseInsomniaRequest(item.raw);
-            QString safeFileName = sanitizeFileName(req.name) + ".bru";
-            QString filePath = folderPath + "/" + safeFileName;
-
-            // Handle name collisions
-            int count = 1;
-            while (QFile::exists(filePath)) {
-                safeFileName = QString("%1 (%2).bru").arg(sanitizeFileName(req.name)).arg(count++);
-                filePath = folderPath + "/" + safeFileName;
-            }
-
-            QString serialized = BruWriter::serialize(req);
-            QFile outBru(filePath);
-            if (outBru.open(QIODevice::WriteOnly | QIODevice::Text)) {
-                outBru.write(serialized.toUtf8());
+            QString filePath = BruWriter::uniqueFilePath(
+                folderPath, BruWriter::safeFileStem(req.name), ".bru");
+            if (!BruWriter::writeToFile(filePath, req)) {
+                if (outError) *outError = "Failed to write request file: " + filePath;
+                return false;
             }
         }
     }

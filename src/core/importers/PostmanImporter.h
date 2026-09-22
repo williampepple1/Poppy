@@ -10,7 +10,8 @@ namespace poppy::core {
 
 class PostmanImporter {
 public:
-    static bool importCollection(const QString& postmanJsonFile, const QString& destinationDir, QString* outError = nullptr);
+    static bool importCollection(const QString& postmanJsonFile, const QString& destinationDir,
+                                 QString* outError = nullptr, QString* outCollectionDir = nullptr);
     static RequestModel parsePostmanItem(const QJsonObject& itemObj);
 
 private:
