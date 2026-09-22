@@ -31,6 +31,7 @@
 #include <core/exporters/InsomniaExporter.h>
 #include <core/exporters/HarExporter.h>
 #include <core/CookieJar.h>
+#include <core/importers/CurlImporter.h>
 #include <QTabBar>
 #include <QDir>
 #include <QInputDialog>
@@ -183,6 +184,17 @@ void MainWindow::setupUi() {
     m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Press Enter to send)");
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::updateUrlVariableInspection);
+    connect(m_urlEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
+        QString trimmed = text.trimmed();
+        if (trimmed.startsWith("curl ", Qt::CaseInsensitive) || trimmed.startsWith("curl.exe ", Qt::CaseInsensitive)) {
+            auto imported = core::CurlImporter::importCurl(trimmed);
+            if (!imported.url.isEmpty()) {
+                loadRequestIntoUi(imported);
+                markCurrentTabDirty();
+                statusBar()->showMessage("Detected and imported cURL command into request editor!", 3500);
+            }
+        }
+    });
     connect(m_urlEdit, &QLineEdit::returnPressed, this, &MainWindow::onSendClicked);
 
     m_urlCompleter = new QCompleter(this);

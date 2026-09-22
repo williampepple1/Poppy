@@ -120,7 +120,13 @@ private:
     QPlainTextEdit* m_chartViewer{nullptr};
     bool m_showingChart{false};
 
+    // Cookies Tab
+    QWidget* m_cookiesTab{nullptr};
+    QTableWidget* m_cookiesTable{nullptr};
+
     void updateVisualizeTab(const core::ResponseModel& res);
+    void updateCookiesTab(const core::ResponseModel& res);
+    static QString httpStatusExplanation(int code);
 };
 
 } // namespace poppy::gui

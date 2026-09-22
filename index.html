@@ -9,6 +9,41 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
+      /* Light Mode by Default */
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --border-subtle: #f1f5f9;
+      --card-bg: #ffffff;
+      --card-hover: #f1f5f9;
+      --accent: #059669;
+      --accent-blue: #2563eb;
+      --accent-purple: #7c3aed;
+      --accent-amber: #d97706;
+      --code-bg: #f1f5f9;
+      --nav-bg: rgba(248, 250, 252, 0.85);
+      --hero-heading: linear-gradient(135deg, #0f172a 30%, #475569 100%);
+      --btn-primary-bg: #0f172a;
+      --btn-primary-fg: #f8fafc;
+      --btn-primary-hover: #1e293b;
+      --table-head: #f8fafc;
+      --col-highlight: rgba(5, 150, 105, 0.08);
+      --mockup-window-bg: #ffffff;
+      --mockup-header-bg: #f8fafc;
+      --mockup-sidebar-bg: #f1f5f9;
+      --mockup-main-bg: #ffffff;
+      --mockup-input-bg: #ffffff;
+      --mockup-input-border: #cbd5e1;
+      --mockup-input-color: #0f172a;
+      --mockup-telemetry-bg: #f8fafc;
+      --mockup-text: #1e293b;
+      --mockup-shadow: 0 20px 45px -15px rgba(15, 23, 42, 0.12), 0 0 0 1px rgba(0, 0, 0, 0.06);
+      --icon-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    }
+
+    [data-theme="dark"] {
+      /* Dark Mode */
       --bg: #09090b;
       --fg: #fafafa;
       --muted: #a1a1aa;
@@ -21,6 +56,24 @@
       --accent-purple: #8b5cf6;
       --accent-amber: #f59e0b;
       --code-bg: #0c0c0e;
+      --nav-bg: rgba(9, 9, 11, 0.9);
+      --hero-heading: linear-gradient(135deg, #fafafa 30%, #a1a1aa 100%);
+      --btn-primary-bg: #fafafa;
+      --btn-primary-fg: #09090b;
+      --btn-primary-hover: #e4e4e7;
+      --table-head: #141418;
+      --col-highlight: rgba(16, 185, 129, 0.05);
+      --mockup-window-bg: #131316;
+      --mockup-header-bg: #0d0d10;
+      --mockup-sidebar-bg: #0d0d10;
+      --mockup-main-bg: #131316;
+      --mockup-input-bg: #09090b;
+      --mockup-input-border: #27272a;
+      --mockup-input-color: #fafafa;
+      --mockup-telemetry-bg: #0d0d10;
+      --mockup-text: #d4d4d8;
+      --mockup-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      --icon-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
     }
 
     html { scroll-behavior: smooth; }
@@ -32,6 +85,7 @@
       font-size: 15px;
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s ease, color 0.2s ease;
     }
 
     /* ── NAV ── */
@@ -43,9 +97,10 @@
       border-bottom: 1px solid var(--border);
       position: sticky;
       top: 0;
-      background: rgba(9, 9, 11, 0.9);
+      background: var(--nav-bg);
       backdrop-filter: blur(12px);
       z-index: 100;
+      transition: background-color 0.2s ease, border-color 0.2s ease;
     }
     nav .logo {
       font-size: 1.15rem;
@@ -65,12 +120,32 @@
     nav .nav-right {
       display: flex;
       align-items: center;
-      gap: 1.5rem;
+      gap: 1.25rem;
+    }
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 1.05rem;
+      transition: all 0.15s ease-in-out;
+      user-select: none;
+    }
+    .theme-toggle-btn:hover {
+      background: var(--card-hover);
+      border-color: var(--muted);
+      transform: translateY(-1px);
     }
     nav .badge-version {
       font-size: 0.75rem;
       font-weight: 600;
-      background: #18181b;
+      background: var(--card-hover);
       border: 1px solid var(--border);
       color: var(--accent);
       padding: 3px 8px;
@@ -97,7 +172,7 @@
       border-radius: 20px;
       margin: 0 auto 1.75rem;
       display: block;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+      box-shadow: var(--icon-shadow);
     }
     .hero-tagline {
       display: inline-flex;
@@ -120,7 +195,7 @@
       margin-bottom: 1.5rem;
     }
     .hero h1 span {
-      background: linear-gradient(135deg, #fafafa 30%, #a1a1aa 100%);
+      background: var(--hero-heading);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
     }
@@ -158,18 +233,18 @@
     }
     .btn:hover {
       background: var(--card-hover);
-      border-color: #3f3f46;
+      border-color: var(--border);
       transform: translateY(-1px);
     }
     .btn-primary {
-      background: #fafafa;
-      color: #09090b;
-      border-color: #fafafa;
+      background: var(--btn-primary-bg);
+      color: var(--btn-primary-fg);
+      border-color: var(--btn-primary-bg);
     }
     .btn-primary:hover {
-      background: #e4e4e7;
-      color: #09090b;
-      border-color: #e4e4e7;
+      background: var(--btn-primary-hover);
+      color: var(--btn-primary-fg);
+      border-color: var(--btn-primary-hover);
     }
     .version-note {
       font-size: 0.8rem;
@@ -184,14 +259,14 @@
       padding: 0 1.5rem;
     }
     .mockup-window {
-      background: #131316;
+      background: var(--mockup-window-bg);
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
+      box-shadow: var(--mockup-shadow);
     }
     .window-header {
-      background: #0d0d10;
+      background: var(--mockup-header-bg);
       border-bottom: 1px solid var(--border);
       padding: 10px 16px;
       display: flex;
@@ -222,14 +297,14 @@
       font-size: 0.85rem;
     }
     .window-sidebar {
-      background: #0d0d10;
+      background: var(--mockup-sidebar-bg);
       border-right: 1px solid var(--border);
       padding: 12px;
     }
     .sidebar-section-title {
       font-size: 0.7rem;
       font-weight: 700;
-      color: #71717a;
+      color: var(--muted);
       text-transform: uppercase;
       letter-spacing: 0.05em;
       margin-bottom: 8px;
@@ -240,13 +315,13 @@
       gap: 8px;
       padding: 6px 8px;
       border-radius: 6px;
-      color: #d4d4d8;
+      color: var(--mockup-text);
       font-size: 0.8rem;
       margin-bottom: 2px;
     }
     .sidebar-item.active {
-      background: #1f1f24;
-      color: #fff;
+      background: var(--card-hover);
+      color: var(--fg);
       font-weight: 600;
     }
     .tag {
@@ -255,15 +330,15 @@
       padding: 1px 4px;
       border-radius: 3px;
     }
-    .tag-get { background: rgba(16, 185, 129, 0.2); color: #34d399; }
-    .tag-post { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
-    .tag-ws { background: rgba(59, 130, 246, 0.2); color: #60a5fa; }
-    .tag-grpc { background: rgba(139, 92, 246, 0.2); color: #c084fc; }
+    .tag-get { background: rgba(16, 185, 129, 0.2); color: #059669; }
+    .tag-post { background: rgba(245, 158, 11, 0.2); color: #d97706; }
+    .tag-ws { background: rgba(59, 130, 246, 0.2); color: #2563eb; }
+    .tag-grpc { background: rgba(139, 92, 246, 0.2); color: #7c3aed; }
 
     .window-main {
       display: flex;
       flex-direction: column;
-      background: #131316;
+      background: var(--mockup-main-bg);
     }
     .url-bar {
       display: flex;
@@ -274,7 +349,7 @@
     }
     .method-pill {
       background: rgba(16, 185, 129, 0.2);
-      color: #34d399;
+      color: var(--accent);
       font-weight: 800;
       font-size: 0.75rem;
       padding: 6px 12px;
@@ -282,17 +357,17 @@
     }
     .url-input {
       flex: 1;
-      background: #09090b;
-      border: 1px solid #27272a;
+      background: var(--mockup-input-bg);
+      border: 1px solid var(--mockup-input-border);
       border-radius: 6px;
       padding: 6px 12px;
       font-family: monospace;
       font-size: 0.8rem;
-      color: #fafafa;
+      color: var(--mockup-input-color);
     }
-    .url-var { color: #60a5fa; font-weight: 600; }
+    .url-var { color: var(--accent-blue); font-weight: 600; }
     .send-pill {
-      background: #10b981;
+      background: var(--accent);
       color: #fff;
       font-weight: 700;
       font-size: 0.8rem;
@@ -305,38 +380,38 @@
       align-items: center;
       gap: 12px;
       padding: 8px 16px;
-      background: #0d0d10;
+      background: var(--mockup-telemetry-bg);
       border-bottom: 1px solid var(--border);
       font-size: 0.75rem;
     }
     .status-badge {
-      background: #10b981;
+      background: var(--accent);
       color: #fff;
       font-weight: 800;
       padding: 2px 8px;
       border-radius: 4px;
     }
     .time-badge, .size-badge {
-      color: #a1a1aa;
+      color: var(--muted);
     }
 
     .tabs-row {
       display: flex;
       gap: 4px;
       padding: 8px 16px 0;
-      background: #0d0d10;
+      background: var(--mockup-header-bg);
       border-bottom: 1px solid var(--border);
     }
     .tab-pill {
       padding: 6px 12px;
       font-size: 0.75rem;
-      color: #71717a;
+      color: var(--muted);
       border-bottom: 2px solid transparent;
     }
     .tab-pill.active {
-      color: #fff;
+      color: var(--fg);
       font-weight: 600;
-      border-bottom: 2px solid #10b981;
+      border-bottom: 2px solid var(--accent);
     }
 
     .visualizer-table {
@@ -347,15 +422,15 @@
     .visualizer-table th {
       text-align: left;
       padding: 8px 14px;
-      background: #0c0c0e;
-      color: #71717a;
+      background: var(--table-head);
+      color: var(--muted);
       font-weight: 600;
       border-bottom: 1px solid var(--border);
     }
     .visualizer-table td {
       padding: 8px 14px;
-      border-bottom: 1px solid #1f1f23;
-      color: #d4d4d8;
+      border-bottom: 1px solid var(--border-subtle);
+      color: var(--mockup-text);
     }
 
     /* ── BENCHMARK TABLE ── */
@@ -391,13 +466,13 @@
       border-bottom: 1px solid var(--border);
     }
     .benchmark-table th {
-      background: #141418;
-      color: #a1a1aa;
+      background: var(--table-head);
+      color: var(--muted);
       font-weight: 600;
     }
     .benchmark-table tr:last-child td { border-bottom: none; }
     .col-highlight {
-      background: rgba(16, 185, 129, 0.05);
+      background: var(--col-highlight);
       color: var(--accent);
       font-weight: 700;
     }
@@ -421,7 +496,7 @@
       transition: all 0.15s ease-in-out;
     }
     .pillar-card:hover {
-      border-color: #3f3f46;
+      border-color: var(--border);
       background: var(--card-hover);
       transform: translateY(-2px);
     }
@@ -461,10 +536,15 @@
       gap: 1.25rem;
     }
     .feature-item {
-      background: #111114;
+      background: var(--card-bg);
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 1.25rem;
+      transition: all 0.15s ease-in-out;
+    }
+    .feature-item:hover {
+      background: var(--card-hover);
+      transform: translateY(-2px);
     }
     .feature-item h3 {
       font-size: 0.95rem;
@@ -500,13 +580,13 @@
     }
     .cli-box {
       display: inline-block;
-      background: #09090b;
+      background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
       padding: 12px 20px;
       font-family: Consolas, Monaco, monospace;
       font-size: 0.85rem;
-      color: #34d399;
+      color: var(--accent);
     }
 
     /* ── FOOTER ── */
@@ -540,7 +620,10 @@
       Poppy
     </a>
     <div class="nav-right">
-      <span class="badge-version">v1.3.0 Latest</span>
+      <button id="themeToggleBtn" class="theme-toggle-btn" aria-label="Toggle Dark/Light Theme" title="Switch to Dark Mode">
+        <span class="theme-icon">🌙</span>
+      </button>
+      <span class="badge-version">v1.4.0 Latest</span>
       <a class="gh-link" href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">GitHub ↗</a>
     </div>
   </nav>
@@ -571,7 +654,7 @@
         All Releases ↗
       </a>
     </div>
-    <p class="version-note">Release v1.3.0 · Windows x64 &amp; Linux x64 Binaries</p>
+    <p class="version-note">Release v1.4.0 · Windows x64 &amp; Linux x64 Binaries</p>
   </section>
 
   <!-- APP PREVIEW MOCKUP -->
@@ -613,7 +696,7 @@
             <span class="send-pill">Send ↵</span>
           </div>
           <div class="telemetry-row">
-            <span class="status-badge">200 OK</span>
+            <span class="status-badge" title="200 OK — The request succeeded and the server returned the requested payload.">200 OK ⓘ</span>
             <span class="time-badge">⏱ 14 ms</span>
             <span class="size-badge">📦 2.4 KB</span>
             <span style="color:#71717a; margin-left:auto;">DNS: 2ms | TCP: 3ms | TTFB: 8ms</span>
@@ -625,6 +708,7 @@
             <div class="tab-pill">Tests (4/4)</div>
             <div class="tab-pill">SSL / TLS</div>
             <div class="tab-pill active">Visualize (Table &amp; Chart)</div>
+            <div class="tab-pill">Cookies (2)</div>
           </div>
           <div style="padding:12px; overflow-x:auto;">
             <table class="visualizer-table">
@@ -659,7 +743,7 @@
           <th>Metric</th>
           <th>Postman</th>
           <th>Bruno</th>
-          <th class="col-highlight">Poppy (v1.3.0)</th>
+          <th class="col-highlight">Poppy (v1.4.0)</th>
         </tr>
       </thead>
       <tbody>
@@ -682,10 +766,22 @@
           <td class="col-highlight"><strong>&lt; 30 MB</strong></td>
         </tr>
         <tr>
-          <td><strong>Cloud Requirement</strong></td>
-          <td>Mandatory Cloud Login</td>
-          <td>Offline-first</td>
-          <td class="col-highlight"><strong>100% Offline-First</strong></td>
+          <td><strong>Data-Driven Testing</strong></td>
+          <td>Paid / Complex</td>
+          <td>CLI Only</td>
+          <td class="col-highlight"><strong>Built-in GUI (CSV/JSON Fixtures)</strong></td>
+        </tr>
+        <tr>
+          <td><strong>Response Cookies Tab</strong></td>
+          <td>Basic Table</td>
+          <td>Raw Headers Only</td>
+          <td class="col-highlight"><strong>Parsed Tab with Flags &amp; Counts</strong></td>
+        </tr>
+        <tr>
+          <td><strong>cURL Paste Auto-Detect</strong></td>
+          <td>Manual Import Modal</td>
+          <td>Manual Import Modal</td>
+          <td class="col-highlight"><strong>Instant Paste in Main URL Bar</strong></td>
         </tr>
         <tr>
           <td><strong>API Doc Generator</strong></td>
@@ -719,9 +815,24 @@
   <section class="pillars-section">
     <div class="pillars-grid">
       <div class="pillar-card">
+        <span class="pillar-icon">🍪</span>
+        <h3>Response Cookies Inspector</h3>
+        <p>Dedicated response tab parses all <code>Set-Cookie</code> headers into Name, Value, Domain, Path, Expires, Secure, and HttpOnly columns with badge count indicators.</p>
+      </div>
+      <div class="pillar-card">
+        <span class="pillar-icon">📋</span>
+        <h3>cURL Paste Auto-Detection</h3>
+        <p>Paste any raw <code>curl ...</code> command directly into the URL bar to instantly parse and populate method, URL, headers, and body into the editor.</p>
+      </div>
+      <div class="pillar-card">
+        <span class="pillar-icon">🧪</span>
+        <h3>Data-Driven Test Runner</h3>
+        <p>Run collections against CSV or JSON data fixture files. Poppy auto-sizes iterations and dynamically injects row variables into <code>{{key}}</code> templates.</p>
+      </div>
+      <div class="pillar-card">
         <span class="pillar-icon">📖</span>
         <h3>API Documentation Generator</h3>
-        <p>Export collections into standalone, responsive single-file HTML documentation (<code>docs.html</code>) with live search, method tags, and multi-language snippets (cURL, Python, JS).</p>
+        <p>Export collections into standalone, responsive single-file HTML documentation (<code>docs.html</code>) with live search, method tags, and multi-language snippets.</p>
       </div>
       <div class="pillar-card">
         <span class="pillar-icon">📊</span>
@@ -836,6 +947,16 @@
         <p>Navigate your entire collection instantly with a fuzzy-search command palette.</p>
       </div>
 
+      <div class="feature-item">
+        <h3>Quick Sidebar Codegen</h3>
+        <p>Right-click any request in collection or history to copy JS Fetch or Python scripts directly.</p>
+      </div>
+
+      <div class="feature-item">
+        <h3>RFC Status Tooltips</h3>
+        <p>Hover over status badges for official RFC explanations and status semantics across all HTTP response codes.</p>
+      </div>
+
     </div>
   </section>
 
@@ -856,6 +977,41 @@
   </footer>
 
   <script>
+    // Theme toggle handling (Light Mode by default)
+    (function () {
+      var themeBtn = document.getElementById('themeToggleBtn');
+      var themeIcon = themeBtn ? themeBtn.querySelector('.theme-icon') : null;
+
+      function applyTheme(theme) {
+        if (theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          if (themeIcon) themeIcon.textContent = '☀️';
+          if (themeBtn) themeBtn.title = 'Switch to Light Mode';
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+          if (themeIcon) themeIcon.textContent = '🌙';
+          if (themeBtn) themeBtn.title = 'Switch to Dark Mode';
+        }
+      }
+
+      // Check saved preference; default to light
+      var savedTheme = localStorage.getItem('poppy-theme');
+      if (savedTheme === 'dark') {
+        applyTheme('dark');
+      } else {
+        applyTheme('light');
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener('click', function () {
+          var current = document.documentElement.getAttribute('data-theme');
+          var next = current === 'dark' ? 'light' : 'dark';
+          applyTheme(next);
+          localStorage.setItem('poppy-theme', next);
+        });
+      }
+    })();
+
     fetch('https://api.github.com/repos/williampepple1/Poppy/releases/latest')
       .then(function (response) { return response.ok ? response.json() : Promise.reject(); })
       .then(function (release) {

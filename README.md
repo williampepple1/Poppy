@@ -105,6 +105,22 @@
 - **Intelligent Autocomplete**: Type `{{` in the URL bar to trigger instant popup completion of all active variable tokens.
 - **Status Bar Quick-Look Widget**: Displays total active variable count with one-click full variable inspection table.
 
+### 🍪 Response Cookies Inspector (Tab 7)
+- **Parsed Cookie Table**: Dedicated response tab automatically parses all incoming `Set-Cookie` response headers into a clean table displaying Name, Value, Domain, Path, Expires / Max-Age, Secure, and HttpOnly flags.
+- **Dynamic Badge Counter**: Instantly view how many cookies were set by the endpoint directly on the tab header (e.g. `Cookies (3)`).
+
+### 🏷️ RFC HTTP Status Code Tooltips
+- **Interactive Explanations**: Hover over any response status badge to view official RFC explanations and semantic descriptions (200 OK, 201 Created, 400 Bad Request, 401 Unauthorized, 403 Forbidden, 404 Not Found, 429 Too Many Requests, 500 Internal Server Error, etc.).
+
+### 📋 cURL Paste Auto-Detection
+- **Intelligent URL Bar Import**: Simply paste any raw `curl ...` command into the main URL bar. Poppy automatically detects the cURL syntax, parses method, headers, parameters, and request body, loads them straight into the active editor, and notifies you in the status bar.
+
+### ⚡ Quick Sidebar Code Exporters
+- **One-Click Export**: Right-click any request in either the Collection Tree or History Sidebar to instantly `Copy as Fetch (JS)` or `Copy as Python` without opening any modal dialogs.
+
+### 🧪 GUI Data-Driven Collection Runner
+- **CSV & JSON Fixture Support**: Load test data files directly inside the GUI Collection Runner dialog. Poppy automatically sets iteration counts matching your fixture rows and injects each row's columns into `{{variable}}` templates on every cycle.
+
 ### 🌓 Instant Theme Toggle (`Ctrl+T`)
 - **One-Key Switcher**: Seamlessly toggle between dark and light themes at runtime using `Ctrl+T` or `View -> Toggle Dark/Light Theme`.
 

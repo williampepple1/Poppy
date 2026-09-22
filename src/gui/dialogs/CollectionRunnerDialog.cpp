@@ -4,6 +4,14 @@
 #include <QGridLayout>
 #include <QHeaderView>
 #include <QMessageBox>
+#include <QLineEdit>
+#include <QLabel>
+#include <QFileDialog>
+#include <QFile>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QRegularExpression>
 #include <core/VariableResolver.h>
 #include <core/assertions/DeclarativeAssertion.h>
 #include <Theme.h>
@@ -63,8 +71,29 @@ CollectionRunnerDialog::CollectionRunnerDialog(
     m_delaySpin->setSingleStep(100);
     configGrid->addWidget(m_delaySpin, 1, 3);
 
+    configGrid->addWidget(new QLabel("Data File (CSV/JSON):", this), 2, 0);
+    auto* dataFileLayout = new QHBoxLayout();
+    m_dataFileEdit = new QLineEdit(this);
+    m_dataFileEdit->setPlaceholderText("Select CSV or JSON data fixture...");
+    connect(m_dataFileEdit, &QLineEdit::textChanged, this, &CollectionRunnerDialog::loadDataFile);
+    dataFileLayout->addWidget(m_dataFileEdit, 1);
+
+    m_browseDataBtn = new QPushButton("Browse...", this);
+    connect(m_browseDataBtn, &QPushButton::clicked, this, [this]() {
+        QString path = QFileDialog::getOpenFileName(this, "Select Data File", QString(), "Data Files (*.csv *.json);;CSV Files (*.csv);;JSON Files (*.json);;All Files (*.*)");
+        if (!path.isEmpty()) {
+            m_dataFileEdit->setText(path);
+        }
+    });
+    dataFileLayout->addWidget(m_browseDataBtn);
+    configGrid->addLayout(dataFileLayout, 2, 1, 1, 3);
+
     m_stopOnFailureChk = new QCheckBox("Stop run on first failure", this);
-    configGrid->addWidget(m_stopOnFailureChk, 2, 0, 1, 2);
+    configGrid->addWidget(m_stopOnFailureChk, 3, 0, 1, 2);
+
+    m_dataStatusLabel = new QLabel("No data file loaded", this);
+    m_dataStatusLabel->setStyleSheet("color: #71717a; font-size: 11px;");
+    configGrid->addWidget(m_dataStatusLabel, 3, 2, 1, 2);
 
     mainLayout->addLayout(configGrid);
 
@@ -195,6 +224,81 @@ void CollectionRunnerDialog::stopRun() {
     m_summaryLabel->setText("Run cancelled by user.");
 }
 
+void CollectionRunnerDialog::loadDataFile(const QString& filePath) {
+    m_dataRows.clear();
+    QString path = filePath.trimmed();
+    if (path.isEmpty()) {
+        m_dataStatusLabel->setText("No data file loaded");
+        m_dataStatusLabel->setStyleSheet("color: #71717a; font-size: 11px;");
+        return;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        m_dataStatusLabel->setText("Failed to open file: " + file.errorString());
+        m_dataStatusLabel->setStyleSheet("color: #ef4444; font-size: 11px;");
+        return;
+    }
+
+    QByteArray content = file.readAll();
+    file.close();
+
+    // Try parsing as JSON array
+    QJsonParseError parseErr;
+    QJsonDocument doc = QJsonDocument::fromJson(content, &parseErr);
+    if (parseErr.error == QJsonParseError::NoError && doc.isArray()) {
+        QJsonArray arr = doc.array();
+        for (const auto& val : arr) {
+            if (val.isObject()) {
+                QJsonObject obj = val.toObject();
+                QMap<QString, QString> row;
+                for (auto it = obj.begin(); it != obj.end(); ++it) {
+                    if (it.value().isObject() || it.value().isArray()) {
+                        row[it.key()] = QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact);
+                    } else {
+                        row[it.key()] = it.value().toVariant().toString();
+                    }
+                }
+                if (!row.isEmpty()) {
+                    m_dataRows.append(row);
+                }
+            }
+        }
+    } else {
+        // Fallback: Parse CSV
+        QString text = QString::fromUtf8(content);
+        QStringList lines = text.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
+        if (!lines.isEmpty()) {
+            QStringList headers = lines.first().split(',');
+            for (auto& h : headers) h = h.trimmed().remove('\"');
+
+            for (int i = 1; i < lines.size(); ++i) {
+                QString line = lines[i].trimmed();
+                if (line.isEmpty()) continue;
+                QStringList cols = line.split(',');
+                QMap<QString, QString> row;
+                for (int c = 0; c < headers.size() && c < cols.size(); ++c) {
+                    QString val = cols[c].trimmed().remove('\"');
+                    row[headers[c]] = val;
+                }
+                if (!row.isEmpty()) {
+                    m_dataRows.append(row);
+                }
+            }
+        }
+    }
+
+    if (!m_dataRows.isEmpty()) {
+        m_iterationsSpin->setValue(m_dataRows.size());
+        int keyCount = m_dataRows.first().keys().size();
+        m_dataStatusLabel->setText(QString("✓ Loaded %1 data rows (%2 fields per row)").arg(m_dataRows.size()).arg(keyCount));
+        m_dataStatusLabel->setStyleSheet("color: #10b981; font-weight: bold; font-size: 11px;");
+    } else {
+        m_dataStatusLabel->setText("No valid records found in file.");
+        m_dataStatusLabel->setStyleSheet("color: #ef4444; font-size: 11px;");
+    }
+}
+
 void CollectionRunnerDialog::executeNextRequest() {
     if (!m_isRunning || m_currentIndex >= m_queue.size()) {
         m_isRunning = false;
@@ -214,6 +318,17 @@ void CollectionRunnerDialog::executeNextRequest() {
 
     core::RequestModel req = m_queue[m_currentIndex];
 
+    // Data-driven iteration variable injection
+    int iters = m_iterationsSpin->value();
+    int requestsPerIter = (iters > 0) ? (m_queue.size() / iters) : m_queue.size();
+    int currentIter = (requestsPerIter > 0) ? (m_currentIndex / requestsPerIter) : 0;
+    if (!m_dataRows.isEmpty() && currentIter < m_dataRows.size()) {
+        const auto& rowData = m_dataRows[currentIter];
+        for (auto it = rowData.begin(); it != rowData.end(); ++it) {
+            m_activeEnv.addOrUpdateVariable(it.key(), it.value(), false, true);
+        }
+    }
+
     // Variable resolution
     core::VariableResolver resolver;
     resolver.setEnvironment(m_activeEnv);
@@ -231,7 +346,8 @@ void CollectionRunnerDialog::executeNextRequest() {
     methodItem->setFont(QFont(methodItem->font().family(), -1, QFont::Bold));
     m_resultsTable->setItem(row, 1, methodItem);
 
-    m_resultsTable->setItem(row, 2, new QTableWidgetItem(resolvedReq.name));
+    QString displayName = (iters > 1) ? QString("[#%1] %2").arg(currentIter + 1).arg(resolvedReq.name) : resolvedReq.name;
+    m_resultsTable->setItem(row, 2, new QTableWidgetItem(displayName));
     m_resultsTable->setItem(row, 3, new QTableWidgetItem("Running..."));
     m_resultsTable->scrollToBottom();
 

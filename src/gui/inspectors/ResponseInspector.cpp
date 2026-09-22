@@ -312,6 +312,33 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
     m_tabWidget->addTab(m_visualizeTab, "Visualize");
 
+    // Tab 7: Cookies (Set-Cookie)
+    m_cookiesTab = new QWidget(this);
+    auto* cLayout = new QVBoxLayout(m_cookiesTab);
+    cLayout->setContentsMargins(0, 4, 0, 0);
+
+    m_cookiesTable = new QTableWidget(m_cookiesTab);
+    m_cookiesTable->setColumnCount(7);
+    m_cookiesTable->setHorizontalHeaderLabels({"Name", "Value", "Domain", "Path", "Expires / Max-Age", "Secure", "HttpOnly"});
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    m_cookiesTable->setColumnWidth(0, 150);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Interactive);
+    m_cookiesTable->setColumnWidth(2, 120);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Interactive);
+    m_cookiesTable->setColumnWidth(3, 80);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Interactive);
+    m_cookiesTable->setColumnWidth(4, 140);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(5, QHeaderView::Fixed);
+    m_cookiesTable->setColumnWidth(5, 75);
+    m_cookiesTable->horizontalHeader()->setSectionResizeMode(6, QHeaderView::Fixed);
+    m_cookiesTable->setColumnWidth(6, 75);
+    m_cookiesTable->verticalHeader()->setVisible(false);
+    m_cookiesTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    cLayout->addWidget(m_cookiesTable);
+
+    m_tabWidget->addTab(m_cookiesTab, "Cookies (0)");
+
     mainLayout->addWidget(m_tabWidget);
 }
 
@@ -337,10 +364,13 @@ void ResponseInspector::clear() {
     m_visualizeTable->setRowCount(0);
     m_visualizeTable->setColumnCount(0);
     m_chartViewer->clear();
+    m_cookiesTable->setRowCount(0);
+    m_statusBadge->setToolTip(QString());
     m_visualizeStats->setText("No data visualized");
     m_testSummaryLabel->setText("No tests run");
     m_tabWidget->setTabText(4, "Tests (0)");
     m_tabWidget->setTabText(5, "SSL / TLS");
+    m_tabWidget->setTabText(7, "Cookies (0)");
 }
 
 void ResponseInspector::setTheme(bool isDark) {
@@ -407,6 +437,9 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
 
     // Tab 6: Visualize
     updateVisualizeTab(res);
+
+    // Tab 7: Cookies
+    updateCookiesTab(res);
 }
 
 void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
@@ -418,6 +451,7 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
         QColor sc = Theme::statusColor(res.statusCode);
         m_statusBadge->setStyleSheet(QString("background-color: %1; color: #ffffff; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;").arg(sc.name()));
         m_statusBadge->setText(QString("%1 %2").arg(res.statusCode).arg(res.statusText));
+        m_statusBadge->setToolTip(httpStatusExplanation(res.statusCode));
     }
 
     m_latencyBadge->setText(QString("%1 ms").arg(res.latencyMs));
@@ -897,6 +931,116 @@ void ResponseInspector::updateVisualizeTab(const core::ResponseModel& res) {
 
     m_visualizeTable->setSortingEnabled(true);
     m_visualizeTable->resizeColumnsToContents();
+}
+
+void ResponseInspector::updateCookiesTab(const core::ResponseModel& res) {
+    m_cookiesTable->setRowCount(0);
+    int cookieCount = 0;
+
+    for (const auto& h : res.headers) {
+        if (h.name.compare("Set-Cookie", Qt::CaseInsensitive) == 0) {
+            const QStringList parts = h.value.split(';', Qt::SkipEmptyParts);
+            if (parts.isEmpty()) continue;
+
+            QString name, value, domain, path, expires;
+            bool secure = false;
+            bool httpOnly = false;
+
+            const QString first = parts.first().trimmed();
+            int eqIdx = first.indexOf('=');
+            if (eqIdx != -1) {
+                name = first.left(eqIdx).trimmed();
+                value = first.mid(eqIdx + 1).trimmed();
+            } else {
+                name = first;
+            }
+
+            for (int i = 1; i < parts.size(); ++i) {
+                QString attr = parts[i].trimmed();
+                int aEq = attr.indexOf('=');
+                QString attrName = (aEq != -1 ? attr.left(aEq) : attr).trimmed();
+                QString attrVal = (aEq != -1 ? attr.mid(aEq + 1) : QString()).trimmed();
+
+                if (attrName.compare("Domain", Qt::CaseInsensitive) == 0) {
+                    domain = attrVal;
+                } else if (attrName.compare("Path", Qt::CaseInsensitive) == 0) {
+                    path = attrVal;
+                } else if (attrName.compare("Expires", Qt::CaseInsensitive) == 0) {
+                    expires = attrVal;
+                } else if (attrName.compare("Max-Age", Qt::CaseInsensitive) == 0) {
+                    if (expires.isEmpty()) expires = attrVal + " s";
+                    else expires += " (" + attrVal + "s)";
+                } else if (attrName.compare("Secure", Qt::CaseInsensitive) == 0) {
+                    secure = true;
+                } else if (attrName.compare("HttpOnly", Qt::CaseInsensitive) == 0) {
+                    httpOnly = true;
+                }
+            }
+
+            int row = m_cookiesTable->rowCount();
+            m_cookiesTable->insertRow(row);
+            m_cookiesTable->setItem(row, 0, new QTableWidgetItem(name));
+            m_cookiesTable->setItem(row, 1, new QTableWidgetItem(value));
+            m_cookiesTable->setItem(row, 2, new QTableWidgetItem(domain.isEmpty() ? "—" : domain));
+            m_cookiesTable->setItem(row, 3, new QTableWidgetItem(path.isEmpty() ? "/" : path));
+            m_cookiesTable->setItem(row, 4, new QTableWidgetItem(expires.isEmpty() ? "Session" : expires));
+
+            auto* secItem = new QTableWidgetItem(secure ? "✓" : "✗");
+            secItem->setTextAlignment(Qt::AlignCenter);
+            secItem->setForeground(secure ? QColor("#10b981") : QColor("#71717a"));
+            m_cookiesTable->setItem(row, 5, secItem);
+
+            auto* httpItem = new QTableWidgetItem(httpOnly ? "✓" : "✗");
+            httpItem->setTextAlignment(Qt::AlignCenter);
+            httpItem->setForeground(httpOnly ? QColor("#10b981") : QColor("#71717a"));
+            m_cookiesTable->setItem(row, 6, httpItem);
+
+            cookieCount++;
+        }
+    }
+
+    m_tabWidget->setTabText(7, QString("Cookies (%1)").arg(cookieCount));
+}
+
+QString ResponseInspector::httpStatusExplanation(int code) {
+    switch (code) {
+        // 2xx Success
+        case 200: return "200 OK — The request succeeded and the server returned the requested payload.";
+        case 201: return "201 Created — The request succeeded and a new resource was created.";
+        case 202: return "202 Accepted — The request has been accepted for processing, but processing is not complete.";
+        case 204: return "204 No Content — The server successfully processed the request, but is not returning any content.";
+        // 3xx Redirection
+        case 301: return "301 Moved Permanently — This and all future requests should be directed to the given URI.";
+        case 302: return "302 Found — The resource temporarily resides under a different URI.";
+        case 304: return "304 Not Modified — Resource has not been modified since the version specified in request headers.";
+        case 307: return "307 Temporary Redirect — The request should be repeated with another URI, but future requests should still use original URI.";
+        case 308: return "308 Permanent Redirect — The request and all future requests should be repeated using another URI.";
+        // 4xx Client Errors
+        case 400: return "400 Bad Request — The server cannot or will not process the request due to perceived client error.";
+        case 401: return "401 Unauthorized — Authentication is required and has failed or has not been provided.";
+        case 403: return "403 Forbidden — The request was valid, but the server is refusing action (insufficient permissions).";
+        case 404: return "404 Not Found — The requested resource could not be found on the server.";
+        case 405: return "405 Method Not Allowed — A request method is not supported for the requested resource.";
+        case 408: return "408 Request Timeout — The server timed out waiting for the request.";
+        case 409: return "409 Conflict — The request could not be processed because of conflict in current state of resource.";
+        case 410: return "410 Gone — The resource requested is no longer available and will not be available again.";
+        case 413: return "413 Payload Too Large — The request is larger than the server is willing or able to process.";
+        case 415: return "415 Unsupported Media Type — The payload format is in an unsupported format.";
+        case 422: return "422 Unprocessable Content — The request was well-formed but was unable to be followed due to semantic errors.";
+        case 429: return "429 Too Many Requests — The user has sent too many requests in a given amount of time (rate limited).";
+        // 5xx Server Errors
+        case 500: return "500 Internal Server Error — A generic error message given when an unexpected condition was encountered.";
+        case 501: return "501 Not Implemented — The server either does not recognize the request method, or lacks ability to fulfill it.";
+        case 502: return "502 Bad Gateway — The server was acting as a gateway or proxy and received an invalid response from upstream.";
+        case 503: return "503 Service Unavailable — The server cannot handle the request (usually overloaded or down for maintenance).";
+        case 504: return "504 Gateway Timeout — The server was acting as a gateway or proxy and did not receive a timely response from upstream.";
+        default:
+            if (code >= 200 && code < 300) return QString("%1 Success").arg(code);
+            if (code >= 300 && code < 400) return QString("%1 Redirection").arg(code);
+            if (code >= 400 && code < 500) return QString("%1 Client Error").arg(code);
+            if (code >= 500 && code < 600) return QString("%1 Server Error").arg(code);
+            return QString("HTTP %1").arg(code);
+    }
 }
 
 } // namespace poppy::gui

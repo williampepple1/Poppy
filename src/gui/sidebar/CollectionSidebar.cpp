@@ -9,6 +9,7 @@
 #include <Theme.h>
 #include <functional>
 #include <components/KeyValueTable.h>
+#include <core/codegen/CodeGenerator.h>
 #include <QDialog>
 
 namespace poppy::gui {
@@ -232,6 +233,18 @@ void CollectionSidebar::onContextMenu(const QPoint& pos) {
         menu.addAction("Rename", this, &CollectionSidebar::onRenameItem);
         menu.addAction("Duplicate", this, &CollectionSidebar::onDuplicateRequest);
         menu.addAction("Copy as cURL", this, &CollectionSidebar::onCopyAsCurl);
+        menu.addAction("Copy as Fetch (JS)", [modelItem]() {
+            if (modelItem && modelItem->request()) {
+                QClipboard* cb = QGuiApplication::clipboard();
+                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, *modelItem->request()));
+            }
+        });
+        menu.addAction("Copy as Python", [modelItem]() {
+            if (modelItem && modelItem->request()) {
+                QClipboard* cb = QGuiApplication::clipboard();
+                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, *modelItem->request()));
+            }
+        });
         menu.addSeparator();
         menu.addAction("Delete", this, &CollectionSidebar::onDeleteItem);
     }
@@ -452,6 +465,14 @@ void CollectionSidebar::onHistoryContextMenu(const QPoint& pos) {
     menu.addAction("Copy as cURL", [found]() {
         QClipboard* cb = QGuiApplication::clipboard();
         cb->setText(found->request.toCurlCommand());
+    });
+    menu.addAction("Copy as Fetch (JS)", [found]() {
+        QClipboard* cb = QGuiApplication::clipboard();
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, found->request));
+    });
+    menu.addAction("Copy as Python", [found]() {
+        QClipboard* cb = QGuiApplication::clipboard();
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, found->request));
     });
     menu.addSeparator();
     menu.addAction("Delete Entry", [this, id]() {

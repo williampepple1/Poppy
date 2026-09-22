@@ -8,6 +8,7 @@
 #include <QTableWidget>
 #include <QPushButton>
 #include <QLabel>
+#include <QLineEdit>
 #include <QTimer>
 #include <core/CollectionModel.h>
 #include <core/ScriptRunner.h>
@@ -43,6 +44,9 @@ private:
     QComboBox* m_envCombo;
     QSpinBox* m_iterationsSpin;
     QSpinBox* m_delaySpin;
+    QLineEdit* m_dataFileEdit{nullptr};
+    QPushButton* m_browseDataBtn{nullptr};
+    QLabel* m_dataStatusLabel{nullptr};
     QCheckBox* m_stopOnFailureChk;
     QPushButton* m_startBtn;
     QPushButton* m_stopBtn;
@@ -52,7 +56,10 @@ private:
     QTableWidget* m_resultsTable;
     QLabel* m_summaryLabel;
 
+    void loadDataFile(const QString& filePath);
+
     // State during execution
+    QList<QMap<QString, QString>> m_dataRows;
     QList<core::RequestModel> m_queue;
     int m_currentIndex{0};
     int m_passedRequests{0};
