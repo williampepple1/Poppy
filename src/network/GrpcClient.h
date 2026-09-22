@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QList>
 #include <QByteArray>
+#include <atomic>
 
 namespace poppy::network {
 
@@ -46,7 +47,7 @@ class GrpcClient : public QObject {
     Q_OBJECT
 public:
     explicit GrpcClient(QObject* parent = nullptr);
-    ~GrpcClient() override = default;
+    ~GrpcClient() override;
 
     static GrpcProtoDefinition parseProto(const QString& protoContent);
     static QString generateSampleJsonForMessage(const QString& messageName, const GrpcProtoDefinition& def);
@@ -58,6 +59,7 @@ public:
                      const QMap<QString, QString>& metadata,
                      bool useTls,
                      int timeoutMs = 10000);
+    void cancel();
 
 signals:
     void callStarted();
@@ -69,7 +71,10 @@ private:
                          const QString& payload,
                          const QMap<QString, QString>& metadata,
                          bool useTls,
-                         int timeoutMs);
+                         int timeoutMs,
+                         uint64_t generation);
+
+    std::atomic<uint64_t> m_generation{0};
 };
 
 } // namespace poppy::network

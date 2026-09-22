@@ -60,6 +60,7 @@ private slots:
     void onCloseCurrentTab();
     void onItemAboutToBeDeleted(core::CollectionItem* item);
     void onCollectionAboutToReload();
+    void onCollectionLoaded();
     void markCurrentTabDirty();
     void onHistoryItemSelected(const core::HistoryItem& item);
     void onManageCookies();
@@ -93,6 +94,7 @@ private:
     void updateTabTitle(int index);
     core::VariableResolver currentVariableResolver() const;
     void updateTopEnvCombo();
+    void rebindOpenTabs();
     void updateSessionTelemetryWidget();
 
     // Core & Network engines
@@ -104,6 +106,7 @@ private:
     // Active state & Tab management
     struct OpenTabInfo {
         core::CollectionItem* item{nullptr};
+        QString itemPath;
         core::RequestModel request;
         bool isDirty{false};
         bool isPinned{false};

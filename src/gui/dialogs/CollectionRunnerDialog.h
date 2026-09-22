@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QTimer>
+#include <QMap>
 #include <core/CollectionModel.h>
 #include <core/ScriptRunner.h>
 #include <network/CurlNetworkEngine.h>
@@ -33,7 +34,12 @@ private slots:
     void executeNextRequest();
 
 private:
-    void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list);
+    struct QueuedRequest {
+        core::RequestModel request;
+        QMap<QString, QString> folderVars;
+    };
+
+    void collectRequests(core::CollectionItem* item, QList<QueuedRequest>& list);
 
     core::CollectionModel* m_model;
     network::CurlNetworkEngine* m_networkEngine;
@@ -60,7 +66,7 @@ private:
 
     // State during execution
     QList<QMap<QString, QString>> m_dataRows;
-    QList<core::RequestModel> m_queue;
+    QList<QueuedRequest> m_queue;
     int m_currentIndex{0};
     int m_passedRequests{0};
     int m_totalTests{0};

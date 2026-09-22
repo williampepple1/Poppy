@@ -38,15 +38,21 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
     QString region = req.auth.awsRegion.isEmpty() ? "us-east-1" : req.auth.awsRegion;
     QString service = req.auth.awsService.isEmpty() ? "execute-api" : req.auth.awsService;
 
-    // 1. Hash of payload actually sent (GraphQL envelope, encoded form, etc.)
-    QByteArray bodyBytes = req.effectiveBody();
-    QByteArray payloadHash = QCryptographicHash::hash(bodyBytes, QCryptographicHash::Sha256).toHex();
+    // 1. Hash of payload actually sent. Multipart is built by libcurl after signing,
+    // so use the AWS unsigned-payload convention.
+    QString payloadHash;
+    if (req.bodyType == BodyType::MultipartForm) {
+        payloadHash = QStringLiteral("UNSIGNED-PAYLOAD");
+    } else {
+        QByteArray bodyBytes = req.effectiveBody();
+        payloadHash = QString::fromLatin1(QCryptographicHash::hash(bodyBytes, QCryptographicHash::Sha256).toHex());
+    }
 
     // 2. Canonical headers
     QMap<QString, QString> headersToSign;
     headersToSign["host"] = host;
     headersToSign["x-amz-date"] = amzDate;
-    headersToSign["x-amz-content-sha256"] = QString::fromLatin1(payloadHash);
+    headersToSign["x-amz-content-sha256"] = payloadHash;
     if (!req.auth.awsSessionToken.isEmpty()) {
         headersToSign["x-amz-security-token"] = req.auth.awsSessionToken;
     }
@@ -81,7 +87,7 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
         .arg(canonicalQuery)
         .arg(canonicalHeaders)
         .arg(signedHeaders)
-        .arg(QString::fromLatin1(payloadHash));
+        .arg(payloadHash);
 
     QByteArray canonicalRequestHash = QCryptographicHash::hash(canonicalRequest.toUtf8(), QCryptographicHash::Sha256).toHex();
 
@@ -101,7 +107,7 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
 
     authHeaders.append(HttpHeader{.name = "Authorization", .value = authHeaderValue, .enabled = true});
     authHeaders.append(HttpHeader{.name = "X-Amz-Date", .value = amzDate, .enabled = true});
-    authHeaders.append(HttpHeader{.name = "X-Amz-Content-Sha256", .value = QString::fromLatin1(payloadHash), .enabled = true});
+    authHeaders.append(HttpHeader{.name = "X-Amz-Content-Sha256", .value = payloadHash, .enabled = true});
     if (!req.auth.awsSessionToken.isEmpty()) {
         authHeaders.append(HttpHeader{.name = "X-Amz-Security-Token", .value = req.auth.awsSessionToken, .enabled = true});
     }

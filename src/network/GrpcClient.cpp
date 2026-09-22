@@ -5,6 +5,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QThread>
+#include <QPointer>
+#include <QCoreApplication>
+#include <atomic>
 #include <curl/curl.h>
 
 namespace poppy::network {
@@ -12,6 +15,14 @@ namespace poppy::network {
 GrpcClient::GrpcClient(QObject* parent)
     : QObject(parent)
 {
+}
+
+GrpcClient::~GrpcClient() {
+    cancel();
+}
+
+void GrpcClient::cancel() {
+    ++m_generation;
 }
 
 QString GrpcClient::statusToString(int code) {
@@ -181,11 +192,13 @@ void GrpcClient::invokeUnary(const QString& endpoint,
                              int timeoutMs)
 {
     emit callStarted();
+    const uint64_t generation = ++m_generation;
 
-    // Execute in worker thread to prevent blocking GUI
-    QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs]() {
-        executeHttp2Call(endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs);
-    })->start();
+    auto* thread = QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation]() {
+        executeHttp2Call(endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
 }
 
 void GrpcClient::executeHttp2Call(const QString& endpoint,
@@ -193,17 +206,27 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
                                  const QString& payload,
                                  const QMap<QString, QString>& metadata,
                                  bool useTls,
-                                 int timeoutMs)
+                                 int timeoutMs,
+                                 uint64_t generation)
 {
     GrpcResponse res;
     QElapsedTimer timer;
     timer.start();
 
+    auto finish = [this, generation, &res]() {
+        QPointer<GrpcClient> self(this);
+        const GrpcResponse copy = res;
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, generation, copy]() {
+            if (!self || self->m_generation.load() != generation) return;
+            emit self->callFinished(copy);
+        }, Qt::QueuedConnection);
+    };
+
     CURL* curl = curl_easy_init();
     if (!curl) {
         res.success = false;
         res.errorMessage = "Failed to initialize libcurl for gRPC";
-        emit callFinished(res);
+        finish();
         return;
     }
 
@@ -215,7 +238,7 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
     QString methodPath = fullMethodPath;
     if (!methodPath.startsWith("/")) methodPath = "/" + methodPath;
 
-    QString fullUrl = scheme + cleanedEndpoint + methodPath;
+    QByteArray urlBytes = (scheme + cleanedEndpoint + methodPath).toUtf8();
 
     // Build gRPC framed payload: 1 byte compressed flag (0) + 4 bytes big endian length + payload
     QByteArray payloadBytes = payload.toUtf8();
@@ -229,32 +252,50 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
     framedBody.append(payloadBytes);
 
     curl_slist* headers = nullptr;
-    headers = curl_slist_append(headers, "Content-Type: application/grpc");
-    headers = curl_slist_append(headers, "TE: trailers");
-
+    QList<QByteArray> headerStorage;
+    headerStorage.append(QByteArray("Content-Type: application/grpc"));
+    headerStorage.append(QByteArray("TE: trailers"));
+    for (const auto& stored : headerStorage) {
+        headers = curl_slist_append(headers, stored.constData());
+    }
     for (auto it = metadata.cbegin(); it != metadata.cend(); ++it) {
         if (!it.key().isEmpty()) {
-            QString h = QString("%1: %2").arg(it.key(), it.value());
-            headers = curl_slist_append(headers, h.toUtf8().constData());
+            headerStorage.append((it.key() + ": " + it.value()).toUtf8());
+            headers = curl_slist_append(headers, headerStorage.last().constData());
         }
     }
 
-    curl_easy_setopt(curl, CURLOPT_URL, fullUrl.toUtf8().constData());
+    curl_easy_setopt(curl, CURLOPT_URL, urlBytes.constData());
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, framedBody.constData());
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, framedBody.size());
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 
-    // Force HTTP/2
     if (useTls) {
         curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     } else {
         curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE);
     }
 
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, static_cast<long>(timeoutMs));
+
+    struct CancelContext {
+        std::atomic<uint64_t>* generation{nullptr};
+        uint64_t expected{0};
+    } cancelCtx{&m_generation, generation};
+
+    auto xferInfo = [](void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) -> int {
+        auto* ctx = static_cast<CancelContext*>(clientp);
+        if (ctx && ctx->generation && ctx->generation->load() != ctx->expected) {
+            return 1;
+        }
+        return 0;
+    };
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, +xferInfo);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &cancelCtx);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
 
     QByteArray responseBuffer;
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, grpcWriteCallback);
@@ -264,6 +305,12 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
 
     CURLcode code = curl_easy_perform(curl);
     res.latencyMs = timer.elapsed();
+
+    if (m_generation.load() != generation) {
+        curl_slist_free_all(headers);
+        curl_easy_cleanup(curl);
+        return;
+    }
 
     if (code != CURLE_OK) {
         res.success = false;
@@ -276,7 +323,6 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
         res.success = (res.statusCode == 0);
         res.rawResponseBody = responseBuffer;
 
-        // Decode gRPC response framing if present
         if (responseBuffer.size() >= 5) {
             quint8 flag = static_cast<quint8>(responseBuffer[0]);
             Q_UNUSED(flag);
@@ -294,7 +340,6 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
             res.responseBody = QString::fromUtf8(responseBuffer);
         }
 
-        // If response is valid JSON, format it indented
         QJsonParseError parseErr;
         auto doc = QJsonDocument::fromJson(res.responseBody.toUtf8(), &parseErr);
         if (parseErr.error == QJsonParseError::NoError && (doc.isObject() || doc.isArray())) {
@@ -305,7 +350,7 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
     curl_slist_free_all(headers);
     curl_easy_cleanup(curl);
 
-    emit callFinished(res);
+    finish();
 }
 
 } // namespace poppy::network

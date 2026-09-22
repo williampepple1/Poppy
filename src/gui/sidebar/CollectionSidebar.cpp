@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QDropEvent>
 #include <Theme.h>
 #include <functional>
 #include <components/KeyValueTable.h>
@@ -13,6 +14,25 @@
 #include <QDialog>
 
 namespace poppy::gui {
+
+namespace {
+
+class CollectionTreeWidget : public QTreeWidget {
+public:
+    explicit CollectionTreeWidget(QWidget* parent = nullptr) : QTreeWidget(parent) {}
+    std::function<void(QTreeWidgetItem*)> afterDrop;
+
+protected:
+    void dropEvent(QDropEvent* event) override {
+        QTreeWidgetItem* dragged = currentItem();
+        QTreeWidget::dropEvent(event);
+        if (dragged && afterDrop) {
+            afterDrop(dragged);
+        }
+    }
+};
+
+} // namespace
 
 CollectionSidebar::CollectionSidebar(core::CollectionModel* model, core::HistoryManager* historyManager, QWidget* parent)
     : QWidget(parent), m_model(model), m_historyManager(historyManager) {
@@ -103,13 +123,17 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     layout->addLayout(envLayout);
 
     // 3. Tree Widget
-    m_tree = new QTreeWidget(container);
+    auto* tree = new CollectionTreeWidget(container);
+    m_tree = tree;
     m_tree->setHeaderHidden(true);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
     m_tree->setDragDropMode(QAbstractItemView::InternalMove);
     m_tree->setDragEnabled(true);
     m_tree->setAcceptDrops(true);
     m_tree->setDropIndicatorShown(true);
+    tree->afterDrop = [this](QTreeWidgetItem* dragged) {
+        onTreeItemDropped(dragged);
+    };
     connect(m_tree, &QTreeWidget::itemClicked, this, &CollectionSidebar::onItemClicked);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &CollectionSidebar::onContextMenu);
     layout->addWidget(m_tree, 1);
@@ -181,9 +205,14 @@ void CollectionSidebar::refreshTree() {
     auto* rootWidget = new QTreeWidgetItem(m_tree);
     rootWidget->setText(0, "📁 " + root->name());
     rootWidget->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<void*>(root)));
+    rootWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
     rootWidget->setExpanded(true);
 
     populateChildren(rootWidget, root);
+
+    if (m_collectionFilterEdit && !m_collectionFilterEdit->text().trimmed().isEmpty()) {
+        onCollectionFilterChanged(m_collectionFilterEdit->text());
+    }
 }
 
 void CollectionSidebar::populateChildren(QTreeWidgetItem* parentWidget, core::CollectionItem* parentModel) {
@@ -193,9 +222,11 @@ void CollectionSidebar::populateChildren(QTreeWidgetItem* parentWidget, core::Co
 
         if (child->type() == core::CollectionItemType::Folder) {
             childWidget->setText(0, "📁 " + child->name());
+            childWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
             populateChildren(childWidget, child);
             childWidget->setExpanded(true);
         } else {
+            childWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
             auto* req = child->request();
             if (req) {
                 QString methodStr = core::methodToString(req->method);
@@ -212,6 +243,24 @@ void CollectionSidebar::populateChildren(QTreeWidgetItem* parentWidget, core::Co
 core::CollectionItem* CollectionSidebar::itemFromWidget(QTreeWidgetItem* widget) const {
     if (!widget) return nullptr;
     return static_cast<core::CollectionItem*>(widget->data(0, Qt::UserRole).value<void*>());
+}
+
+void CollectionSidebar::onTreeItemDropped(QTreeWidgetItem* widget) {
+    if (!m_model || !widget) return;
+    auto* item = itemFromWidget(widget);
+    if (!item) {
+        refreshTree();
+        return;
+    }
+    QTreeWidgetItem* parentWidget = widget->parent();
+    core::CollectionItem* newParent = parentWidget ? itemFromWidget(parentWidget) : m_model->rootItem();
+    if (!newParent || newParent->type() == core::CollectionItemType::Request) {
+        refreshTree();
+        return;
+    }
+    if (!m_model->moveItem(item, newParent)) {
+        refreshTree();
+    }
 }
 
 void CollectionSidebar::onItemClicked(QTreeWidgetItem* item, int /*column*/) {
@@ -308,10 +357,9 @@ void CollectionSidebar::onRenameItem() {
     bool ok;
     QString newName = QInputDialog::getText(this, "Rename Item", "New Name:", QLineEdit::Normal, item->name(), &ok);
     if (ok && !newName.isEmpty()) {
-        item->setName(newName);
-        if (item->request()) {
-            item->request()->name = newName;
-            m_model->saveRequest(item);
+        if (!m_model->renameItem(item, newName)) {
+            QMessageBox::warning(this, "Rename Failed", "Could not rename the item on disk.");
+            return;
         }
         refreshTree();
     }
@@ -368,6 +416,9 @@ void CollectionSidebar::onFolderVariables() {
             }
         }
         item->setVariables(vars);
+        if (!m_model->saveFolderVariables(item)) {
+            QMessageBox::warning(this, "Save Failed", "Could not write folder.bru for this folder.");
+        }
     }
 }
 

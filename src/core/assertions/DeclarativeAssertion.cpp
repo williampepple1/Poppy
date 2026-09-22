@@ -1,5 +1,6 @@
 #include "DeclarativeAssertion.h"
 #include <core/ResponseModel.h>
+#include <core/JsonPathEvaluator.h>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -30,34 +31,13 @@ QString DeclarativeAssertionEvaluator::resolveTargetValue(const QString& target,
         return res.headerValue(headerName);
     }
 
-    // res.body.property.subproperty
-    if (t.startsWith("res.body.")) {
-        QString path = t.mid(9);
-        QStringList parts = path.split('.', Qt::SkipEmptyParts);
-
+    // res.body.property / res.body.items[0].id
+    if (t.startsWith("res.body.") || t.startsWith("res.body[")) {
+        QString path = t.mid(8); // after "res.body"
+        if (path.startsWith('.')) path = path.mid(1);
         QJsonDocument doc = QJsonDocument::fromJson(res.rawBody);
-        if (!doc.isObject()) return {};
-
-        QJsonValue current = doc.object();
-        for (const QString& part : parts) {
-            if (current.isObject()) {
-                current = current.toObject().value(part);
-            } else {
-                return {};
-            }
-        }
-
-        if (current.isDouble()) {
-            return QString::number(current.toDouble());
-        } else if (current.isBool()) {
-            return current.toBool() ? "true" : "false";
-        } else if (current.isString()) {
-            return current.toString();
-        } else if (current.isNull() || current.isUndefined()) {
-            return "null";
-        } else {
-            return QString::fromUtf8(QJsonDocument(current.toObject()).toJson(QJsonDocument::Compact));
-        }
+        if (doc.isNull()) return {};
+        return JsonPathEvaluator::evaluateToString(doc, path, false);
     }
 
     return {};

@@ -197,8 +197,8 @@ void WebSocketClient::processFrames() {
         quint8 byte0 = static_cast<quint8>(m_rxBuffer[0]);
         quint8 byte1 = static_cast<quint8>(m_rxBuffer[1]);
 
-        // bool fin = (byte0 & 0x80) != 0;
         quint8 opcode = (byte0 & 0x0F);
+        bool fin = (byte0 & 0x80) != 0;
         bool hasMask = (byte1 & 0x80) != 0;
         quint64 payloadLen = (byte1 & 0x7F);
 
@@ -237,16 +237,34 @@ void WebSocketClient::processFrames() {
             }
         }
 
+        auto emitComplete = [&](quint8 completeOpcode, const QByteArray& data) {
+            if (completeOpcode == 0x1) {
+                emit frameReceived("TEXT", QString("%1 bytes").arg(data.size()));
+                emit textMessageReceived(QString::fromUtf8(data));
+            } else if (completeOpcode == 0x2) {
+                emit frameReceived("BINARY", QString("%1 bytes").arg(data.size()));
+                emit binaryMessageReceived(data);
+            }
+        };
+
         switch (opcode) {
-            case 0x1: { // Text
-                QString msg = QString::fromUtf8(payload);
-                emit frameReceived("TEXT", QString("%1 bytes").arg(payload.size()));
-                emit textMessageReceived(msg);
+            case 0x0: { // Continuation
+                m_fragmentBuffer.append(payload);
+                if (fin) {
+                    emitComplete(m_fragmentOpcode, m_fragmentBuffer);
+                    m_fragmentBuffer.clear();
+                    m_fragmentOpcode = 0;
+                }
                 break;
             }
+            case 0x1: // Text
             case 0x2: { // Binary
-                emit frameReceived("BINARY", QString("%1 bytes").arg(payload.size()));
-                emit binaryMessageReceived(payload);
+                if (!fin) {
+                    m_fragmentOpcode = opcode;
+                    m_fragmentBuffer = payload;
+                } else {
+                    emitComplete(opcode, payload);
+                }
                 break;
             }
             case 0x8: { // Close

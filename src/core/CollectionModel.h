@@ -5,6 +5,7 @@
 #include <QList>
 #include <memory>
 #include <QFileSystemWatcher>
+#include <QTimer>
 #include "RequestModel.h"
 #include "EnvironmentModel.h"
 
@@ -85,8 +86,11 @@ public:
     CollectionItem* addRequest(CollectionItem* parent, const QString& name, const RequestModel& req);
     CollectionItem* addFolder(CollectionItem* parent, const QString& name);
     bool saveRequest(CollectionItem* item);
+    bool saveFolderVariables(CollectionItem* folder);
     bool deleteItem(CollectionItem* item);
     bool renameItem(CollectionItem* item, const QString& newName);
+    bool moveItem(CollectionItem* item, CollectionItem* newParent);
+    CollectionItem* findItemByPath(const QString& path) const;
 
     // Environments discovered in collection
     const QList<EnvironmentModel>& environments() const { return m_environments; }
@@ -103,11 +107,16 @@ signals:
 private:
     void scanDirectory(const QString& dirPath, CollectionItem* parentItem);
     void notifyItemTreeDeleted(CollectionItem* item);
+    void rewriteDescendantPaths(CollectionItem* item, const QString& oldPrefix, const QString& newPrefix);
+    CollectionItem* findItemByPathRecursive(CollectionItem* item, const QString& canonicalPath) const;
+    void scheduleReloadFromDisk();
 
     QString m_rootPath;
     std::unique_ptr<CollectionItem> m_rootItem;
     QList<EnvironmentModel> m_environments;
     QFileSystemWatcher m_fileWatcher;
+    QTimer m_reloadDebounce;
+    bool m_suppressWatchReload{false};
 };
 
 } // namespace poppy::core

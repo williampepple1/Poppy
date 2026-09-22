@@ -147,9 +147,21 @@ QString DocGenerator::generateHtml(const QList<RequestModel>& requests,
         }
 
         // Body
-        if (!req.bodyContent.isEmpty()) {
+        QString bodyText = req.bodyContent;
+        if (req.bodyType == BodyType::GraphQL) {
+            bodyText = QString::fromUtf8(req.effectiveBody());
+        } else if (req.bodyType == BodyType::MultipartForm) {
+            QStringList parts;
+            for (const auto& p : req.formDataParams) {
+                if (p.enabled && !p.key.isEmpty()) {
+                    parts.append(p.key + "=" + p.value);
+                }
+            }
+            bodyText = parts.join("\n");
+        }
+        if (!bodyText.isEmpty()) {
             html += "      <h3>Request Body</h3>\n";
-            html += QString("      <pre><code>%1</code></pre>\n").arg(escapeHtml(req.bodyContent));
+            html += QString("      <pre><code>%1</code></pre>\n").arg(escapeHtml(bodyText));
         }
 
         // Code Snippets

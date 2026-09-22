@@ -53,6 +53,7 @@ private:
     void setupHistoryTab(QWidget* container);
     void populateChildren(QTreeWidgetItem* parentWidget, core::CollectionItem* parentModel);
     core::CollectionItem* itemFromWidget(QTreeWidgetItem* widget) const;
+    void onTreeItemDropped(QTreeWidgetItem* widget);
 
     core::CollectionModel* m_model;
     core::HistoryManager* m_historyManager;

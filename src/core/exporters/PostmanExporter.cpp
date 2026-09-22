@@ -109,10 +109,13 @@ QJsonObject PostmanExporter::exportToJson(const QList<RequestModel>& requests,
             QJsonObject bodyObj;
             bodyObj["mode"] = "urlencoded";
             QJsonArray formArr;
-            for (const auto& p : req.queryParams) { // or pairs
+            const QStringList pairs = req.bodyContent.split('&');
+            for (const QString& pair : pairs) {
+                if (pair.isEmpty()) continue;
+                const int eq = pair.indexOf('=');
                 QJsonObject pObj;
-                pObj["key"] = p.key;
-                pObj["value"] = p.value;
+                pObj["key"] = eq >= 0 ? pair.left(eq) : pair;
+                pObj["value"] = eq >= 0 ? pair.mid(eq + 1) : QString();
                 formArr.append(pObj);
             }
             bodyObj["urlencoded"] = formArr;

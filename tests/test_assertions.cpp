@@ -68,6 +68,12 @@ int main() {
     auto r9 = DeclarativeAssertionEvaluator::evaluate(rule9, res);
     assert(r9.passed == true);
 
+    ResponseModel arrayRes;
+    arrayRes.rawBody = R"([{"id":"root-0"}])";
+    AssertionRule ruleArr{"res.body[0].id", "eq", "root-0", true};
+    auto rArr = DeclarativeAssertionEvaluator::evaluate(ruleArr, arrayRes);
+    assert(rArr.passed == true);
+
     // 5. Negative / Failing assertion
     AssertionRule ruleFail{"res.status", "eq", "500", true};
     auto rFail = DeclarativeAssertionEvaluator::evaluate(ruleFail, res);

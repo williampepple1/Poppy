@@ -67,10 +67,19 @@ int main() {
     assert(exampleCookies.size() == 1);
     assert(exampleCookies[0].name == "auth_token");
 
+    Cookie suffixFalsePositive;
+    suffixFalsePositive.domain = "example.com";
+    suffixFalsePositive.includeSubdomains = true;
+    suffixFalsePositive.name = "sid";
+    suffixFalsePositive.value = "1";
+    jar.addOrUpdateCookie(suffixFalsePositive);
+    assert(jar.cookiesForDomain("notexample.com").isEmpty());
+    assert(jar.cookiesForDomain("www.example.com").size() == 1);
+
     // Remove c1
     bool removed = jar.removeCookie(".httpbin.org", "/", "session_id");
     assert(removed);
-    assert(jar.count() == 1);
+    assert(jar.count() == 2);
 
     // 6. Test File persistence roundtrip
     QString tmpFile = QDir::tempPath() + "/poppy_test_cookies.txt";

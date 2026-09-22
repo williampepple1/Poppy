@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QString>
+#include <QMap>
 #include "RequestModel.h"
 
 namespace poppy::core {
@@ -9,6 +10,8 @@ class BruWriter {
 public:
     static QString serialize(const RequestModel& req);
     static bool writeToFile(const QString& filePath, const RequestModel& req);
+    static QString serializeFolder(const QString& name, const QMap<QString, QString>& vars);
+    static bool writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars);
 
     // Strip characters illegal on Windows (and other reserved names) so
     // imported request files actually land on disk.

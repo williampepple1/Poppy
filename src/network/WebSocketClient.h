@@ -63,6 +63,8 @@ private:
     QString m_handshakeKey;
     bool m_handshakeDone{false};
     QByteArray m_rxBuffer;
+    QByteArray m_fragmentBuffer;
+    quint8 m_fragmentOpcode{0};
 };
 
 } // namespace poppy::network

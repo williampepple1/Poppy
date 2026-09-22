@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QUuid>
+#include <QPointer>
 
 namespace poppy::network {
 
@@ -37,6 +38,7 @@ bool MockServer::start(quint16 port) {
 
 void MockServer::stop() {
     if (m_server) {
+        m_recvBuffers.clear();
         m_server->close();
         delete m_server;
         m_server = nullptr;
@@ -129,23 +131,43 @@ const MockRoute* MockServer::matchRoute(const QString& method, const QString& pa
 void MockServer::onNewConnection() {
     while (m_server && m_server->hasPendingConnections()) {
         QTcpSocket* socket = m_server->nextPendingConnection();
+        socket->setParent(m_server);
         connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
             handleClientSocket(socket);
+        });
+        connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+            m_recvBuffers.remove(socket);
+            socket->deleteLater();
         });
     }
 }
 
 void MockServer::handleClientSocket(QTcpSocket* socket) {
-    QByteArray rawData = socket->readAll();
-    QString reqStr = QString::fromUtf8(rawData);
-    int headerEnd = reqStr.indexOf("\r\n\r\n");
+    if (!socket) return;
+    m_recvBuffers[socket].append(socket->readAll());
+    QByteArray& rawData = m_recvBuffers[socket];
+    int headerEnd = rawData.indexOf("\r\n\r\n");
     if (headerEnd == -1) return;
 
-    QString headersPart = reqStr.left(headerEnd);
-    QString bodyPart = reqStr.mid(headerEnd + 4);
+    QByteArray headerBytes = rawData.left(headerEnd);
+    QString headersPart = QString::fromUtf8(headerBytes);
+    QByteArray bodyBytesSoFar = rawData.mid(headerEnd + 4);
 
     QStringList lines = headersPart.split("\r\n");
     if (lines.isEmpty()) return;
+
+    int contentLength = 0;
+    for (int i = 1; i < lines.size(); ++i) {
+        int colon = lines[i].indexOf(':');
+        if (colon == -1) continue;
+        if (lines[i].left(colon).trimmed().compare("Content-Length", Qt::CaseInsensitive) == 0) {
+            contentLength = lines[i].mid(colon + 1).trimmed().toInt();
+        }
+    }
+    if (bodyBytesSoFar.size() < contentLength) return;
+
+    QString bodyPart = QString::fromUtf8(bodyBytesSoFar.left(contentLength));
+    rawData.remove(0, headerEnd + 4 + contentLength);
 
     QString requestLine = lines.first();
     auto reqParts = requestLine.split(' ');
@@ -235,7 +257,10 @@ void MockServer::handleClientSocket(QTcpSocket* socket) {
     };
 
     if (delay > 0) {
-        QTimer::singleShot(delay, this, sendResponse);
+        QPointer<QTcpSocket> safeSocket(socket);
+        QTimer::singleShot(delay, this, [sendResponse, safeSocket]() {
+            if (safeSocket) sendResponse();
+        });
     } else {
         sendResponse();
     }

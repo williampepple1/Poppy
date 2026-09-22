@@ -3,6 +3,31 @@
 
 namespace poppy::core {
 
+namespace {
+QString snippetBody(const RequestModel& req) {
+    if (req.bodyType == BodyType::GraphQL) {
+        return QString::fromUtf8(req.effectiveBody());
+    }
+    if (req.bodyType == BodyType::MultipartForm) {
+        QStringList parts;
+        for (const auto& p : req.formDataParams) {
+            if (p.enabled && !p.key.isEmpty()) {
+                parts.append(p.key + "=" + (p.isFile ? ("@" + p.value) : p.value));
+            }
+        }
+        return parts.join("&");
+    }
+    if (req.bodyType == BodyType::FormUrlEncoded) {
+        return QString::fromUtf8(req.effectiveBody());
+    }
+    return req.bodyContent;
+}
+
+bool snippetHasBody(const RequestModel& req) {
+    return req.bodyType != BodyType::None && !snippetBody(req).trimmed().isEmpty();
+}
+}
+
 QString CodeGenerator::languageName(TargetLanguage lang) {
     switch (lang) {
         case TargetLanguage::PythonRequests: return "Python (requests)";
@@ -53,12 +78,12 @@ QString CodeGenerator::generatePython(const RequestModel& req) {
     }
 
     // Body
-    bool hasBody = (req.bodyType != BodyType::None && !req.bodyContent.isEmpty());
+    bool hasBody = (snippetHasBody(req));
     if (hasBody) {
         if (req.bodyType == BodyType::Json) {
-            ts << "payload = " << req.bodyContent << "\n\n";
+            ts << "payload = " << snippetBody(req) << "\n\n";
         } else {
-            ts << "payload = \"\"\"" << req.bodyContent << "\"\"\"\n\n";
+            ts << "payload = \"\"\"" << snippetBody(req) << "\"\"\"\n\n";
         }
     }
 
@@ -97,11 +122,11 @@ QString CodeGenerator::generateJsFetch(const RequestModel& req) {
         ts << "  },\n";
     }
 
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+    if (snippetHasBody(req)) {
         if (req.bodyType == BodyType::Json) {
-            ts << "  body: JSON.stringify(" << req.bodyContent << "),\n";
+            ts << "  body: JSON.stringify(" << snippetBody(req) << "),\n";
         } else {
-            ts << "  body: `" << req.bodyContent << "`,\n";
+            ts << "  body: `" << snippetBody(req) << "`,\n";
         }
     }
     ts << "};\n\n";
@@ -134,11 +159,11 @@ QString CodeGenerator::generateJsAxios(const RequestModel& req) {
         ts << "  },\n";
     }
 
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+    if (snippetHasBody(req)) {
         if (req.bodyType == BodyType::Json) {
-            ts << "  data: " << req.bodyContent << ",\n";
+            ts << "  data: " << snippetBody(req) << ",\n";
         } else {
-            ts << "  data: `" << req.bodyContent << "`,\n";
+            ts << "  data: `" << snippetBody(req) << "`,\n";
         }
     }
     ts << "};\n\n";
@@ -159,7 +184,7 @@ QString CodeGenerator::generateGo(const RequestModel& req) {
     ts << "    \"fmt\"\n";
     ts << "    \"io\"\n";
     ts << "    \"net/http\"\n";
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+    if (snippetHasBody(req)) {
         ts << "    \"strings\"\n";
     }
     ts << ")\n\n";
@@ -167,9 +192,9 @@ QString CodeGenerator::generateGo(const RequestModel& req) {
     ts << "func main() {\n";
     ts << "    url := \"" << req.effectiveUrl() << "\"\n";
 
-    bool hasBody = (req.bodyType != BodyType::None && !req.bodyContent.isEmpty());
+    bool hasBody = (snippetHasBody(req));
     if (hasBody) {
-        QString escaped = req.bodyContent;
+        QString escaped = snippetBody(req);
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "\\n");
         ts << "    payload := strings.NewReader(\"" << escaped << "\")\n";
@@ -222,8 +247,8 @@ QString CodeGenerator::generateCpp(const RequestModel& req) {
         ts << "        curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);\n";
     }
 
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
-        QString escaped = req.bodyContent;
+    if (snippetHasBody(req)) {
+        QString escaped = snippetBody(req);
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "\\n");
         ts << "        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, \"" << escaped << "\");\n";
@@ -274,8 +299,8 @@ QString CodeGenerator::generateRust(const RequestModel& req) {
         ts << "        .headers(headers)\n";
     }
 
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
-        QString escaped = req.bodyContent;
+    if (snippetHasBody(req)) {
+        QString escaped = snippetBody(req);
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "\\n");
         ts << "        .body(\"" << escaped << "\")\n";
@@ -316,8 +341,8 @@ QString CodeGenerator::generateCSharp(const RequestModel& req) {
         }
     }
 
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
-        QString escaped = req.bodyContent;
+    if (snippetHasBody(req)) {
+        QString escaped = snippetBody(req);
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "\\n");
         QString mediaType = (req.bodyType == BodyType::Json) ? "application/json" : "text/plain";
@@ -356,8 +381,8 @@ QString CodeGenerator::generateJava(const RequestModel& req) {
     }
 
     QString methodStr = methodToString(req.method);
-    if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
-        QString escaped = req.bodyContent;
+    if (snippetHasBody(req)) {
+        QString escaped = snippetBody(req);
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "\\n");
         ts << "        builder.method(\"" << methodStr << "\", HttpRequest.BodyPublishers.ofString(\"" << escaped << "\"));\n";

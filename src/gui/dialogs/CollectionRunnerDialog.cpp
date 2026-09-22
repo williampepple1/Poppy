@@ -149,10 +149,10 @@ CollectionRunnerDialog::CollectionRunnerDialog(
     mainLayout->addLayout(bottomLayout);
 }
 
-void CollectionRunnerDialog::collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list) {
+void CollectionRunnerDialog::collectRequests(core::CollectionItem* item, QList<QueuedRequest>& list) {
     if (!item) return;
     if (item->type() == core::CollectionItemType::Request && item->request()) {
-        list.append(*item->request());
+        list.append(QueuedRequest{*item->request(), item->effectiveVariables()});
     }
     for (auto* child : item->children()) {
         collectRequests(child, list);
@@ -175,7 +175,7 @@ void CollectionRunnerDialog::startRun() {
         }
     }
 
-    QList<core::RequestModel> baseRequests;
+    QList<QueuedRequest> baseRequests;
     collectRequests(targetItem, baseRequests);
 
     if (baseRequests.isEmpty()) {
@@ -325,7 +325,8 @@ void CollectionRunnerDialog::executeNextRequest() {
     int row = m_resultsTable->rowCount();
     m_resultsTable->insertRow(row);
 
-    core::RequestModel req = m_queue[m_currentIndex];
+    const QueuedRequest& queued = m_queue[m_currentIndex];
+    core::RequestModel req = queued.request;
 
     // Data-driven iteration variable injection
     int iters = m_iterationsSpin->value();
@@ -341,6 +342,7 @@ void CollectionRunnerDialog::executeNextRequest() {
     // Variable resolution
     core::VariableResolver resolver;
     resolver.setEnvironment(m_activeEnv);
+    resolver.setFolderVariables(queued.folderVars);
     core::RequestModel resolvedReq = resolver.resolveRequest(req);
 
     // Pre-request script

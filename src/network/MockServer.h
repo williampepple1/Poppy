@@ -5,6 +5,7 @@
 #include <QTcpSocket>
 #include <QString>
 #include <QMap>
+#include <QHash>
 #include <QList>
 #include <QDateTime>
 #include <core/RequestModel.h>
@@ -75,6 +76,7 @@ private:
     quint16 m_port{8080};
     QList<MockRoute> m_routes;
     QList<MockRequestLog> m_logs;
+    QHash<QTcpSocket*, QByteArray> m_recvBuffers;
 };
 
 } // namespace poppy::network

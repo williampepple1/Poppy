@@ -5,6 +5,7 @@
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QDir>
+#include <QFile>
 #include <QLineEdit>
 
 namespace poppy::gui {
@@ -197,7 +198,14 @@ void EnvironmentDialog::deleteEnvironment() {
     if (m_currentIdx < 0 || m_currentIdx >= m_envs.size()) return;
     auto ans = QMessageBox::question(this, "Confirm Delete", QString("Delete environment '%1'?").arg(m_envs[m_currentIdx].name()));
     if (ans == QMessageBox::Yes) {
+        const QString envName = m_envs[m_currentIdx].name();
+        if (!m_rootPath.isEmpty()) {
+            QDir dir(m_rootPath);
+            QFile::remove(dir.filePath("environments/" + envName + ".env"));
+            QFile::remove(dir.filePath("environments/" + envName + ".secret.env"));
+        }
         m_envs.removeAt(m_currentIdx);
+        m_currentIdx = -1;
         populateEnvList();
         emit environmentsModified();
     }

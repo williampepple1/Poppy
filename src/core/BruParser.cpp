@@ -208,4 +208,37 @@ RequestModel BruParser::parse(const QString& content) {
     return req;
 }
 
+QMap<QString, QString> BruParser::parseVars(const QString& content) {
+    QMap<QString, QString> vars;
+    const QStringList lines = content.split('\n');
+    bool inVars = false;
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.startsWith("vars") && line.endsWith('{')) {
+            inVars = true;
+            continue;
+        }
+        if (!inVars) continue;
+        if (line == "}") {
+            inVars = false;
+            continue;
+        }
+        if (line.isEmpty() || line.startsWith('#')) continue;
+        const int colon = line.indexOf(':');
+        if (colon > 0) {
+            vars.insert(line.left(colon).trimmed(), line.mid(colon + 1).trimmed());
+        }
+    }
+    return vars;
+}
+
+QMap<QString, QString> BruParser::parseVarsFile(const QString& filePath) {
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return {};
+    }
+    QTextStream in(&file);
+    return parseVars(in.readAll());
+}
+
 } // namespace poppy::core

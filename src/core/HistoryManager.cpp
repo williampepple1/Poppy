@@ -11,6 +11,196 @@
 
 namespace poppy::core {
 
+namespace {
+
+QJsonArray headersToJson(const QList<HttpHeader>& headers) {
+    QJsonArray arr;
+    for (const auto& h : headers) {
+        QJsonObject ho;
+        ho["name"] = h.name;
+        ho["value"] = h.value;
+        ho["enabled"] = h.enabled;
+        ho["description"] = h.description;
+        arr.append(ho);
+    }
+    return arr;
+}
+
+QList<HttpHeader> headersFromJson(const QJsonArray& arr) {
+    QList<HttpHeader> list;
+    for (const auto& hv : arr) {
+        QJsonObject ho = hv.toObject();
+        list.append(HttpHeader{
+            .name = ho["name"].toString(),
+            .value = ho["value"].toString(),
+            .enabled = ho["enabled"].toBool(true),
+            .description = ho["description"].toString()
+        });
+    }
+    return list;
+}
+
+QJsonArray paramsToJson(const QList<HttpParam>& params) {
+    QJsonArray arr;
+    for (const auto& p : params) {
+        QJsonObject po;
+        po["key"] = p.key;
+        po["value"] = p.value;
+        po["enabled"] = p.enabled;
+        po["description"] = p.description;
+        arr.append(po);
+    }
+    return arr;
+}
+
+QList<HttpParam> paramsFromJson(const QJsonArray& arr) {
+    QList<HttpParam> list;
+    for (const auto& pv : arr) {
+        QJsonObject po = pv.toObject();
+        list.append(HttpParam{
+            .key = po["key"].toString(),
+            .value = po["value"].toString(),
+            .enabled = po["enabled"].toBool(true),
+            .description = po["description"].toString()
+        });
+    }
+    return list;
+}
+
+QJsonObject requestToJson(const RequestModel& req) {
+    QJsonObject ro;
+    ro["name"] = req.name;
+    ro["method"] = static_cast<int>(req.method);
+    ro["url"] = req.url;
+    ro["bodyType"] = static_cast<int>(req.bodyType);
+    ro["bodyContent"] = req.bodyContent;
+    ro["graphqlQuery"] = req.graphqlQuery;
+    ro["graphqlVariables"] = req.graphqlVariables;
+    ro["proxy"] = req.proxy;
+    ro["seq"] = req.seq;
+    ro["description"] = req.description;
+    ro["headers"] = headersToJson(req.headers);
+    ro["params"] = paramsToJson(req.queryParams);
+    ro["pathParams"] = paramsToJson(req.pathParams);
+
+    QJsonArray formArr;
+    for (const auto& p : req.formDataParams) {
+        QJsonObject fo;
+        fo["key"] = p.key;
+        fo["value"] = p.value;
+        fo["isFile"] = p.isFile;
+        fo["enabled"] = p.enabled;
+        formArr.append(fo);
+    }
+    ro["formDataParams"] = formArr;
+
+    QJsonObject auth;
+    auth["type"] = static_cast<int>(req.auth.type);
+    auth["bearerToken"] = req.auth.bearerToken;
+    auth["basicUsername"] = req.auth.basicUsername;
+    auth["basicPassword"] = req.auth.basicPassword;
+    auth["apiKeyName"] = req.auth.apiKeyName;
+    auth["apiKeyValue"] = req.auth.apiKeyValue;
+    auth["apiKeyPlacement"] = req.auth.apiKeyPlacement;
+    auth["oauth2AccessToken"] = req.auth.oauth2AccessToken;
+    auth["awsAccessKey"] = req.auth.awsAccessKey;
+    auth["awsSecretKey"] = req.auth.awsSecretKey;
+    auth["awsSessionToken"] = req.auth.awsSessionToken;
+    auth["awsRegion"] = req.auth.awsRegion;
+    auth["awsService"] = req.auth.awsService;
+    auth["digestUsername"] = req.auth.digestUsername;
+    auth["digestPassword"] = req.auth.digestPassword;
+    auth["ntlmUsername"] = req.auth.ntlmUsername;
+    auth["ntlmPassword"] = req.auth.ntlmPassword;
+    auth["ntlmDomain"] = req.auth.ntlmDomain;
+    auth["ntlmWorkstation"] = req.auth.ntlmWorkstation;
+    ro["auth"] = auth;
+
+    QJsonObject scripts;
+    scripts["preRequest"] = req.scripts.preRequestScript;
+    scripts["postResponse"] = req.scripts.postResponseScript;
+    scripts["tests"] = req.scripts.tests;
+    ro["scripts"] = scripts;
+
+    QJsonArray asArr;
+    for (const auto& a : req.assertions) {
+        QJsonObject ao;
+        ao["target"] = a.target;
+        ao["op"] = a.op;
+        ao["expected"] = a.expected;
+        ao["enabled"] = a.enabled;
+        asArr.append(ao);
+    }
+    ro["assertions"] = asArr;
+    return ro;
+}
+
+RequestModel requestFromJson(const QJsonObject& ro) {
+    RequestModel req;
+    req.name = ro["name"].toString();
+    req.method = static_cast<HttpMethod>(ro["method"].toInt());
+    req.url = ro["url"].toString();
+    req.bodyType = static_cast<BodyType>(ro["bodyType"].toInt());
+    req.bodyContent = ro["bodyContent"].toString();
+    req.graphqlQuery = ro["graphqlQuery"].toString();
+    req.graphqlVariables = ro["graphqlVariables"].toString();
+    req.proxy = ro["proxy"].toString();
+    req.seq = ro["seq"].toInt(1);
+    req.description = ro["description"].toString();
+    req.headers = headersFromJson(ro["headers"].toArray());
+    req.queryParams = paramsFromJson(ro["params"].toArray());
+    req.pathParams = paramsFromJson(ro["pathParams"].toArray());
+
+    for (const auto& fv : ro["formDataParams"].toArray()) {
+        QJsonObject fo = fv.toObject();
+        req.formDataParams.append(FormDataParam{
+            .key = fo["key"].toString(),
+            .value = fo["value"].toString(),
+            .isFile = fo["isFile"].toBool(false),
+            .enabled = fo["enabled"].toBool(true)
+        });
+    }
+
+    QJsonObject auth = ro["auth"].toObject();
+    req.auth.type = static_cast<AuthType>(auth["type"].toInt());
+    req.auth.bearerToken = auth["bearerToken"].toString();
+    req.auth.basicUsername = auth["basicUsername"].toString();
+    req.auth.basicPassword = auth["basicPassword"].toString();
+    req.auth.apiKeyName = auth["apiKeyName"].toString();
+    req.auth.apiKeyValue = auth["apiKeyValue"].toString();
+    req.auth.apiKeyPlacement = auth["apiKeyPlacement"].toString("header");
+    req.auth.oauth2AccessToken = auth["oauth2AccessToken"].toString();
+    req.auth.awsAccessKey = auth["awsAccessKey"].toString();
+    req.auth.awsSecretKey = auth["awsSecretKey"].toString();
+    req.auth.awsSessionToken = auth["awsSessionToken"].toString();
+    req.auth.awsRegion = auth["awsRegion"].toString();
+    req.auth.awsService = auth["awsService"].toString();
+    req.auth.digestUsername = auth["digestUsername"].toString();
+    req.auth.digestPassword = auth["digestPassword"].toString();
+    req.auth.ntlmUsername = auth["ntlmUsername"].toString();
+    req.auth.ntlmPassword = auth["ntlmPassword"].toString();
+    req.auth.ntlmDomain = auth["ntlmDomain"].toString();
+    req.auth.ntlmWorkstation = auth["ntlmWorkstation"].toString();
+
+    QJsonObject scripts = ro["scripts"].toObject();
+    req.scripts.preRequestScript = scripts["preRequest"].toString();
+    req.scripts.postResponseScript = scripts["postResponse"].toString();
+    req.scripts.tests = scripts["tests"].toString();
+
+    for (const auto& av : ro["assertions"].toArray()) {
+        QJsonObject ao = av.toObject();
+        req.assertions.append(AssertionRule{
+            .target = ao["target"].toString(),
+            .op = ao["op"].toString(),
+            .expected = ao["expected"].toString(),
+            .enabled = ao["enabled"].toBool(true)
+        });
+    }
+    return req;
+}
+
+} // namespace
+
 HistoryManager::HistoryManager(QObject* parent) : QObject(parent) {
 }
 
@@ -124,44 +314,8 @@ bool HistoryManager::loadFromFile(const QString& filePath) {
         item.errorString = obj["errorString"].toString();
         item.responseRawBody = QByteArray::fromBase64(obj["responseRawBody"].toString().toUtf8());
 
-        // Headers
-        QJsonArray hArr = obj["responseHeaders"].toArray();
-        for (const auto& hv : hArr) {
-            QJsonObject ho = hv.toObject();
-            item.responseHeaders.append(HttpHeader{
-                .name = ho["name"].toString(),
-                .value = ho["value"].toString(),
-                .enabled = ho["enabled"].toBool(true)
-            });
-        }
-
-        // Request
-        QJsonObject ro = obj["request"].toObject();
-        item.request.name = ro["name"].toString();
-        item.request.method = static_cast<HttpMethod>(ro["method"].toInt());
-        item.request.url = ro["url"].toString();
-        item.request.bodyType = static_cast<BodyType>(ro["bodyType"].toInt());
-        item.request.bodyContent = ro["bodyContent"].toString();
-
-        QJsonArray reqHArr = ro["headers"].toArray();
-        for (const auto& hv : reqHArr) {
-            QJsonObject ho = hv.toObject();
-            item.request.headers.append(HttpHeader{
-                .name = ho["name"].toString(),
-                .value = ho["value"].toString(),
-                .enabled = ho["enabled"].toBool(true)
-            });
-        }
-
-        QJsonArray reqPArr = ro["params"].toArray();
-        for (const auto& pv : reqPArr) {
-            QJsonObject po = pv.toObject();
-            item.request.queryParams.append(HttpParam{
-                .key = po["key"].toString(),
-                .value = po["value"].toString(),
-                .enabled = po["enabled"].toBool(true)
-            });
-        }
+        item.responseHeaders = headersFromJson(obj["responseHeaders"].toArray());
+        item.request = requestFromJson(obj["request"].toObject());
 
         m_items.append(item);
         if (m_items.size() >= m_maxEntries) break;
@@ -188,47 +342,8 @@ bool HistoryManager::saveToFile(const QString& filePath) const {
         obj["success"] = item.success;
         obj["errorString"] = item.errorString;
         obj["responseRawBody"] = QString::fromUtf8(item.responseRawBody.toBase64());
-
-        // Response headers
-        QJsonArray hArr;
-        for (const auto& h : item.responseHeaders) {
-            QJsonObject ho;
-            ho["name"] = h.name;
-            ho["value"] = h.value;
-            ho["enabled"] = h.enabled;
-            hArr.append(ho);
-        }
-        obj["responseHeaders"] = hArr;
-
-        // Request
-        QJsonObject ro;
-        ro["name"] = item.request.name;
-        ro["method"] = static_cast<int>(item.request.method);
-        ro["url"] = item.request.url;
-        ro["bodyType"] = static_cast<int>(item.request.bodyType);
-        ro["bodyContent"] = item.request.bodyContent;
-
-        QJsonArray reqHArr;
-        for (const auto& h : item.request.headers) {
-            QJsonObject ho;
-            ho["name"] = h.name;
-            ho["value"] = h.value;
-            ho["enabled"] = h.enabled;
-            reqHArr.append(ho);
-        }
-        ro["headers"] = reqHArr;
-
-        QJsonArray reqPArr;
-        for (const auto& p : item.request.queryParams) {
-            QJsonObject po;
-            po["key"] = p.key;
-            po["value"] = p.value;
-            po["enabled"] = p.enabled;
-            reqPArr.append(po);
-        }
-        ro["params"] = reqPArr;
-
-        obj["request"] = ro;
+        obj["responseHeaders"] = headersToJson(item.responseHeaders);
+        obj["request"] = requestToJson(item.request);
         arr.append(obj);
     }
 

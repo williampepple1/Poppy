@@ -52,17 +52,26 @@ QJsonObject HarExporter::exportToJson(const QList<RequestModel>& requests) {
         reqObj["queryString"] = qsArr;
         reqObj["cookies"] = QJsonArray{};
         reqObj["headersSize"] = -1;
-        reqObj["bodySize"] = req.bodyContent.size();
+        reqObj["bodySize"] = static_cast<int>(req.effectiveBody().size());
 
-        // Post data
-        if (req.bodyType != BodyType::None && !req.bodyContent.isEmpty()) {
+        QByteArray postBytes = req.effectiveBody();
+        if (req.bodyType == BodyType::MultipartForm && postBytes.isEmpty()) {
+            QStringList parts;
+            for (const auto& p : req.formDataParams) {
+                if (p.enabled && !p.key.isEmpty()) {
+                    parts.append(p.key + "=" + p.value);
+                }
+            }
+            postBytes = parts.join("&").toUtf8();
+        }
+        if (req.bodyType != BodyType::None && !postBytes.isEmpty()) {
             QJsonObject postData;
-            if (req.bodyType == BodyType::Json) postData["mimeType"] = "application/json";
+            if (req.bodyType == BodyType::Json || req.bodyType == BodyType::GraphQL) postData["mimeType"] = "application/json";
             else if (req.bodyType == BodyType::FormUrlEncoded) postData["mimeType"] = "application/x-www-form-urlencoded";
             else if (req.bodyType == BodyType::MultipartForm) postData["mimeType"] = "multipart/form-data";
             else postData["mimeType"] = "text/plain";
 
-            postData["text"] = req.bodyContent;
+            postData["text"] = QString::fromUtf8(postBytes);
             reqObj["postData"] = postData;
         }
 

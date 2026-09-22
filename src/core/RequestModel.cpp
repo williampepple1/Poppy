@@ -195,7 +195,9 @@ QList<HttpHeader> RequestModel::effectiveHeaders() const {
     }
 
     // Ensure Content-Type is set if body is JSON or GraphQL and not already present
-    if ((bodyType == BodyType::Json && !bodyContent.trimmed().isEmpty()) || bodyType == BodyType::GraphQL) {
+    if ((bodyType == BodyType::Json && !bodyContent.trimmed().isEmpty()) ||
+        bodyType == BodyType::GraphQL ||
+        bodyType == BodyType::FormUrlEncoded) {
         bool hasContentType = false;
         for (const auto& h : result) {
             if (h.enabled && h.name.compare("Content-Type", Qt::CaseInsensitive) == 0) {
@@ -204,9 +206,13 @@ QList<HttpHeader> RequestModel::effectiveHeaders() const {
             }
         }
         if (!hasContentType) {
+            QString mime = "application/json";
+            if (bodyType == BodyType::FormUrlEncoded) {
+                mime = "application/x-www-form-urlencoded";
+            }
             result.append(HttpHeader{
                 .name = "Content-Type",
-                .value = "application/json",
+                .value = mime,
                 .enabled = true
             });
         }

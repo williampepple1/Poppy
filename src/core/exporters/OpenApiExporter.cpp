@@ -44,9 +44,17 @@ QJsonObject OpenApiExporter::exportToJson(const QList<RequestModel>& requests,
 
     for (const auto& req : requests) {
         QString path = extractPath(req.url);
-        QJsonObject pathItem = pathsObj.value(path).toObject();
-
         QString methodStr = methodToString(req.method).toLower();
+        QJsonObject pathItem = pathsObj.value(path).toObject();
+        if (pathItem.contains(methodStr)) {
+            int n = 2;
+            QString unique = path;
+            while (pathsObj.value(unique).toObject().contains(methodStr)) {
+                unique = path + "-" + QString::number(n++);
+            }
+            path = unique;
+            pathItem = pathsObj.value(path).toObject();
+        }
         QJsonObject opObj;
         opObj["summary"] = req.name.isEmpty() ? (methodToString(req.method) + " " + path) : req.name;
 

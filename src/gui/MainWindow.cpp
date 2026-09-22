@@ -70,12 +70,15 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
             this, &MainWindow::onItemAboutToBeDeleted);
     connect(&m_collectionModel, &core::CollectionModel::collectionAboutToReload,
             this, &MainWindow::onCollectionAboutToReload);
+    connect(&m_collectionModel, &core::CollectionModel::collectionLoaded,
+            this, &MainWindow::onCollectionLoaded);
 
     // Set default initial request tab
     m_currentRequest.name = "Quick Request";
     m_currentRequest.method = core::HttpMethod::GET;
     m_currentRequest.url = "https://httpbin.org/get";
-    OpenTabInfo initTab{nullptr, m_currentRequest, false};
+    OpenTabInfo initTab;
+    initTab.request = m_currentRequest;
     m_openTabs.append(initTab);
     m_openRequestsTabBar->addTab("Quick Request");
     m_currentTabIndex = 0;
@@ -464,7 +467,9 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
 
     // Check if already open
     for (int i = 0; i < m_openTabs.size(); ++i) {
-        if (m_openTabs[i].item == item) {
+        if (m_openTabs[i].item == item || (!item->path().isEmpty() && m_openTabs[i].itemPath == item->path())) {
+            m_openTabs[i].item = item;
+            m_openTabs[i].itemPath = item->path();
             m_openRequestsTabBar->setCurrentIndex(i);
             return;
         }
@@ -473,6 +478,7 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
     // If only single tab open and it's the pristine Quick Request, reuse it
     if (m_openTabs.size() == 1 && m_openTabs[0].item == nullptr && !m_openTabs[0].isDirty && !m_openTabs[0].isPinned) {
         m_openTabs[0].item = item;
+        m_openTabs[0].itemPath = item->path();
         m_openTabs[0].request = *item->request();
         m_openTabs[0].isDirty = false;
         m_openRequestsTabBar->setTabText(0, item->name());
@@ -488,6 +494,7 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
 
     OpenTabInfo newTab;
     newTab.item = item;
+    newTab.itemPath = item->path();
     newTab.request = *item->request();
     newTab.isDirty = false;
     newTab.isPinned = false;
@@ -529,6 +536,9 @@ void MainWindow::onItemAboutToBeDeleted(core::CollectionItem* item) {
     };
     for (int i = 0; i < m_openTabs.size(); ++i) {
         if (isOrContains(item, m_openTabs[i].item)) {
+            if (m_openTabs[i].item) {
+                m_openTabs[i].itemPath = m_openTabs[i].item->path();
+            }
             m_openTabs[i].item = nullptr;
             m_openTabs[i].isDirty = true;
             updateTabTitle(i);
@@ -541,9 +551,39 @@ void MainWindow::onItemAboutToBeDeleted(core::CollectionItem* item) {
 
 void MainWindow::onCollectionAboutToReload() {
     for (auto& tab : m_openTabs) {
+        if (tab.item) {
+            tab.itemPath = tab.item->path();
+        }
         tab.item = nullptr;
     }
     m_activeItem = nullptr;
+}
+
+void MainWindow::onCollectionLoaded() {
+    rebindOpenTabs();
+    updateTopEnvCombo();
+    updateUrlVariableInspection();
+}
+
+void MainWindow::rebindOpenTabs() {
+    for (int i = 0; i < m_openTabs.size(); ++i) {
+        auto& tab = m_openTabs[i];
+        if (tab.itemPath.isEmpty()) continue;
+        auto* found = m_collectionModel.findItemByPath(tab.itemPath);
+        tab.item = found;
+        if (found) {
+            tab.itemPath = found->path();
+            if (!tab.isDirty && found->request()) {
+                tab.request = *found->request();
+            }
+        }
+    }
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        m_activeItem = m_openTabs[m_currentTabIndex].item;
+        if (m_activeItem && !m_openTabs[m_currentTabIndex].isDirty) {
+            loadRequestIntoUi(m_openTabs[m_currentTabIndex].request);
+        }
+    }
 }
 
 void MainWindow::onTabCloseRequested(int index) {
@@ -578,6 +618,9 @@ void MainWindow::closeTab(int index) {
             if (m_openTabs[index].item && m_openTabs[index].item->request()) {
                 *m_openTabs[index].item->request() = m_openTabs[index].request;
                 m_collectionModel.saveRequest(m_openTabs[index].item);
+            } else if (m_collectionModel.rootItem()) {
+                m_collectionModel.addRequest(m_collectionModel.rootItem(),
+                    m_openTabs[index].request.name, m_openTabs[index].request);
             }
         }
     }
@@ -592,7 +635,8 @@ void MainWindow::closeTab(int index) {
         quickReq.name = "Quick Request";
         quickReq.method = core::HttpMethod::GET;
         quickReq.url = "https://httpbin.org/get";
-        OpenTabInfo quickTab{nullptr, quickReq, false};
+        OpenTabInfo quickTab;
+        quickTab.request = quickReq;
         m_openTabs.append(quickTab);
         m_openRequestsTabBar->addTab("Quick Request");
         m_currentTabIndex = 0;
@@ -809,6 +853,17 @@ void MainWindow::onRunCollection() {
 void MainWindow::onManageEnvironments() {
     EnvironmentDialog dlg(m_collectionModel.environments(), m_activeEnvName, m_collectionModel.rootPath(), this);
     if (dlg.exec() == QDialog::Accepted) {
+        bool found = false;
+        for (const auto& env : m_collectionModel.environments()) {
+            if (env.name() == m_activeEnvName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            m_activeEnvName.clear();
+            m_sidebar->setActiveEnvironment(QString());
+        }
         m_sidebar->updateEnvironmentsCombo();
         updateTopEnvCombo();
         updateUrlVariableInspection();
@@ -817,6 +872,7 @@ void MainWindow::onManageEnvironments() {
 
 void MainWindow::onSendClicked() {
     saveUiIntoRequest(m_currentRequest);
+    m_networkEngine.cancelAll();
 
     // 1. Get active environment model
     core::EnvironmentModel activeEnv(m_activeEnvName);
@@ -1029,10 +1085,13 @@ void MainWindow::onAutoSaveTimerTimeout() {
             if (m_openTabs[m_currentTabIndex].item->request()) {
                 *m_openTabs[m_currentTabIndex].item->request() = m_openTabs[m_currentTabIndex].request;
             }
-            m_collectionModel.saveRequest(m_openTabs[m_currentTabIndex].item);
-            m_openTabs[m_currentTabIndex].isDirty = false;
-            updateTabTitle(m_currentTabIndex);
-            statusBar()->showMessage("Auto-saved changes.", 2000);
+            if (m_collectionModel.saveRequest(m_openTabs[m_currentTabIndex].item)) {
+                m_openTabs[m_currentTabIndex].isDirty = false;
+                updateTabTitle(m_currentTabIndex);
+                statusBar()->showMessage("Auto-saved changes.", 2000);
+            } else {
+                statusBar()->showMessage("Auto-save failed.", 3000);
+            }
         }
     }
 }
@@ -1398,9 +1457,17 @@ void MainWindow::onFindAndReplace() {
     });
     connect(&dlg, &FindReplaceDialog::collectionModified, this, [this]() {
         m_sidebar->refreshTree();
-        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size() &&
-            m_openTabs[m_currentTabIndex].item && m_openTabs[m_currentTabIndex].item->request()) {
-            m_openTabs[m_currentTabIndex].request = *m_openTabs[m_currentTabIndex].item->request();
+        for (int i = 0; i < m_openTabs.size(); ++i) {
+            auto& tab = m_openTabs[i];
+            if (!tab.item) {
+                tab.item = m_collectionModel.findItemByPath(tab.itemPath);
+            }
+            if (tab.item && tab.item->request() && !tab.isDirty) {
+                tab.request = *tab.item->request();
+            }
+        }
+        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+            m_activeItem = m_openTabs[m_currentTabIndex].item;
             loadRequestIntoUi(m_openTabs[m_currentTabIndex].request);
         }
     });
@@ -1439,6 +1506,8 @@ void MainWindow::closeEvent(QCloseEvent* event) {
                 if (tab.item && tab.item->request()) {
                     *tab.item->request() = tab.request;
                     m_collectionModel.saveRequest(tab.item);
+                } else if (m_collectionModel.rootItem()) {
+                    m_collectionModel.addRequest(m_collectionModel.rootItem(), tab.request.name, tab.request);
                 }
             }
         }

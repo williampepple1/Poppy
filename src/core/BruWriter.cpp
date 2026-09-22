@@ -171,6 +171,37 @@ bool BruWriter::writeToFile(const QString& filePath, const RequestModel& req) {
     return true;
 }
 
+QString BruWriter::serializeFolder(const QString& name, const QMap<QString, QString>& vars) {
+    QString out;
+    QTextStream ts(&out);
+    ts << "meta {\n";
+    ts << "  name: " << (name.isEmpty() ? QStringLiteral("folder") : name) << "\n";
+    ts << "  type: folder\n";
+    ts << "}\n\n";
+    if (!vars.isEmpty()) {
+        ts << "vars {\n";
+        for (auto it = vars.begin(); it != vars.end(); ++it) {
+            ts << "  " << it.key() << ": " << it.value() << "\n";
+        }
+        ts << "}\n";
+    }
+    return out;
+}
+
+bool BruWriter::writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars) {
+    QDir dir(dirPath);
+    if (!dir.exists() && !dir.mkpath(".")) {
+        return false;
+    }
+    QFile file(dir.filePath(QStringLiteral("folder.bru")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        return false;
+    }
+    QTextStream out(&file);
+    out << serializeFolder(name, vars);
+    return true;
+}
+
 QString BruWriter::safeFileStem(const QString& name, const QString& fallback) {
     QString s = name.trimmed();
     static const QString invalid = QStringLiteral("<>:\"/\\|?*");
