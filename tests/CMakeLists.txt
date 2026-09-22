@@ -59,3 +59,15 @@ add_test(NAME test_cookie_jar COMMAND test_cookie_jar)
 add_executable(test_history_manager test_history_manager.cpp)
 target_link_libraries(test_history_manager PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_history_manager COMMAND test_history_manager)
+
+add_executable(test_exporters test_exporters.cpp)
+target_link_libraries(test_exporters PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_exporters COMMAND test_exporters)
+
+add_executable(test_grpc test_grpc.cpp)
+target_link_libraries(test_grpc PRIVATE poppy_network poppy_core Qt6::Core)
+add_test(NAME test_grpc COMMAND test_grpc)
+
+add_executable(test_websocket test_websocket.cpp)
+target_link_libraries(test_websocket PRIVATE poppy_network poppy_core Qt6::Core Qt6::Network)
+add_test(NAME test_websocket COMMAND test_websocket)

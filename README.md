@@ -34,16 +34,23 @@
 
 ### 🚀 Protocols & Requests
 - **Full REST / HTTP**: HTTP/1.1 and HTTP/2 support across all standard verbs (`GET`, `POST`, `PUT`, `DELETE`, `PATCH`, `HEAD`, `OPTIONS`).
+- **WebSocket Client (`ws://` & `wss://`)**: Native RFC 6455 client with interactive handshake headers, live message timeline (`▲ SENT` / `▼ RECV`), text/binary/ping/pong frames, automatic pong responses, and formatted JSON inspector.
+- **gRPC Client & Protobuf Viewer**: HTTP/2 unary gRPC execution with 5-byte framing, `.proto` schema parser, service/method selectors, automated example JSON payload generator, and `grpc-status` / trailer decoding.
 - **Native GraphQL Split Editor**: Dedicated query and JSON variables editor with automatic payload serialization (`{"query": "...", "variables": {...}}`) and syntax highlighting.
 - **Dynamic URL Parameters**: Path variable substitution (`:param`) and query parameter key-value tables with toggles.
-- **Flexible Body Formats**: JSON (with syntax highlighting), Multipart Form-Data, URL-Encoded, Raw text, and GraphQL.
-- **Rich Telemetry**: Microsecond latency measurements, status code badges, payload size, and detailed timing breakdowns.
+- **Flexible Body Formats**: JSON (with syntax highlighting), Multipart Form-Data (with file attachments), URL-Encoded, Raw text, and GraphQL.
+- **Rich Telemetry**: Microsecond latency measurements, status code badges, payload size, DNS/TCP/SSL/TTFB timing breakdowns, and full server SSL certificate inspection.
+
+### 🔍 Diff & Comparison Engine
+- **Side-by-Side Response Diff Viewer**: Interactive visual difference tool with synchronized scrolling, additions/deletions/edits coloring, pane swapping, and one-click loading from disk or past execution history.
 
 ### 🔐 Authentication Suite
 - **Bearer Token**: Token strings with dynamic variable expansion.
 - **Basic Authentication**: Base64-encoded username and password credentials.
 - **API Key**: Header or query parameter placement.
 - **AWS Signature Version 4 (SigV4)**: Full canonical request signing with HMAC-SHA256, date stamping, region, and service scope.
+- **Digest & NTLM Authentication**: Automated challenge-response authentication.
+- **mTLS**: Client certificate (`.crt` / `.pem`) and private key authentication.
 - **Interactive OAuth 2.0 Helper**:
   - **Client Credentials Grant**: Instant token exchange via direct endpoint communication.
   - **Authorization Code Flow**: Embedded local loopback server (`127.0.0.1:8089/callback`) that opens your browser, captures the redirect code, exchanges it for an access token, and automatically sets the Bearer token.
@@ -52,25 +59,32 @@
 - **Declarative Zero-Code Assertions**: Visual assertion builder supporting `eq`, `neq`, `gt`, `gte`, `lt`, `lte`, `contains`, and `not_contains` against `res.status`, `res.responseTime`, headers, and nested JSON dot-paths (e.g. `res.body.users[0].id`).
 - **Sandboxed JavaScript Testing**: Integrated `QJSEngine` runtime exposing a secure `poppy` namespace (`poppy.req`, `poppy.res`, `poppy.setEnvVar`, `poppy.getEnvVar`).
 - **Standard Chai/Mocha-Style Test Suite**: Write custom pre-request and post-response validation scripts using familiar `expect(res.getStatus()).to.equal(200)` assertions.
+- **Hierarchical Variables**: Scoped environment, collection, and folder-level variables with recursive parent inheritance.
 
 ### 🔄 Migration, Interoperability & Exporters
 - **cURL Importer**: Paste any cURL command to instantly parse methods, URLs, headers, bodies, and auth.
-- **Postman v2.1 Importer**: Recursively converts Postman collections, folders, environments, and requests into `.bru` directory trees.
-- **Insomnia v4 Importer**: Ingests Insomnia workspace exports, maintaining nested folder structures and auth profiles.
-- **OpenAPI v3.0 Importer & Exporter**: Ingest OpenAPI specifications into collections, or export entire collections and active requests to valid OpenAPI 3.0.3 JSON specs with a single click.
+- **Postman v2.1 Importer & Exporter**: Full two-way conversion between Postman v2.1.0 collections and `.bru` directory trees.
+- **Insomnia v4 Importer & Exporter**: Ingest and export Insomnia v4 workspaces.
+- **OpenAPI v3.0 Importer & Exporter**: Ingest OpenAPI specifications into collections, or export entire collections to valid OpenAPI 3.0.3 JSON specs.
+- **HTTP Archive (.har 1.2) Exporter**: Export collections to standard HAR format for sharing with browser devtools.
 
 ### ⚡ Developer Ergonomics & Productivity
 - **Quick Open Command Palette (`Ctrl+P`)**: Instant keyboard fuzzy switcher across all requests in the active collection with colored HTTP method badges and directory breadcrumbs.
 - **In-Response Search & JSONPath Filter (`Ctrl+F`)**: Interactive search bar with document match highlighting, previous/next cycling, match counter, case-sensitive/regex toggles, and live JSONPath query filtering (`$.items[*].name`).
-- **Multi-Tab Document Workspace**: Tabbed interface with `Ctrl+N` (New Request), `Ctrl+S` (Save), `Ctrl+W` (Close), and unsaved changes dirty indicators (`*`).
+- **Multi-Tab Document Workspace**: Pinned tabs, tab renaming, drag-and-drop collection reordering, and debounced auto-save.
+- **Request Execution History**: Dedicated sidebar history tab with status codes, latency badges, and one-click replay.
 
 ### 💻 Multi-Language Code Generation
-- Export any request with one click to production-ready code:
+- Export any request with one click to production-ready code across 9 languages and libraries:
   - **Python** (`requests`)
   - **JavaScript** (Fetch API & Axios)
   - **Go** (`net/http`)
+  - **Rust** (`reqwest` + `tokio`)
+  - **C#** (`System.Net.Http.HttpClient`)
+  - **Java** (`java.net.http.HttpClient`)
+  - **PHP** & **Ruby**
   - **C++** (`libcurl`)
-  - **cURL** command-line syntax
+  - **cURL** CLI command
 
 ### 🤖 Automation & Headless CLI Runner (`poppy-cli`)
 Poppy includes a standalone CLI binary designed for CI/CD pipelines (GitHub Actions, GitLab CI, Jenkins):
@@ -80,9 +94,9 @@ Poppy includes a standalone CLI binary designed for CI/CD pipelines (GitHub Acti
 - **Rate-Limiting & Pacing**: Configurable inter-request throttling (`--delay <ms>`).
 
 ### 🌐 Networking & Security Controls
-- **Persistent Cookie Jar**: Cross-request session cookie storage using libcurl's cookie engine with one-click clearing.
-- **Proxy Configuration**: System proxy or custom HTTP, HTTPS, and SOCKS5 proxy routing with authentication.
-- **SSL / TLS Verification**: One-click toggle to ignore self-signed certificates in development environments.
+- **Persistent Cookie Jar & Manager**: Cross-request session cookie storage using Netscape cookie format with a visual Cookie Manager (`Ctrl+K`).
+- **Per-Request & Global Proxy**: HTTP, HTTPS, and SOCKS5 proxy routing with URL bar quick-override.
+- **SSL / TLS Verification & Certificate Chains**: One-click certificate inspection and self-signed certificate toggles.
 - **Request Timeouts**: Configurable connection and read timeouts.
 
 ---
