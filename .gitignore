@@ -8,6 +8,7 @@ build/
 bin/
 out/
 dist/
+release-installer/
 .cache/
 
 # IDE files

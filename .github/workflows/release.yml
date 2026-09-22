@@ -61,7 +61,10 @@ jobs:
         run: |
           ctest --test-dir build --output-on-failure -C Release
 
-      - name: Package Windows Release (windeployqt)
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Package Windows Release (windeployqt & Inno Setup)
         shell: pwsh
         run: |
           $dist = "dist/Poppy"
@@ -74,12 +77,15 @@ jobs:
           if (Test-Path examples) { Copy-Item -Recurse examples $dist/ }
           windeployqt "$dist/poppy.exe" --no-translations --compiler-runtime
           Compress-Archive -Path "$dist/*" -DestinationPath "Poppy-windows-x64.zip" -Force
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/poppy_setup.iss
 
       - name: Upload Windows Package Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Poppy-windows-x64
-          path: Poppy-windows-x64.zip
+          path: |
+            Poppy-windows-x64.zip
+            release-installer/Poppy-windows-x64-setup.exe
 
   build-linux:
     name: Build & Package (Linux)
@@ -200,6 +206,7 @@ jobs:
             echo "No existing release for ${{ env.RELEASE_TAG }}; a new one will be created."
             exit 0
           fi
+          gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64-setup.exe --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64.zip --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-linux-x64.tar.gz --yes || true
 
@@ -215,5 +222,6 @@ jobs:
           make_latest: ${{ env.RELEASE_PRERELEASE != 'true' && env.RELEASE_DRAFT != 'true' }}
           generate_release_notes: true
           files: |
+            release-assets/Poppy-windows-x64-setup.exe
             release-assets/Poppy-windows-x64.zip
             release-assets/Poppy-linux-x64.tar.gz

@@ -277,20 +277,25 @@ Compiled executables will be available in:
 
 ### Packaging for Release
 
-#### Local Standalone Package (Windows)
-Create a standalone, portable `.zip` release bundled with all necessary Qt and MinGW runtime libraries via `windeployqt`:
+#### Local Standalone Package & Installer (Windows)
+Create a standalone portable `.zip` and legit Windows Setup installer (`.exe`) bundled with all necessary Qt and MinGW runtime libraries via `windeployqt` and Inno Setup:
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
-# Generates: dist/Poppy-windows-x64.zip
+# Generates:
+#   dist/Poppy-windows-x64.zip (Portable)
+#   release-installer/Poppy-windows-x64-setup.exe (Windows Setup Installer Wizard)
 ```
 
 #### Automated CI/CD Releases (GitHub Actions)
 The repository includes an automated release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- **Continuous Deploy**: Every push to `main` compiles, tests, packages, and updates the rolling [Latest](https://github.com/williampepple1/Poppy/releases/latest) GitHub Release (`Poppy-windows-x64.zip` and `Poppy-linux-x64.tar.gz`).
-- **Version Tag**: Push any version tag (e.g. `v1.0.0`) to publish a snapshot release for that version:
+- **Continuous Deploy**: Every push to `main` compiles, tests, packages, and updates the rolling [Latest](https://github.com/williampepple1/Poppy/releases/latest) GitHub Release with:
+  - `Poppy-windows-x64-setup.exe` (Windows Installer with Start Menu, Desktop Shortcut, Uninstaller & `.bru` Association)
+  - `Poppy-windows-x64.zip` (Windows Portable)
+  - `Poppy-linux-x64.tar.gz` (Linux Portable)
+- **Version Tag**: Push any version tag (e.g. `v1.4.1`) to publish a release snapshot with all installers and archives:
   ```bash
-  git tag v1.0.0
-  git push origin v1.0.0
+  git tag v1.4.1
+  git push origin v1.4.1
   ```
 - **Manual Trigger**: Navigate to **GitHub Actions -> Release -> Run workflow**, specify the tag name, and trigger on demand.
 

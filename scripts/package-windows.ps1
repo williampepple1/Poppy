@@ -56,7 +56,7 @@ if (Test-Path "$rootDir/LICENSE") { Copy-Item "$rootDir/LICENSE" $DistDir }
 if (Test-Path "$rootDir/assets") { Copy-Item -Recurse "$rootDir/assets" $DistDir }
 if (Test-Path "$rootDir/examples") { Copy-Item -Recurse "$rootDir/examples" $DistDir }
 
-# 6. Compress to ZIP
+# 6. Compress to ZIP (Portable)
 if (Test-Path $ZipOutput) {
     Remove-Item -Force $ZipOutput
 }
@@ -64,7 +64,27 @@ Write-Host "Compressing to $ZipOutput..." -ForegroundColor Green
 Compress-Archive -Path "$DistDir/*" -DestinationPath $ZipOutput -Force
 
 $zipSize = (Get-Item $ZipOutput).Length / 1MB
+Write-Host "Portable ZIP created: $ZipOutput ($([math]::Round($zipSize, 2)) MB)" -ForegroundColor Yellow
+
+# 7. Compile Windows Setup Installer (Inno Setup)
+$isccPath = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+if (-not (Test-Path $isccPath)) {
+    $isccCmd = Get-Command iscc -ErrorAction SilentlyContinue
+    if ($isccCmd) { $isccPath = $isccCmd.Source }
+}
+
+if (Test-Path $isccPath) {
+    Write-Host "Compiling Windows Installer with Inno Setup..." -ForegroundColor Green
+    & $isccPath "$rootDir/installer/poppy_setup.iss"
+    $installerExe = "$rootDir/release-installer/Poppy-windows-x64-setup.exe"
+    if (Test-Path $installerExe) {
+        $setupSize = (Get-Item $installerExe).Length / 1MB
+        Write-Host "Windows Installer created: $installerExe ($([math]::Round($setupSize, 2)) MB)" -ForegroundColor Yellow
+    }
+} else {
+    Write-Warning "Inno Setup (ISCC.exe) not found. Skipping installer generation."
+}
+
 Write-Host "=========================================" -ForegroundColor Cyan
-Write-Host " Package created successfully!" -ForegroundColor Green
-Write-Host " Output: $ZipOutput ($([math]::Round($zipSize, 2)) MB)" -ForegroundColor Yellow
+Write-Host " Windows Packaging completed successfully!" -ForegroundColor Green
 Write-Host "=========================================" -ForegroundColor Cyan
