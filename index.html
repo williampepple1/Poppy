@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Poppy — Local-first API Client</title>
+  <link rel="icon" type="image/png" href="icon.png" />
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -40,6 +41,14 @@
       letter-spacing: -0.02em;
       text-decoration: none;
       color: var(--fg);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    nav .logo img {
+      width: 28px;
+      height: 28px;
+      border-radius: 6px;
     }
     nav a.gh-link {
       font-size: 0.875rem;
@@ -56,6 +65,13 @@
       max-width: 760px;
       margin: 6rem auto 4rem;
       padding: 0 2rem;
+    }
+    .hero-icon {
+      width: 80px;
+      height: 80px;
+      border-radius: 18px;
+      margin-bottom: 1.75rem;
+      display: block;
     }
     .hero h1 {
       font-size: clamp(2.5rem, 6vw, 4rem);
@@ -171,13 +187,17 @@
 <body>
 
   <nav>
-    <a class="logo" href="#">Poppy</a>
+    <a class="logo" href="#">
+      <img src="icon.png" alt="Poppy" />
+      Poppy
+    </a>
     <a class="gh-link" href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">
       GitHub ↗
     </a>
   </nav>
 
   <section class="hero">
+    <img class="hero-icon" src="icon.png" alt="Poppy icon" />
     <h1>The API client<br/>that stays yours.</h1>
     <p>
       Poppy is a native, ultra-fast, local-first API client &amp; test runner built with
