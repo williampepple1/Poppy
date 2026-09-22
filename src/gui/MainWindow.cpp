@@ -20,6 +20,9 @@
 #include "dialogs/DiffViewerDialog.h"
 #include "dialogs/WebSocketDialog.h"
 #include "dialogs/GrpcDialog.h"
+#include "dialogs/SseDialog.h"
+#include "dialogs/MockServerDialog.h"
+#include "dialogs/GitSyncDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 #include <core/exporters/OpenApiExporter.h>
@@ -254,6 +257,9 @@ void MainWindow::setupMenus() {
     toolsMenu->addAction("Response &Diff Viewer...", this, &MainWindow::onOpenDiffViewer);
     toolsMenu->addAction("&WebSocket Client...", this, &MainWindow::onOpenWebSocket);
     toolsMenu->addAction("&gRPC Client...", this, &MainWindow::onOpenGrpc);
+    toolsMenu->addAction("&Server-Sent Events (SSE)...", this, &MainWindow::onOpenSse);
+    toolsMenu->addAction("&Mock Server...", this, &MainWindow::onOpenMockServer);
+    toolsMenu->addAction("&Git Sync...", this, &MainWindow::onOpenGitSync);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Keyboard Shortcuts...", QKeySequence(Qt::CTRL | Qt::Key_Slash), this, &MainWindow::onShowShortcuts);
@@ -871,6 +877,27 @@ void MainWindow::onOpenWebSocket() {
 
 void MainWindow::onOpenGrpc() {
     auto dlg = new GrpcDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+}
+
+void MainWindow::onOpenMockServer() {
+    auto dlg = new MockServerDialog(&m_collectionModel, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+}
+
+void MainWindow::onOpenSse() {
+    QString currentUrl = m_urlEdit ? m_urlEdit->text().trimmed() : QString();
+    auto dlg = new SseDialog(currentUrl, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+}
+
+void MainWindow::onOpenGitSync() {
+    QString repoPath = m_collectionModel.rootPath();
+    if (repoPath.isEmpty()) repoPath = QDir::currentPath();
+    auto dlg = new GitSyncDialog(repoPath, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->show();
 }

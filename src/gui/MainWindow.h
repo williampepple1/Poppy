@@ -66,6 +66,9 @@ private slots:
     void onOpenDiffViewer();
     void onOpenWebSocket();
     void onOpenGrpc();
+    void onOpenMockServer();
+    void onOpenSse();
+    void onOpenGitSync();
 
 private:
     void setupUi();

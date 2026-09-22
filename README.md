@@ -73,6 +73,21 @@
 - **In-Response Search & JSONPath Filter (`Ctrl+F`)**: Interactive search bar with document match highlighting, previous/next cycling, match counter, case-sensitive/regex toggles, and live JSONPath query filtering (`$.items[*].name`).
 - **Multi-Tab Document Workspace**: Pinned tabs, tab renaming, drag-and-drop collection reordering, and debounced auto-save.
 - **Request Execution History**: Dedicated sidebar history tab with status codes, latency badges, and one-click replay.
+- **Sidebar Git Sync (`Ctrl+Shift+G`)**: Native Git version control dialog to inspect branch status, view changed `.bru` collection files, commit, pull, and push directly from the app.
+
+### 🎭 Embedded Mock Server
+- **Local HTTP Mocking Engine (`Tools -> Mock Server...`)**:
+  - Run a lightweight HTTP mock server on any custom port (`8080`, `3000`, etc.).
+  - Configure mock routes with HTTP method, path, custom headers, status codes, and JSON response bodies.
+  - **Simulated Latency**: Add configurable delay (ms) to test frontend loading states and timeouts.
+  - **One-Click Import**: Automatically populate mock endpoints from all requests in your active collection.
+  - **Live Request Logging**: Inspect all incoming client requests, headers, and payloads in real time.
+
+### 🌊 Server-Sent Events (SSE) Stream Inspector
+- **Real-Time Event Streaming (`Tools -> Server-Sent Events...`)**:
+  - Inspect live `text/event-stream` connections with sub-millisecond timeline logging.
+  - Automatic event parsing (`event`, `id`, `data`, `retry`) with search and filtering.
+  - **LLM Token Accumulator**: Automatically extracts and streams OpenAI/ChatGPT style `delta.content` tokens in real time.
 
 ### 💻 Multi-Language Code Generation
 - Export any request with one click to production-ready code across 9 languages and libraries:

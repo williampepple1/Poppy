@@ -71,3 +71,11 @@ add_test(NAME test_grpc COMMAND test_grpc)
 add_executable(test_websocket test_websocket.cpp)
 target_link_libraries(test_websocket PRIVATE poppy_network poppy_core Qt6::Core Qt6::Network)
 add_test(NAME test_websocket COMMAND test_websocket)
+
+add_executable(test_sse test_sse.cpp)
+target_link_libraries(test_sse PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_sse COMMAND test_sse)
+
+add_executable(test_mock_server test_mock_server.cpp)
+target_link_libraries(test_mock_server PRIVATE poppy_network poppy_core Qt6::Core Qt6::Network)
+add_test(NAME test_mock_server COMMAND test_mock_server)

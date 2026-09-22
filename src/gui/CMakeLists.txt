@@ -30,6 +30,9 @@ add_executable(poppy
     dialogs/DiffViewerDialog.h dialogs/DiffViewerDialog.cpp
     dialogs/WebSocketDialog.h dialogs/WebSocketDialog.cpp
     dialogs/GrpcDialog.h dialogs/GrpcDialog.cpp
+    dialogs/SseDialog.h dialogs/SseDialog.cpp
+    dialogs/MockServerDialog.h dialogs/MockServerDialog.cpp
+    dialogs/GitSyncDialog.h dialogs/GitSyncDialog.cpp
 )
 
 target_include_directories(poppy PRIVATE

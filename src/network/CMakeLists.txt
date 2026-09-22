@@ -3,6 +3,7 @@ add_library(poppy_network STATIC
     CurlNetworkEngine.h CurlNetworkEngine.cpp
     WebSocketClient.h WebSocketClient.cpp
     GrpcClient.h GrpcClient.cpp
+    MockServer.h MockServer.cpp
 )
 
 target_include_directories(poppy_network PUBLIC
