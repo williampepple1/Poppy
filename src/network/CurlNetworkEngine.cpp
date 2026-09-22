@@ -160,6 +160,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     }
 
     // 4. Request Body
+    curl_mime* mime = nullptr;
     QByteArray bodyBytes;
     if (req.bodyType == core::BodyType::GraphQL) {
         QJsonObject gqlObj;
@@ -173,6 +174,19 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         bodyBytes = QJsonDocument(gqlObj).toJson(QJsonDocument::Compact);
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
         curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
+    } else if (req.bodyType == core::BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
+        mime = curl_mime_init(curl);
+        for (const auto& p : req.formDataParams) {
+            if (!p.enabled || p.key.isEmpty()) continue;
+            curl_mimepart* part = curl_mime_addpart(mime);
+            curl_mime_name(part, p.key.toUtf8().constData());
+            if (p.isFile) {
+                curl_mime_filedata(part, p.value.toUtf8().constData());
+            } else {
+                curl_mime_data(part, p.value.toUtf8().constData(), CURL_ZERO_TERMINATED);
+            }
+        }
+        curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
     } else if (req.bodyType != core::BodyType::None && !req.bodyContent.isEmpty()) {
         bodyBytes = req.bodyContent.toUtf8();
         curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
@@ -191,6 +205,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     // 6. Redirects & SSL
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
+    curl_easy_setopt(curl, CURLOPT_CERTINFO, 1L);
 
     if (m_sslVerifyPeer) {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
@@ -204,8 +219,9 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, m_timeoutMs);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
 
-    if (!m_proxy.isEmpty()) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, m_proxy.toUtf8().constData());
+    QString effectiveProxy = !req.proxy.trimmed().isEmpty() ? req.proxy.trimmed() : m_proxy;
+    if (!effectiveProxy.isEmpty()) {
+        curl_easy_setopt(curl, CURLOPT_PROXY, effectiveProxy.toUtf8().constData());
     }
 
     // Cookie Jar
@@ -300,7 +316,35 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         else response.statusText = QString::number(response.statusCode);
     }
 
+    // Protocol version
+    long httpVer = 0;
+    if (curl_easy_getinfo(curl, CURLINFO_HTTP_VERSION, &httpVer) == CURLE_OK) {
+        if (httpVer == CURL_HTTP_VERSION_1_0) response.protocol = "HTTP/1.0";
+        else if (httpVer == CURL_HTTP_VERSION_1_1) response.protocol = "HTTP/1.1";
+        else if (httpVer == CURL_HTTP_VERSION_2_0) response.protocol = "HTTP/2";
+        else if (httpVer == CURL_HTTP_VERSION_3) response.protocol = "HTTP/3";
+        else response.protocol = "HTTP";
+    }
+
+    // SSL Certificate Chain
+    struct curl_certinfo* ci = nullptr;
+    if (curl_easy_getinfo(curl, CURLINFO_CERTINFO, &ci) == CURLE_OK && ci) {
+        for (int i = 0; i < ci->num_of_certs; ++i) {
+            struct curl_slist* slist = ci->certinfo[i];
+            QString certStr;
+            for (struct curl_slist* curr = slist; curr; curr = curr->next) {
+                if (curr->data) certStr += QString::fromUtf8(curr->data) + "\n";
+            }
+            if (!certStr.isEmpty()) {
+                response.certDetails.append(certStr.trimmed());
+            }
+        }
+    }
+
     // Cleanup
+    if (mime) {
+        curl_mime_free(mime);
+    }
     if (headerList) {
         curl_slist_free_all(headerList);
     }
@@ -315,5 +359,3 @@ void CurlNetworkEngine::clearCookies() {
 }
 
 } // namespace poppy::network
-
-#include "CurlNetworkEngine.moc"

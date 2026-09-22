@@ -22,12 +22,15 @@ public:
     void setResponse(const core::ResponseModel& res, const core::TestReport* testReport = nullptr);
     void clear();
     void openSearch();
+    void setTheme(bool isDark);
+    QString currentBody() const { return m_currentResponse.bodyAsString(); }
 
 private slots:
     void copyBodyToClipboard();
     void saveBodyToFile();
     void togglePrettyRaw();
     void toggleWordWrap();
+    void onCompareDiffClicked();
     void filterHeaders(const QString& text);
     void onSearchTextChanged(const QString& text);
     void findNext();
@@ -53,6 +56,7 @@ private:
     QPushButton* m_wordWrapBtn;
     QPushButton* m_copyBtn;
     QPushButton* m_saveToFileBtn;
+    QPushButton* m_diffBtn;
 
     // Tabs
     QTabWidget* m_tabWidget;
@@ -98,6 +102,10 @@ private:
     QWidget* m_testsTab;
     QLabel* m_testSummaryLabel;
     QTableWidget* m_testsTable;
+
+    // SSL / TLS Certificate Tab
+    QWidget* m_sslTab;
+    QPlainTextEdit* m_sslCertViewer;
 };
 
 } // namespace poppy::gui

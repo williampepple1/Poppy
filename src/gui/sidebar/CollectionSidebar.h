@@ -36,6 +36,7 @@ private slots:
     void onAddFolder();
     void onRenameItem();
     void onDeleteItem();
+    void onFolderVariables();
     void onDuplicateRequest();
     void onCopyAsCurl();
     void onCollectionFilterChanged(const QString& query);

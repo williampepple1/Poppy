@@ -11,6 +11,7 @@
 #include <QShortcut>
 #include <QRegularExpression>
 #include <core/JsonPathEvaluator.h>
+#include <dialogs/DiffViewerDialog.h>
 #include <Theme.h>
 
 namespace poppy::gui {
@@ -88,6 +89,11 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     m_saveToFileBtn = new QPushButton("Save...", this);
     connect(m_saveToFileBtn, &QPushButton::clicked, this, &ResponseInspector::saveBodyToFile);
     topBar->addWidget(m_saveToFileBtn);
+
+    m_diffBtn = new QPushButton("Compare...", this);
+    m_diffBtn->setToolTip("Compare this response with another response or file");
+    connect(m_diffBtn, &QPushButton::clicked, this, &ResponseInspector::onCompareDiffClicked);
+    topBar->addWidget(m_diffBtn);
 
     mainLayout->addLayout(topBar);
 
@@ -227,6 +233,17 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
     m_tabWidget->addTab(m_testsTab, "Tests (0)");
 
+    // Tab 5: SSL / TLS Certificate Chain
+    m_sslTab = new QWidget(this);
+    auto* sslLayout = new QVBoxLayout(m_sslTab);
+    sslLayout->setContentsMargins(0, 4, 0, 0);
+    m_sslCertViewer = new QPlainTextEdit(m_sslTab);
+    m_sslCertViewer->setReadOnly(true);
+    m_sslCertViewer->setFont(codeFont);
+    m_sslCertViewer->setPlaceholderText("No SSL/TLS certificate details for this request.");
+    sslLayout->addWidget(m_sslCertViewer);
+    m_tabWidget->addTab(m_sslTab, "SSL / TLS");
+
     mainLayout->addWidget(m_tabWidget);
 }
 
@@ -248,8 +265,16 @@ void ResponseInspector::clear() {
     m_matchCountLabel->clear();
     m_headersTable->setRowCount(0);
     m_testsTable->setRowCount(0);
+    m_sslCertViewer->clear();
     m_testSummaryLabel->setText("No tests run");
     m_tabWidget->setTabText(4, "Tests (0)");
+    m_tabWidget->setTabText(5, "SSL / TLS");
+}
+
+void ResponseInspector::setTheme(bool isDark) {
+    if (m_jsonHighlighter) {
+        m_jsonHighlighter->setDarkTheme(isDark);
+    }
 }
 
 void ResponseInspector::setResponse(const core::ResponseModel& res, const core::TestReport* testReport) {
@@ -294,6 +319,19 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
 
     // Tests
     updateTestsTab(testReport);
+
+    // SSL / TLS Certificate Info
+    if (!res.certDetails.isEmpty()) {
+        QString certReport = QString("=== Protocol: %1 ===\n\n").arg(res.protocol.isEmpty() ? "HTTPS" : res.protocol);
+        for (int i = 0; i < res.certDetails.size(); ++i) {
+            certReport += QString("--- Certificate #%1 ---\n%2\n\n").arg(i + 1).arg(res.certDetails[i]);
+        }
+        m_sslCertViewer->setPlainText(certReport.trimmed());
+        m_tabWidget->setTabText(5, QString("SSL / TLS (%1)").arg(res.certDetails.size()));
+    } else {
+        m_sslCertViewer->setPlainText(!res.protocol.isEmpty() ? QString("Protocol: %1\nNo certificate chain available or connection was unencrypted (HTTP).").arg(res.protocol) : "No SSL/TLS certificate details available for this request.");
+        m_tabWidget->setTabText(5, "SSL / TLS");
+    }
 }
 
 void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
@@ -438,6 +476,12 @@ void ResponseInspector::saveBodyToFile() {
             QMessageBox::warning(this, "Error", "Could not write to file: " + file.errorString());
         }
     }
+}
+
+void ResponseInspector::onCompareDiffClicked() {
+    auto dlg = new DiffViewerDialog(m_currentResponse.bodyAsString(), QString(), nullptr, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
 }
 
 void ResponseInspector::openSearch() {

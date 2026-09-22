@@ -25,6 +25,10 @@ public:
     double sslHandshakeTimeMs{0.0};
     double ttfbMs{0.0};
 
+    // SSL / TLS & Protocol details
+    QList<QString> certDetails;
+    QString protocol;
+
     QString errorString;
 
     bool isSuccess() const { return errorString.isEmpty() && statusCode > 0; }

@@ -13,6 +13,7 @@ public:
 
     void setGlobalVariables(const QMap<QString, QString>& vars) { m_globals = vars; }
     void setCollectionVariables(const QMap<QString, QString>& vars) { m_collectionVars = vars; }
+    void setFolderVariables(const QMap<QString, QString>& vars) { m_folderVars = vars; }
     void setEnvironment(const EnvironmentModel& env);
     void setRuntimeVariable(const QString& name, const QString& value) { m_runtimeVars[name] = value; }
     void clearRuntimeVariables() { m_runtimeVars.clear(); }
@@ -28,6 +29,7 @@ private:
 
     QMap<QString, QString> m_globals;
     QMap<QString, QString> m_collectionVars;
+    QMap<QString, QString> m_folderVars;
     QMap<QString, QString> m_envVars;
     QMap<QString, QString> m_runtimeVars;
 };

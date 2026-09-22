@@ -37,6 +37,9 @@ private slots:
     void onSendClicked();
     void onOpenCollection();
     void onExportOpenApi();
+    void onExportPostman();
+    void onExportInsomnia();
+    void onExportHar();
     void onSaveRequest();
     void onCopyAsCurl();
     void onShowCodeSnippets();
@@ -56,6 +59,13 @@ private slots:
     void onClearCookieJar();
     void onRenameTab(int index);
     void onShowShortcuts();
+    void onTabContextMenu(const QPoint& pos);
+    void onTogglePinCurrentTab();
+    void onAutoSaveTimerTimeout();
+    void onConfigureRequestProxy();
+    void onOpenDiffViewer();
+    void onOpenWebSocket();
+    void onOpenGrpc();
 
 private:
     void setupUi();
@@ -63,6 +73,7 @@ private:
     void loadRequestIntoUi(const core::RequestModel& req);
     void saveUiIntoRequest(core::RequestModel& req);
     void closeTab(int index);
+    void updateTabTitle(int index);
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -75,10 +86,12 @@ private:
         core::CollectionItem* item{nullptr};
         core::RequestModel request;
         bool isDirty{false};
+        bool isPinned{false};
     };
     QList<OpenTabInfo> m_openTabs;
     int m_currentTabIndex{-1};
     class QTabBar* m_openRequestsTabBar{nullptr};
+    QTimer* m_autoSaveTimer{nullptr};
 
     core::CollectionItem* m_activeItem{nullptr};
     core::RequestModel m_currentRequest;
@@ -93,6 +106,7 @@ private:
     QPushButton* m_saveBtn;
     QPushButton* m_curlBtn;
     QPushButton* m_snippetBtn;
+    QPushButton* m_proxyBtn;
 
     QTabWidget* m_requestTabs;
     ParamsEditor* m_paramsEditor;

@@ -8,6 +8,8 @@
 #include <QGuiApplication>
 #include <Theme.h>
 #include <functional>
+#include <components/KeyValueTable.h>
+#include <QDialog>
 
 namespace poppy::gui {
 
@@ -103,6 +105,10 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     m_tree = new QTreeWidget(container);
     m_tree->setHeaderHidden(true);
     m_tree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_tree->setDragDropMode(QAbstractItemView::InternalMove);
+    m_tree->setDragEnabled(true);
+    m_tree->setAcceptDrops(true);
+    m_tree->setDropIndicatorShown(true);
     connect(m_tree, &QTreeWidget::itemClicked, this, &CollectionSidebar::onItemClicked);
     connect(m_tree, &QTreeWidget::customContextMenuRequested, this, &CollectionSidebar::onContextMenu);
     layout->addWidget(m_tree, 1);
@@ -218,6 +224,7 @@ void CollectionSidebar::onContextMenu(const QPoint& pos) {
         menu.addAction("Add Subfolder", this, &CollectionSidebar::onAddFolder);
         if (modelItem->type() == core::CollectionItemType::Folder) {
             menu.addSeparator();
+            menu.addAction("Folder Variables...", this, &CollectionSidebar::onFolderVariables);
             menu.addAction("Rename", this, &CollectionSidebar::onRenameItem);
             menu.addAction("Delete", this, &CollectionSidebar::onDeleteItem);
         }
@@ -299,6 +306,46 @@ void CollectionSidebar::onDeleteItem() {
     if (res == QMessageBox::Yes) {
         m_model->deleteItem(item);
         refreshTree();
+    }
+}
+
+void CollectionSidebar::onFolderVariables() {
+    auto* currentWidget = m_tree->currentItem();
+    auto* item = itemFromWidget(currentWidget);
+    if (!item) return;
+
+    QDialog dlg(this);
+    dlg.setWindowTitle(QString("Folder Variables - %1").arg(item->name()));
+    dlg.resize(480, 380);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* table = new KeyValueTable(false, &dlg);
+    QList<core::HttpParam> params;
+    for (auto it = item->variables().begin(); it != item->variables().end(); ++it) {
+        params.append({.key = it.key(), .value = it.value(), .enabled = true});
+    }
+    table->setParams(params);
+    layout->addWidget(table);
+
+    auto* btnBox = new QHBoxLayout();
+    btnBox->addStretch();
+    auto* cancelBtn = new QPushButton("Cancel", &dlg);
+    connect(cancelBtn, &QPushButton::clicked, &dlg, &QDialog::reject);
+    auto* saveBtn = new QPushButton("Save Variables", &dlg);
+    saveBtn->setStyleSheet("background-color: #3b82f6; color: #ffffff; font-weight: bold; padding: 6px 14px; border-radius: 4px;");
+    connect(saveBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    btnBox->addWidget(cancelBtn);
+    btnBox->addWidget(saveBtn);
+    layout->addLayout(btnBox);
+
+    if (dlg.exec() == QDialog::Accepted) {
+        QMap<QString, QString> vars;
+        for (const auto& p : table->params()) {
+            if (p.enabled && !p.key.isEmpty()) {
+                vars[p.key] = p.value;
+            }
+        }
+        item->setVariables(vars);
     }
 }
 

@@ -191,11 +191,26 @@ QString RequestModel::toCurlCommand() const {
     if (bodyType == BodyType::GraphQL) {
         QString escaped = QString("{\"query\": \"%1\"}").arg(graphqlQuery.trimmed().replace("\"", "\\\"").replace("\n", "\\n"));
         parts.append(QString("-d \"%1\"").arg(escaped));
+    } else if (bodyType == BodyType::MultipartForm && !formDataParams.isEmpty()) {
+        for (const auto& p : formDataParams) {
+            if (!p.enabled || p.key.isEmpty()) continue;
+            if (p.isFile) {
+                parts.append(QString("-F \"%1=@%2\"").arg(p.key, p.value));
+            } else {
+                QString val = p.value;
+                val.replace("\"", "\\\"");
+                parts.append(QString("-F \"%1=%2\"").arg(p.key, val));
+            }
+        }
     } else if (bodyType != BodyType::None && !bodyContent.isEmpty()) {
         QString escaped = bodyContent;
         escaped.replace("\"", "\\\"");
         escaped.replace("\n", "");
         parts.append(QString("-d \"%1\"").arg(escaped));
+    }
+
+    if (!proxy.trimmed().isEmpty()) {
+        parts.append(QString("-x \"%1\"").arg(proxy.trimmed()));
     }
 
     parts.append(QString("\"%1\"").arg(effectiveUrl()));

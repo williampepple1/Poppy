@@ -38,6 +38,22 @@ public:
     const RequestModel* request() const { return m_request.get(); }
     void setRequest(const RequestModel& req);
 
+    const QMap<QString, QString>& variables() const { return m_variables; }
+    void setVariables(const QMap<QString, QString>& vars) { m_variables = vars; }
+    void setVariable(const QString& key, const QString& value) { m_variables[key] = value; }
+
+    // Aggregate variables from this folder and all ancestor folders
+    QMap<QString, QString> effectiveVariables() const {
+        QMap<QString, QString> result;
+        if (m_parent) {
+            result = m_parent->effectiveVariables();
+        }
+        for (auto it = m_variables.begin(); it != m_variables.end(); ++it) {
+            result[it.key()] = it.value();
+        }
+        return result;
+    }
+
     int row() const;
 
 private:
@@ -47,6 +63,7 @@ private:
     CollectionItem* m_parent{nullptr};
     QList<CollectionItem*> m_children;
     std::unique_ptr<RequestModel> m_request;
+    QMap<QString, QString> m_variables;
 };
 
 class CollectionModel : public QObject {

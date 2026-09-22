@@ -38,10 +38,13 @@ private:
     QPlainTextEdit* m_codeEditor;
     JsonSyntaxHighlighter* m_jsonHighlighter;
 
-    // View 2: Form Url Encoded / Multipart Form
+    // View 2: Form Url Encoded
     KeyValueTable* m_formTable;
 
-    // View 3: GraphQL Editor
+    // View 3: Multipart Form (with file uploads)
+    KeyValueTable* m_multipartTable;
+
+    // View 4: GraphQL Editor
     QWidget* m_gqlWidget;
     QPlainTextEdit* m_gqlQueryEditor;
     QPlainTextEdit* m_gqlVarsEditor;

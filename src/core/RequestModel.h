@@ -54,6 +54,16 @@ struct HttpParam {
     bool operator==(const HttpParam& other) const = default;
 };
 
+struct FormDataParam {
+    QString key;
+    QString value;
+    bool isFile{false};
+    bool enabled{true};
+    QString description;
+
+    bool operator==(const FormDataParam& other) const = default;
+};
+
 enum class AuthType {
     None,
     Inherit,
@@ -128,6 +138,8 @@ public:
     QList<HttpParam> queryParams;
     QList<HttpParam> pathParams;
     QList<HttpHeader> headers;
+    QList<FormDataParam> formDataParams;
+    QString proxy;
     
     BodyType bodyType{BodyType::None};
     QString bodyContent;

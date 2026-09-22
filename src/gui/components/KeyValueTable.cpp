@@ -5,6 +5,7 @@
 #include <QCheckBox>
 #include <QLineEdit>
 #include <QCompleter>
+#include <QFileDialog>
 
 namespace poppy::gui {
 
@@ -171,6 +172,74 @@ QList<core::HttpParam> KeyValueTable::params() const {
             list.append(core::HttpParam{
                 .key = key->text().trimmed(),
                 .value = val ? val->text() : "",
+                .enabled = (chk && chk->checkState() == Qt::Checked),
+                .description = desc ? desc->text() : ""
+            });
+        }
+    }
+    return list;
+}
+
+void KeyValueTable::setAllowFiles(bool allow) {
+    m_allowFiles = allow;
+    if (m_allowFiles && !m_addFileBtn) {
+        auto* btnLayout = qobject_cast<QHBoxLayout*>(layout()->itemAt(1)->layout());
+        if (btnLayout) {
+            m_addFileBtn = new QPushButton("📁 + Add File", this);
+            m_addFileBtn->setToolTip("Attach a file to multipart form data");
+            connect(m_addFileBtn, &QPushButton::clicked, this, [this]() {
+                QString path = QFileDialog::getOpenFileName(this, "Select File to Upload", QString(), "All Files (*.*)");
+                if (!path.isEmpty()) {
+                    QFileInfo fi(path);
+                    addRow(true, fi.baseName(), path, "[File Upload]");
+                    // Mark last row as file in UserRole
+                    int lastRow = m_table->rowCount() - 1;
+                    if (lastRow >= 0 && m_table->item(lastRow, 2)) {
+                        m_table->item(lastRow, 2)->setData(Qt::UserRole, true);
+                    }
+                    emit dataChanged();
+                }
+            });
+            btnLayout->insertWidget(btnLayout->count() - 1, m_addFileBtn);
+        }
+    } else if (!m_allowFiles && m_addFileBtn) {
+        m_addFileBtn->deleteLater();
+        m_addFileBtn = nullptr;
+    }
+}
+
+void KeyValueTable::setFormData(const QList<core::FormDataParam>& params) {
+    m_updating = true;
+    m_table->setRowCount(0);
+    for (const auto& p : params) {
+        int r = m_table->rowCount();
+        addRow(p.enabled, p.key, p.value, p.description);
+        if (p.isFile && m_table->item(r, 2)) {
+            m_table->item(r, 2)->setData(Qt::UserRole, true);
+        }
+    }
+    m_updating = false;
+    ensureTrailingEmptyRow();
+}
+
+QList<core::FormDataParam> KeyValueTable::formData() const {
+    QList<core::FormDataParam> list;
+    for (int i = 0; i < m_table->rowCount(); ++i) {
+        auto* chk = m_table->item(i, 0);
+        auto* key = m_table->item(i, 1);
+        auto* val = m_table->item(i, 2);
+        auto* desc = m_showDescription ? m_table->item(i, 3) : nullptr;
+
+        if (key && !key->text().trimmed().isEmpty()) {
+            bool isFile = val ? val->data(Qt::UserRole).toBool() : false;
+            // Also heuristic: if description is "[File Upload]" or file exists
+            if (!isFile && desc && desc->text().contains("[File", Qt::CaseInsensitive)) {
+                isFile = true;
+            }
+            list.append(core::FormDataParam{
+                .key = key->text().trimmed(),
+                .value = val ? val->text() : "",
+                .isFile = isFile,
                 .enabled = (chk && chk->checkState() == Qt::Checked),
                 .description = desc ? desc->text() : ""
             });

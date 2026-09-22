@@ -27,6 +27,9 @@ add_executable(poppy
     dialogs/OAuth2TokenDialog.h dialogs/OAuth2TokenDialog.cpp
     dialogs/QuickOpenDialog.h dialogs/QuickOpenDialog.cpp
     dialogs/CookieManagerDialog.h dialogs/CookieManagerDialog.cpp
+    dialogs/DiffViewerDialog.h dialogs/DiffViewerDialog.cpp
+    dialogs/WebSocketDialog.h dialogs/WebSocketDialog.cpp
+    dialogs/GrpcDialog.h dialogs/GrpcDialog.cpp
 )
 
 target_include_directories(poppy PRIVATE

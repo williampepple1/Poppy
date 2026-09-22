@@ -35,6 +35,11 @@ QString VariableResolver::lookupVariable(const QString& name) const {
         return m_envVars.value(name);
     }
 
+    // 3b. Folder-level variables (scoped to folder hierarchy)
+    if (m_folderVars.contains(name)) {
+        return m_folderVars.value(name);
+    }
+
     // 4. Collection variables
     if (m_collectionVars.contains(name)) {
         return m_collectionVars.value(name);

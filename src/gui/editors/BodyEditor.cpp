@@ -54,12 +54,18 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     connect(m_codeEditor, &QPlainTextEdit::textChanged, this, &BodyEditor::bodyChanged);
     m_stack->addWidget(m_codeEditor);
 
-    // View 2: Form Table
+    // View 2: Form Url Encoded Table
     m_formTable = new KeyValueTable(false, this);
     connect(m_formTable, &KeyValueTable::dataChanged, this, &BodyEditor::bodyChanged);
     m_stack->addWidget(m_formTable);
 
-    // View 3: GraphQL Editor
+    // View 3: Multipart Form Table (with file attachments)
+    m_multipartTable = new KeyValueTable(true, this);
+    m_multipartTable->setAllowFiles(true);
+    connect(m_multipartTable, &KeyValueTable::dataChanged, this, &BodyEditor::bodyChanged);
+    m_stack->addWidget(m_multipartTable);
+
+    // View 4: GraphQL Editor
     m_gqlWidget = new QWidget(this);
     auto* gqlLayout = new QVBoxLayout(m_gqlWidget);
     gqlLayout->setContentsMargins(0, 0, 0, 0);
@@ -93,8 +99,11 @@ void BodyEditor::onFormatChanged(int index) {
     if (type == core::BodyType::None) {
         m_stack->setCurrentWidget(m_noneWidget);
         m_formatBtn->setVisible(false);
-    } else if (type == core::BodyType::FormUrlEncoded || type == core::BodyType::MultipartForm) {
+    } else if (type == core::BodyType::FormUrlEncoded) {
         m_stack->setCurrentWidget(m_formTable);
+        m_formatBtn->setVisible(false);
+    } else if (type == core::BodyType::MultipartForm) {
+        m_stack->setCurrentWidget(m_multipartTable);
         m_formatBtn->setVisible(false);
     } else if (type == core::BodyType::GraphQL) {
         m_stack->setCurrentWidget(m_gqlWidget);
@@ -126,7 +135,9 @@ void BodyEditor::loadFromRequest(const core::RequestModel& req) {
     if (req.bodyType == core::BodyType::GraphQL) {
         m_gqlQueryEditor->setPlainText(req.graphqlQuery);
         m_gqlVarsEditor->setPlainText(req.graphqlVariables);
-    } else if (req.bodyType == core::BodyType::FormUrlEncoded || req.bodyType == core::BodyType::MultipartForm) {
+    } else if (req.bodyType == core::BodyType::MultipartForm) {
+        m_multipartTable->setFormData(req.formDataParams);
+    } else if (req.bodyType == core::BodyType::FormUrlEncoded) {
         // Parse key=val&... lines into table
         QList<core::HttpParam> params;
         QStringList pairs = req.bodyContent.split('&', Qt::SkipEmptyParts);
@@ -151,7 +162,14 @@ void BodyEditor::saveToRequest(core::RequestModel& req) const {
         req.graphqlQuery = m_gqlQueryEditor->toPlainText();
         req.graphqlVariables = m_gqlVarsEditor->toPlainText();
         req.bodyContent = req.graphqlQuery;
-    } else if (req.bodyType == core::BodyType::FormUrlEncoded || req.bodyType == core::BodyType::MultipartForm) {
+    } else if (req.bodyType == core::BodyType::MultipartForm) {
+        req.formDataParams = m_multipartTable->formData();
+        QStringList summaries;
+        for (const auto& p : req.formDataParams) {
+            if (p.enabled) summaries.append(p.key + (p.isFile ? "=@" : "=") + p.value);
+        }
+        req.bodyContent = summaries.join("; ");
+    } else if (req.bodyType == core::BodyType::FormUrlEncoded) {
         QStringList parts;
         for (const auto& p : m_formTable->params()) {
             if (p.enabled && !p.key.isEmpty()) {

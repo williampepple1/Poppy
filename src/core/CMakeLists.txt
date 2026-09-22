@@ -15,6 +15,9 @@ add_library(poppy_core STATIC
     auth/AwsSigV4Signer.h auth/AwsSigV4Signer.cpp
     codegen/CodeGenerator.h codegen/CodeGenerator.cpp
     exporters/OpenApiExporter.h exporters/OpenApiExporter.cpp
+    exporters/PostmanExporter.h exporters/PostmanExporter.cpp
+    exporters/InsomniaExporter.h exporters/InsomniaExporter.cpp
+    exporters/HarExporter.h exporters/HarExporter.cpp
     JsonPathEvaluator.h JsonPathEvaluator.cpp
     CookieJar.h CookieJar.cpp
     HistoryManager.h HistoryManager.cpp

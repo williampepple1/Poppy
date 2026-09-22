@@ -18,6 +18,10 @@ public:
     void setParams(const QList<core::HttpParam>& params);
     QList<core::HttpParam> params() const;
 
+    void setFormData(const QList<core::FormDataParam>& params);
+    QList<core::FormDataParam> formData() const;
+    void setAllowFiles(bool allow);
+
     void setKeyCompleterWords(const QStringList& words);
 
 signals:
@@ -33,8 +37,10 @@ private:
 
     QTableWidget* m_table;
     QPushButton* m_addRowBtn;
+    QPushButton* m_addFileBtn{nullptr};
     QPushButton* m_removeRowBtn;
     bool m_showDescription;
+    bool m_allowFiles{false};
     QStringList m_completerWords;
     bool m_updating{false};
 };

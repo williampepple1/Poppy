@@ -1,6 +1,8 @@
 add_library(poppy_network STATIC
     INetworkEngine.h
     CurlNetworkEngine.h CurlNetworkEngine.cpp
+    WebSocketClient.h WebSocketClient.cpp
+    GrpcClient.h GrpcClient.cpp
 )
 
 target_include_directories(poppy_network PUBLIC

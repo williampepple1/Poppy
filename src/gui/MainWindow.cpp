@@ -17,15 +17,23 @@
 #include "dialogs/SettingsDialog.h"
 #include "dialogs/QuickOpenDialog.h"
 #include "dialogs/CookieManagerDialog.h"
+#include "dialogs/DiffViewerDialog.h"
+#include "dialogs/WebSocketDialog.h"
+#include "dialogs/GrpcDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 #include <core/exporters/OpenApiExporter.h>
+#include <core/exporters/PostmanExporter.h>
+#include <core/exporters/InsomniaExporter.h>
+#include <core/exporters/HarExporter.h>
 #include <core/CookieJar.h>
 #include <QTabBar>
 #include <QDir>
 #include <QInputDialog>
 #include <QTextBrowser>
 #include <QDialog>
+#include <QTimer>
+#include <QMenu>
 
 namespace poppy::gui {
 
@@ -91,10 +99,17 @@ void MainWindow::setupUi() {
         "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; font-weight: bold; border-color: #3f3f46; }"
         "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
     );
+    m_openRequestsTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_openRequestsTabBar, &QTabBar::currentChanged, this, &MainWindow::onTabChanged);
     connect(m_openRequestsTabBar, &QTabBar::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
     connect(m_openRequestsTabBar, &QTabBar::tabBarDoubleClicked, this, &MainWindow::onRenameTab);
+    connect(m_openRequestsTabBar, &QTabBar::customContextMenuRequested, this, &MainWindow::onTabContextMenu);
     reqLayout->addWidget(m_openRequestsTabBar);
+
+    // Auto-save timer setup
+    m_autoSaveTimer = new QTimer(this);
+    m_autoSaveTimer->setSingleShot(true);
+    connect(m_autoSaveTimer, &QTimer::timeout, this, &MainWindow::onAutoSaveTimerTimeout);
 
     // Top Request Info Bar
     auto* reqInfoBar = new QHBoxLayout();
@@ -114,6 +129,11 @@ void MainWindow::setupUi() {
     m_saveBtn = new QPushButton("Save", this);
     connect(m_saveBtn, &QPushButton::clicked, this, &MainWindow::onSaveRequest);
     reqInfoBar->addWidget(m_saveBtn);
+
+    m_proxyBtn = new QPushButton("Proxy", this);
+    m_proxyBtn->setToolTip("Configure per-request proxy override");
+    connect(m_proxyBtn, &QPushButton::clicked, this, &MainWindow::onConfigureRequestProxy);
+    reqInfoBar->addWidget(m_proxyBtn);
 
     reqLayout->addLayout(reqInfoBar);
 
@@ -135,8 +155,9 @@ void MainWindow::setupUi() {
     urlBarLayout->addWidget(m_methodCombo);
 
     m_urlEdit = new QLineEdit(this);
-    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path...");
+    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Press Enter to send)");
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_urlEdit, &QLineEdit::returnPressed, this, &MainWindow::onSendClicked);
     urlBarLayout->addWidget(m_urlEdit, 1);
 
     m_sendBtn = new QPushButton("Send", this);
@@ -201,7 +222,11 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("&Quick Open...", QKeySequence(Qt::CTRL | Qt::Key_P), this, &MainWindow::onQuickOpen);
     fileMenu->addAction("&Open Collection...", QKeySequence::Open, this, &MainWindow::onOpenCollection);
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
-    fileMenu->addAction("&Export Collection as OpenAPI 3.0...", this, &MainWindow::onExportOpenApi);
+    auto* exportMenu = fileMenu->addMenu("&Export Collection");
+    exportMenu->addAction("as &OpenAPI 3.0...", this, &MainWindow::onExportOpenApi);
+    exportMenu->addAction("as &Postman Collection (v2.1)...", this, &MainWindow::onExportPostman);
+    exportMenu->addAction("as &Insomnia Collection (v4)...", this, &MainWindow::onExportInsomnia);
+    exportMenu->addAction("as &HTTP Archive (.har)...", this, &MainWindow::onExportHar);
     fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
     fileMenu->addAction("&Save Request", QKeySequence::Save, this, &MainWindow::onSaveRequest);
     fileMenu->addAction("&Close Tab", QKeySequence::Close, this, &MainWindow::onCloseCurrentTab);
@@ -225,6 +250,10 @@ void MainWindow::setupMenus() {
             }
         }
     });
+    toolsMenu->addSeparator();
+    toolsMenu->addAction("Response &Diff Viewer...", this, &MainWindow::onOpenDiffViewer);
+    toolsMenu->addAction("&WebSocket Client...", this, &MainWindow::onOpenWebSocket);
+    toolsMenu->addAction("&gRPC Client...", this, &MainWindow::onOpenGrpc);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Keyboard Shortcuts...", QKeySequence(Qt::CTRL | Qt::Key_Slash), this, &MainWindow::onShowShortcuts);
@@ -258,6 +287,11 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
     m_assertionsEditor->loadFromRequest(req);
     m_scriptEditor->loadFromRequest(req);
 
+    if (m_proxyBtn) {
+        m_proxyBtn->setText(req.proxy.isEmpty() ? "Proxy" : ("Proxy: " + req.proxy));
+        m_proxyBtn->setStyleSheet(req.proxy.isEmpty() ? "" : "background-color: #3b82f6; color: #ffffff; font-weight: bold;");
+    }
+
     m_responseInspector->clear();
 }
 
@@ -265,6 +299,7 @@ void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
     req.name = m_requestNameLabel->text();
     req.method = static_cast<core::HttpMethod>(m_methodCombo->currentData().toInt());
     req.url = m_urlEdit->text().trimmed();
+    req.proxy = m_currentRequest.proxy;
 
     m_paramsEditor->saveToRequest(req);
     m_headersEditor->saveToRequest(req);
@@ -274,12 +309,24 @@ void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
     m_scriptEditor->saveToRequest(req);
 }
 
+void MainWindow::updateTabTitle(int index) {
+    if (index < 0 || index >= m_openTabs.size()) return;
+    const auto& tab = m_openTabs[index];
+    QString title = tab.request.name.isEmpty() ? "Untitled" : tab.request.name;
+    QString prefix;
+    if (tab.isPinned) prefix += "📌 ";
+    if (tab.isDirty) prefix += "* ";
+    m_openRequestsTabBar->setTabText(index, prefix + title);
+}
+
 void MainWindow::markCurrentTabDirty() {
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         if (!m_openTabs[m_currentTabIndex].isDirty) {
             m_openTabs[m_currentTabIndex].isDirty = true;
-            QString title = m_openTabs[m_currentTabIndex].request.name.isEmpty() ? "Untitled" : m_openTabs[m_currentTabIndex].request.name;
-            m_openRequestsTabBar->setTabText(m_currentTabIndex, "* " + title);
+            updateTabTitle(m_currentTabIndex);
+        }
+        if (m_autoSaveTimer) {
+            m_autoSaveTimer->start(1500); // 1.5s debounced auto-save
         }
     }
 }
@@ -296,7 +343,7 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
     }
 
     // If only single tab open and it's the pristine Quick Request, reuse it
-    if (m_openTabs.size() == 1 && m_openTabs[0].item == nullptr && !m_openTabs[0].isDirty) {
+    if (m_openTabs.size() == 1 && m_openTabs[0].item == nullptr && !m_openTabs[0].isDirty && !m_openTabs[0].isPinned) {
         m_openTabs[0].item = item;
         m_openTabs[0].request = *item->request();
         m_openTabs[0].isDirty = false;
@@ -315,6 +362,7 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
     newTab.item = item;
     newTab.request = *item->request();
     newTab.isDirty = false;
+    newTab.isPinned = false;
     m_openTabs.append(newTab);
     int newIdx = m_openRequestsTabBar->addTab(item->name());
     m_openRequestsTabBar->setCurrentIndex(newIdx);
@@ -346,6 +394,11 @@ void MainWindow::onCloseCurrentTab() {
 
 void MainWindow::closeTab(int index) {
     if (index < 0 || index >= m_openTabs.size()) return;
+
+    if (m_openTabs[index].isPinned) {
+        QMessageBox::information(this, "Tab Pinned", "This tab is pinned. Unpin it first before closing.");
+        return;
+    }
 
     if (m_openTabs[index].isDirty && m_openTabs[index].item) {
         auto res = QMessageBox::question(this, "Unsaved Changes",
@@ -432,6 +485,65 @@ void MainWindow::onExportOpenApi() {
     }
 }
 
+void MainWindow::onExportPostman() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString defaultName = m_collectionModel.name().isEmpty() ? "postman_collection.json" : (m_collectionModel.name() + "_postman.json");
+    QString savePath = QFileDialog::getSaveFileName(this, "Export Collection as Postman v2.1", defaultName, "Postman Collection (*.json);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    QString colName = m_collectionModel.name().isEmpty() ? "Poppy Collection" : m_collectionModel.name();
+    if (core::PostmanExporter::exportToFile(savePath, requests, colName, &error)) {
+        QMessageBox::information(this, "Export Succeeded", QString("Collection exported as Postman Collection v2.1 successfully to:\n%1").arg(savePath));
+    } else {
+        QMessageBox::warning(this, "Export Failed", QString("Could not export collection:\n%1").arg(error));
+    }
+}
+
+void MainWindow::onExportInsomnia() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString defaultName = m_collectionModel.name().isEmpty() ? "insomnia_collection.json" : (m_collectionModel.name() + "_insomnia.json");
+    QString savePath = QFileDialog::getSaveFileName(this, "Export Collection as Insomnia v4", defaultName, "Insomnia Export (*.json);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    QString colName = m_collectionModel.name().isEmpty() ? "Poppy Collection" : m_collectionModel.name();
+    if (core::InsomniaExporter::exportToFile(savePath, requests, colName, &error)) {
+        QMessageBox::information(this, "Export Succeeded", QString("Collection exported as Insomnia v4 collection successfully to:\n%1").arg(savePath));
+    } else {
+        QMessageBox::warning(this, "Export Failed", QString("Could not export collection:\n%1").arg(error));
+    }
+}
+
+void MainWindow::onExportHar() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString defaultName = m_collectionModel.name().isEmpty() ? "collection.har" : (m_collectionModel.name() + ".har");
+    QString savePath = QFileDialog::getSaveFileName(this, "Export Collection as HTTP Archive (.har)", defaultName, "HAR Archive (*.har *.json);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    if (core::HarExporter::exportToFile(savePath, requests, &error)) {
+        QMessageBox::information(this, "Export Succeeded", QString("Collection exported as HTTP Archive (.har) successfully to:\n%1").arg(savePath));
+    } else {
+        QMessageBox::warning(this, "Export Failed", QString("Could not export collection:\n%1").arg(error));
+    }
+}
+
 void MainWindow::onOpenCollection() {
     QString dir = QFileDialog::getExistingDirectory(this, "Open Collection Directory", QString());
     if (!dir.isEmpty()) {
@@ -488,6 +600,9 @@ void MainWindow::onShowCodeSnippets() {
         }
     }
     resolver.setEnvironment(activeEnv);
+    if (m_activeItem) {
+        resolver.setFolderVariables(m_activeItem->effectiveVariables());
+    }
     core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
 
     CodeSnippetDialog dlg(resolvedReq, this);
@@ -535,6 +650,9 @@ void MainWindow::onSendClicked() {
     // 2. Variable resolution
     core::VariableResolver resolver;
     resolver.setEnvironment(activeEnv);
+    if (m_activeItem) {
+        resolver.setFolderVariables(m_activeItem->effectiveVariables());
+    }
     core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
 
     // 3. Pre-request script
@@ -668,6 +786,93 @@ void MainWindow::onShowShortcuts() {
     connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
     layout->addWidget(closeBtn);
     dlg.exec();
+}
+
+void MainWindow::onTabContextMenu(const QPoint& pos) {
+    int idx = m_openRequestsTabBar->tabAt(pos);
+    if (idx < 0 || idx >= m_openTabs.size()) return;
+
+    QMenu menu(this);
+    bool isPinned = m_openTabs[idx].isPinned;
+    menu.addAction(isPinned ? "Unpin Tab" : "📌 Pin Tab", [this, idx]() {
+        m_openTabs[idx].isPinned = !m_openTabs[idx].isPinned;
+        updateTabTitle(idx);
+    });
+    menu.addAction("Rename Tab...", [this, idx]() {
+        onRenameTab(idx);
+    });
+    menu.addSeparator();
+    if (!isPinned) {
+        menu.addAction("Close Tab", [this, idx]() {
+            closeTab(idx);
+        });
+    }
+    menu.addAction("Close Other Tabs", [this, idx]() {
+        for (int i = m_openTabs.size() - 1; i >= 0; --i) {
+            if (i != idx && !m_openTabs[i].isPinned) {
+                closeTab(i);
+            }
+        }
+    });
+
+    menu.exec(m_openRequestsTabBar->mapToGlobal(pos));
+}
+
+void MainWindow::onTogglePinCurrentTab() {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        m_openTabs[m_currentTabIndex].isPinned = !m_openTabs[m_currentTabIndex].isPinned;
+        updateTabTitle(m_currentTabIndex);
+    }
+}
+
+void MainWindow::onAutoSaveTimerTimeout() {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        if (m_openTabs[m_currentTabIndex].isDirty && m_openTabs[m_currentTabIndex].item) {
+            saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+            if (m_openTabs[m_currentTabIndex].item->request()) {
+                *m_openTabs[m_currentTabIndex].item->request() = m_openTabs[m_currentTabIndex].request;
+            }
+            m_collectionModel.saveRequest(m_openTabs[m_currentTabIndex].item);
+            m_openTabs[m_currentTabIndex].isDirty = false;
+            updateTabTitle(m_currentTabIndex);
+            statusBar()->showMessage("Auto-saved changes.", 2000);
+        }
+    }
+}
+
+void MainWindow::onConfigureRequestProxy() {
+    bool ok;
+    QString current = m_currentRequest.proxy;
+    QString newProxy = QInputDialog::getText(this, "Request Proxy",
+        "Set custom proxy for this request (e.g. http://127.0.0.1:8080 or socks5://127.0.0.1:1080):\nLeave empty to use global setting:",
+        QLineEdit::Normal, current, &ok);
+    if (ok) {
+        m_currentRequest.proxy = newProxy.trimmed();
+        if (m_proxyBtn) {
+            m_proxyBtn->setText(m_currentRequest.proxy.isEmpty() ? "Proxy" : ("Proxy: " + m_currentRequest.proxy));
+            m_proxyBtn->setStyleSheet(m_currentRequest.proxy.isEmpty() ? "" : "background-color: #3b82f6; color: #ffffff; font-weight: bold;");
+        }
+        markCurrentTabDirty();
+    }
+}
+
+void MainWindow::onOpenDiffViewer() {
+    QString currentBody = m_responseInspector ? m_responseInspector->currentBody() : QString();
+    auto dlg = new DiffViewerDialog(currentBody, QString(), &m_historyManager, this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+}
+
+void MainWindow::onOpenWebSocket() {
+    auto dlg = new WebSocketDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
+}
+
+void MainWindow::onOpenGrpc() {
+    auto dlg = new GrpcDialog(this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    dlg->show();
 }
 
 } // namespace poppy::gui
