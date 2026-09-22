@@ -207,22 +207,22 @@
 
     <div class="downloads">
       <a class="btn btn-primary"
-         href="https://github.com/williampepple1/Poppy/releases/download/v1.0.0/Poppy-windows-x64.zip"
+         href="https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-windows-x64.zip"
          download>
         ↓ Download for Windows
       </a>
       <a class="btn"
-         href="https://github.com/williampepple1/Poppy/releases/download/v1.0.0/Poppy-linux-x64.tar.gz"
+         href="https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-linux-x64.tar.gz"
          download>
         ↓ Download for Linux
       </a>
       <a class="btn"
-         href="https://github.com/williampepple1/Poppy/releases/tag/v1.0.0"
+         href="https://github.com/williampepple1/Poppy/releases"
          target="_blank" rel="noopener">
         All releases ↗
       </a>
     </div>
-    <p class="version-note">v1.0.0 · Windows x64 &amp; Linux x64</p>
+    <p class="version-note">Latest · Windows x64 &amp; Linux x64</p>
   </section>
 
   <hr />
@@ -300,6 +300,19 @@
       <a href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">View on GitHub</a>
     </p>
   </footer>
+
+  <script>
+    fetch('https://api.github.com/repos/williampepple1/Poppy/releases/latest')
+      .then(function (response) { return response.ok ? response.json() : Promise.reject(); })
+      .then(function (release) {
+        var note = document.querySelector('.version-note');
+        if (!note || !release) return;
+        var label = release.name || release.tag_name || 'Latest';
+        var published = release.published_at ? new Date(release.published_at).toISOString().slice(0, 10) : '';
+        note.textContent = (published ? label + ' · ' + published : label) + ' · Windows x64 & Linux x64';
+      })
+      .catch(function () {});
+  </script>
 
 </body>
 </html>

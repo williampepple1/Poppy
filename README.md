@@ -203,7 +203,8 @@ powershell -ExecutionPolicy Bypass -File .\scripts\package-windows.ps1
 
 #### Automated CI/CD Releases (GitHub Actions)
 The repository includes an automated release workflow ([`.github/workflows/release.yml`](.github/workflows/release.yml)):
-- **Tag Trigger**: Push any version tag (e.g. `v1.0.0`) to compile, test, package, and publish a GitHub Release with `Poppy-windows-x64.zip` and `Poppy-linux-x64.tar.gz` attached:
+- **Continuous Deploy**: Every push to `main` compiles, tests, packages, and updates the rolling [Latest](https://github.com/williampepple1/Poppy/releases/latest) GitHub Release (`Poppy-windows-x64.zip` and `Poppy-linux-x64.tar.gz`).
+- **Version Tag**: Push any version tag (e.g. `v1.0.0`) to publish a snapshot release for that version:
   ```bash
   git tag v1.0.0
   git push origin v1.0.0
