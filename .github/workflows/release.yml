@@ -1,14 +1,16 @@
-name: Release
+name: CI & Release
 
 on:
   push:
     branches: [main]
     tags:
       - 'v*'
+  pull_request:
+    branches: [main]
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (e.g. v1.0.0 or latest)'
+        description: 'Release tag (e.g. v1.4.1 or latest)'
         required: true
         default: 'latest'
       draft:
@@ -21,7 +23,7 @@ on:
         default: false
 
 concurrency:
-  group: release-${{ github.workflow }}
+  group: ci-release-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -134,6 +136,7 @@ jobs:
 
   publish-release:
     name: Publish GitHub Release
+    if: github.event_name != 'pull_request'
     needs: [build-windows, build-linux]
     runs-on: ubuntu-latest
 
