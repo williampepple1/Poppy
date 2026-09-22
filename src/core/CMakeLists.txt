@@ -18,6 +18,7 @@ add_library(poppy_core STATIC
     exporters/PostmanExporter.h exporters/PostmanExporter.cpp
     exporters/InsomniaExporter.h exporters/InsomniaExporter.cpp
     exporters/HarExporter.h exporters/HarExporter.cpp
+    exporters/MarkdownExporter.h exporters/MarkdownExporter.cpp
     JsonPathEvaluator.h JsonPathEvaluator.cpp
     CookieJar.h CookieJar.cpp
     HistoryManager.h HistoryManager.cpp

@@ -25,9 +25,18 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     m_typeCombo->addItem("GraphQL", static_cast<int>(core::BodyType::GraphQL));
     topBar->addWidget(m_typeCombo);
 
-    m_formatBtn = new QPushButton("Prettify JSON", this);
+    m_formatBtn = new QPushButton("Prettify", this);
+    m_formatBtn->setToolTip("Format JSON with clean indentation");
     connect(m_formatBtn, &QPushButton::clicked, this, &BodyEditor::formatJson);
     topBar->addWidget(m_formatBtn);
+
+    m_minifyBtn = new QPushButton("Minify", this);
+    m_minifyBtn->setToolTip("Compress JSON by removing unnecessary whitespace");
+    connect(m_minifyBtn, &QPushButton::clicked, this, &BodyEditor::minifyJson);
+    topBar->addWidget(m_minifyBtn);
+
+    m_jsonStatusLabel = new QLabel(this);
+    topBar->addWidget(m_jsonStatusLabel);
     topBar->addStretch();
 
     mainLayout->addLayout(topBar);
@@ -52,6 +61,7 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     m_codeEditor->setFont(font);
     m_jsonHighlighter = new JsonSyntaxHighlighter(m_codeEditor->document());
     connect(m_codeEditor, &QPlainTextEdit::textChanged, this, &BodyEditor::bodyChanged);
+    connect(m_codeEditor, &QPlainTextEdit::textChanged, this, &BodyEditor::validateJson);
     m_stack->addWidget(m_codeEditor);
 
     // View 2: Form Url Encoded Table
@@ -96,21 +106,23 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
 
 void BodyEditor::onFormatChanged(int index) {
     auto type = static_cast<core::BodyType>(m_typeCombo->itemData(index).toInt());
+    bool isJson = (type == core::BodyType::Json);
+    m_formatBtn->setVisible(isJson);
+    m_minifyBtn->setVisible(isJson);
+    m_jsonStatusLabel->setVisible(isJson);
+
     if (type == core::BodyType::None) {
         m_stack->setCurrentWidget(m_noneWidget);
-        m_formatBtn->setVisible(false);
     } else if (type == core::BodyType::FormUrlEncoded) {
         m_stack->setCurrentWidget(m_formTable);
-        m_formatBtn->setVisible(false);
     } else if (type == core::BodyType::MultipartForm) {
         m_stack->setCurrentWidget(m_multipartTable);
-        m_formatBtn->setVisible(false);
     } else if (type == core::BodyType::GraphQL) {
         m_stack->setCurrentWidget(m_gqlWidget);
-        m_formatBtn->setVisible(false);
     } else {
         m_stack->setCurrentWidget(m_codeEditor);
-        m_formatBtn->setVisible(type == core::BodyType::Json);
+        if (isJson) validateJson();
+        else m_jsonStatusLabel->clear();
     }
     emit bodyChanged();
 }
@@ -123,6 +135,41 @@ void BodyEditor::formatJson() {
     QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
     if (err.error == QJsonParseError::NoError && !doc.isNull()) {
         m_codeEditor->setPlainText(QString::fromUtf8(doc.toJson(QJsonDocument::Indented)));
+        validateJson();
+    }
+}
+
+void BodyEditor::minifyJson() {
+    QString raw = m_codeEditor->toPlainText().trimmed();
+    if (raw.isEmpty()) return;
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(raw.toUtf8(), &err);
+    if (err.error == QJsonParseError::NoError && !doc.isNull()) {
+        m_codeEditor->setPlainText(QString::fromUtf8(doc.toJson(QJsonDocument::Compact)));
+        validateJson();
+    }
+}
+
+void BodyEditor::validateJson() {
+    auto type = static_cast<core::BodyType>(m_typeCombo->currentData().toInt());
+    if (type != core::BodyType::Json) {
+        m_jsonStatusLabel->clear();
+        return;
+    }
+    QString raw = m_codeEditor->toPlainText().trimmed();
+    if (raw.isEmpty()) {
+        m_jsonStatusLabel->clear();
+        return;
+    }
+    QJsonParseError err;
+    QJsonDocument::fromJson(raw.toUtf8(), &err);
+    if (err.error == QJsonParseError::NoError) {
+        m_jsonStatusLabel->setText("✓ Valid JSON");
+        m_jsonStatusLabel->setStyleSheet("color: #10b981; font-size: 11px; font-weight: bold; margin-left: 8px;");
+    } else {
+        m_jsonStatusLabel->setText(QString("⚠ %1 (offset %2)").arg(err.errorString()).arg(err.offset));
+        m_jsonStatusLabel->setStyleSheet("color: #ef4444; font-size: 11px; margin-left: 8px;");
     }
 }
 

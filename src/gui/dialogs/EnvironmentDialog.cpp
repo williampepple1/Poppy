@@ -49,6 +49,28 @@ EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const 
     m_varsTable->verticalHeader()->setVisible(false);
     rightLayout->addWidget(m_varsTable);
 
+    connect(m_varsTable, &QTableWidget::cellChanged, this, [this](int r, int c) {
+        if (c == 2) {
+            auto* item = m_varsTable->item(r, 2);
+            if (item && item->text() != "••••••••") {
+                item->setData(Qt::UserRole, item->text());
+            }
+        } else if (c == 3) {
+            auto* sec = m_varsTable->item(r, 3);
+            auto* val = m_varsTable->item(r, 2);
+            if (sec && val) {
+                bool isSecret = (sec->checkState() == Qt::Checked);
+                if (isSecret && !m_showSecrets) {
+                    val->setText("••••••••");
+                } else if (!isSecret) {
+                    if (val->data(Qt::UserRole).isValid()) {
+                        val->setText(val->data(Qt::UserRole).toString());
+                    }
+                }
+            }
+        }
+    });
+
     auto* rightBtnLayout = new QHBoxLayout();
     m_addVarBtn = new QPushButton("+ Add Variable", this);
     connect(m_addVarBtn, &QPushButton::clicked, this, &EnvironmentDialog::addVariable);
@@ -57,6 +79,11 @@ EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const 
     m_delVarBtn = new QPushButton("Delete Variable", this);
     connect(m_delVarBtn, &QPushButton::clicked, this, &EnvironmentDialog::deleteVariable);
     rightBtnLayout->addWidget(m_delVarBtn);
+
+    m_toggleSecretsBtn = new QPushButton("👁 Show Secrets", this);
+    m_toggleSecretsBtn->setToolTip("Toggle visibility of sensitive values");
+    connect(m_toggleSecretsBtn, &QPushButton::clicked, this, &EnvironmentDialog::toggleSecrets);
+    rightBtnLayout->addWidget(m_toggleSecretsBtn);
 
     rightBtnLayout->addStretch();
 
@@ -110,6 +137,7 @@ void EnvironmentDialog::onEnvSelected(int row) {
 }
 
 void EnvironmentDialog::populateVarsTable(int envIdx) {
+    m_varsTable->blockSignals(true);
     m_varsTable->setRowCount(0);
     const auto& vars = m_envs[envIdx].variables();
     for (int i = 0; i < vars.size(); ++i) {
@@ -127,7 +155,13 @@ void EnvironmentDialog::populateVarsTable(int envIdx) {
         m_varsTable->setItem(r, 1, new QTableWidgetItem(v.name));
 
         // Value
-        auto* valItem = new QTableWidgetItem(v.value);
+        auto* valItem = new QTableWidgetItem();
+        valItem->setData(Qt::UserRole, v.value);
+        if (v.isSecret && !m_showSecrets) {
+            valItem->setText("••••••••");
+        } else {
+            valItem->setText(v.value);
+        }
         m_varsTable->setItem(r, 2, valItem);
 
         // Secret
@@ -136,6 +170,7 @@ void EnvironmentDialog::populateVarsTable(int envIdx) {
         secItem->setFlags(Qt::ItemIsUserCheckable | Qt::ItemIsEnabled | Qt::ItemIsSelectable);
         m_varsTable->setItem(r, 3, secItem);
     }
+    m_varsTable->blockSignals(false);
 }
 
 void EnvironmentDialog::addEnvironment() {
@@ -186,6 +221,25 @@ void EnvironmentDialog::deleteVariable() {
     }
 }
 
+void EnvironmentDialog::toggleSecrets() {
+    m_showSecrets = !m_showSecrets;
+    m_toggleSecretsBtn->setText(m_showSecrets ? "🔒 Hide Secrets" : "👁 Show Secrets");
+    m_varsTable->blockSignals(true);
+    for (int r = 0; r < m_varsTable->rowCount(); ++r) {
+        auto* sec = m_varsTable->item(r, 3);
+        auto* val = m_varsTable->item(r, 2);
+        if (sec && val && sec->checkState() == Qt::Checked) {
+            if (m_showSecrets) {
+                QString actual = val->data(Qt::UserRole).isValid() ? val->data(Qt::UserRole).toString() : val->text();
+                val->setText(actual);
+            } else {
+                val->setText("••••••••");
+            }
+        }
+    }
+    m_varsTable->blockSignals(false);
+}
+
 void EnvironmentDialog::saveCurrentEnv() {
     if (m_currentIdx < 0 || m_currentIdx >= m_envs.size()) return;
 
@@ -201,7 +255,15 @@ void EnvironmentDialog::saveCurrentEnv() {
         if (name && !name->text().trimmed().isEmpty()) {
             bool isEnabled = (chk && chk->checkState() == Qt::Checked);
             bool isSecret = (sec && sec->checkState() == Qt::Checked);
-            env.addOrUpdateVariable(name->text().trimmed(), val ? val->text() : "", isSecret, isEnabled);
+            QString realVal;
+            if (val) {
+                if (val->text() == "••••••••" && val->data(Qt::UserRole).isValid()) {
+                    realVal = val->data(Qt::UserRole).toString();
+                } else {
+                    realVal = val->text();
+                }
+            }
+            env.addOrUpdateVariable(name->text().trimmed(), realVal, isSecret, isEnabled);
         }
     }
 

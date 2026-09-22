@@ -73,6 +73,9 @@ private slots:
     void onToggleTheme();
     void onShowQuickVariables();
     void updateUrlVariableInspection();
+    void onShowSessionTelemetry();
+    void onExportMarkdown();
+    void onFindAndReplace();
 
 private:
     void setupUi();
@@ -83,6 +86,7 @@ private:
     void updateTabTitle(int index);
     core::VariableResolver currentVariableResolver() const;
     void updateTopEnvCombo();
+    void updateSessionTelemetryWidget();
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -105,6 +109,13 @@ private:
     core::CollectionItem* m_activeItem{nullptr};
     core::RequestModel m_currentRequest;
     QString m_activeEnvName;
+
+    // Session Telemetry Tracker
+    QPushButton* m_sessionTelemetryBtn{nullptr};
+    int m_sessionReqCount{0};
+    qint64 m_sessionBytesReceived{0};
+    qint64 m_sessionTotalLatencyMs{0};
+    int m_sessionErrorCount{0};
 
     // UI elements
     CollectionSidebar* m_sidebar;

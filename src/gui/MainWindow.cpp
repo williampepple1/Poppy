@@ -24,12 +24,14 @@
 #include "dialogs/SseDialog.h"
 #include "dialogs/MockServerDialog.h"
 #include "dialogs/GitSyncDialog.h"
+#include "dialogs/FindReplaceDialog.h"
 #include "editors/AssertionsEditor.h"
 #include <core/assertions/DeclarativeAssertion.h>
 #include <core/exporters/OpenApiExporter.h>
 #include <core/exporters/PostmanExporter.h>
 #include <core/exporters/InsomniaExporter.h>
 #include <core/exporters/HarExporter.h>
+#include <core/exporters/MarkdownExporter.h>
 #include <core/CookieJar.h>
 #include <core/importers/CurlImporter.h>
 #include <QTabBar>
@@ -283,8 +285,19 @@ void MainWindow::setupUi() {
     auto* themeShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), this);
     connect(themeShortcut, &QShortcut::activated, this, &MainWindow::onToggleTheme);
 
-    // Status Bar & Variable Quick-Look Widget
+    auto* findReplaceShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
+    connect(findReplaceShortcut, &QShortcut::activated, this, &MainWindow::onFindAndReplace);
+
+    // Status Bar & Variable Quick-Look / Telemetry Widgets
     auto* sb = statusBar();
+
+    m_sessionTelemetryBtn = new QPushButton("⚡ 0 reqs | 📦 0 B | ⏱ 0 ms", this);
+    m_sessionTelemetryBtn->setCursor(Qt::PointingHandCursor);
+    m_sessionTelemetryBtn->setToolTip("Session Network Telemetry & Bandwidth (Click to inspect breakdown or reset)");
+    m_sessionTelemetryBtn->setStyleSheet("QPushButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-size: 11px; background: #27272a; color: #a1a1aa; } QPushButton:hover { background: #3f3f46; color: #ffffff; }");
+    connect(m_sessionTelemetryBtn, &QPushButton::clicked, this, &MainWindow::onShowSessionTelemetry);
+    sb->addPermanentWidget(m_sessionTelemetryBtn);
+
     m_varQuickBtn = new QPushButton("Active Variables: 0", this);
     m_varQuickBtn->setCursor(Qt::PointingHandCursor);
     m_varQuickBtn->setToolTip("View all active variables across Environment, Folder, and Collection scopes (Click to inspect)");
@@ -307,6 +320,7 @@ void MainWindow::setupMenus() {
     exportMenu->addAction("as &Postman Collection (v2.1)...", this, &MainWindow::onExportPostman);
     exportMenu->addAction("as &Insomnia Collection (v4)...", this, &MainWindow::onExportInsomnia);
     exportMenu->addAction("as &HTTP Archive (.har)...", this, &MainWindow::onExportHar);
+    exportMenu->addAction("as &Markdown Runbook...", this, &MainWindow::onExportMarkdown);
     fileMenu->addAction("&Run Collection...", this, &MainWindow::onRunCollection);
     fileMenu->addAction("&Save Request", QKeySequence::Save, this, &MainWindow::onSaveRequest);
     fileMenu->addAction("&Close Tab", QKeySequence::Close, this, &MainWindow::onCloseCurrentTab);
@@ -314,6 +328,9 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("&Settings...", QKeySequence::Preferences, this, &MainWindow::onOpenSettings);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", this, &QWidget::close);
+
+    auto* editMenu = menuBar()->addMenu("&Edit");
+    editMenu->addAction("Find && &Replace in Collection...", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this, &MainWindow::onFindAndReplace);
 
     auto* envMenu = menuBar()->addMenu("&Environments");
     envMenu->addAction("&Manage Environments...", QKeySequence(Qt::CTRL | Qt::Key_E), this, &MainWindow::onManageEnvironments);
@@ -330,6 +347,10 @@ void MainWindow::setupMenus() {
             }
         }
     });
+    toolsMenu->addSeparator();
+    toolsMenu->addAction("Find && &Replace in Collection...", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this, &MainWindow::onFindAndReplace);
+    toolsMenu->addAction("Session &Network Telemetry...", this, &MainWindow::onShowSessionTelemetry);
+    toolsMenu->addAction("Export Collection as &Markdown...", this, &MainWindow::onExportMarkdown);
     toolsMenu->addSeparator();
     toolsMenu->addAction("Response &Diff Viewer...", this, &MainWindow::onOpenDiffViewer);
     toolsMenu->addAction("&WebSocket Client...", this, &MainWindow::onOpenWebSocket);
@@ -767,6 +788,16 @@ void MainWindow::onSendClicked() {
 
         // 9. Add to History
         m_historyManager.addEntry(resolvedReq, res);
+
+        // 10. Session Network Telemetry Accounting
+        m_sessionReqCount++;
+        qint64 bytes = res.sizeBytes > 0 ? res.sizeBytes : res.rawBody.size();
+        m_sessionBytesReceived += bytes;
+        m_sessionTotalLatencyMs += res.latencyMs;
+        if (!res.errorString.isEmpty() || res.statusCode >= 400 || res.statusCode == 0) {
+            m_sessionErrorCount++;
+        }
+        updateSessionTelemetryWidget();
     });
 }
 
@@ -1152,6 +1183,145 @@ void MainWindow::updateTopEnvCombo() {
     }
     m_topEnvCombo->setCurrentIndex(selectIdx);
     m_topEnvCombo->blockSignals(false);
+}
+
+static QString formatTelemetryBytes(qint64 bytes) {
+    if (bytes < 1024) {
+        return QString("%1 B").arg(bytes);
+    } else if (bytes < 1024 * 1024) {
+        return QString("%1 KB").arg(QString::number(bytes / 1024.0, 'f', 1));
+    } else if (bytes < 1024LL * 1024 * 1024) {
+        return QString("%1 MB").arg(QString::number(bytes / (1024.0 * 1024.0), 'f', 2));
+    } else {
+        return QString("%1 GB").arg(QString::number(bytes / (1024.0 * 1024.0 * 1024.0), 'f', 2));
+    }
+}
+
+void MainWindow::updateSessionTelemetryWidget() {
+    if (!m_sessionTelemetryBtn) return;
+    qint64 avgLatency = m_sessionReqCount > 0 ? (m_sessionTotalLatencyMs / m_sessionReqCount) : 0;
+    QString txt = QString("⚡ %1 req%2 | 📦 %3 | ⏱ avg %4 ms")
+                      .arg(m_sessionReqCount)
+                      .arg(m_sessionReqCount == 1 ? "" : "s")
+                      .arg(formatTelemetryBytes(m_sessionBytesReceived))
+                      .arg(avgLatency);
+    m_sessionTelemetryBtn->setText(txt);
+}
+
+void MainWindow::onShowSessionTelemetry() {
+    QDialog dlg(this);
+    dlg.setWindowTitle("Session Network Telemetry");
+    dlg.resize(500, 400);
+
+    auto* layout = new QVBoxLayout(&dlg);
+    layout->setContentsMargins(20, 20, 20, 20);
+    layout->setSpacing(14);
+
+    auto* titleLabel = new QLabel("<h3>📈 Session Network Telemetry</h3>", &dlg);
+    layout->addWidget(titleLabel);
+
+    auto* desc = new QLabel("Real-time network throughput and latency metrics accumulated during this application session:", &dlg);
+    desc->setStyleSheet("color: #a1a1aa; font-size: 12px;");
+    desc->setWordWrap(true);
+    layout->addWidget(desc);
+
+    auto* table = new QTableWidget(&dlg);
+    table->setColumnCount(2);
+    table->setHorizontalHeaderLabels({"Metric", "Value"});
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
+    table->setColumnWidth(0, 230);
+    table->verticalHeader()->setVisible(false);
+    table->setSelectionMode(QAbstractItemView::NoSelection);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+
+    int successes = m_sessionReqCount - m_sessionErrorCount;
+    double successRate = m_sessionReqCount > 0 ? (successes * 100.0 / m_sessionReqCount) : 100.0;
+    qint64 avgLatency = m_sessionReqCount > 0 ? (m_sessionTotalLatencyMs / m_sessionReqCount) : 0;
+
+    struct MetricRow { QString name; QString val; };
+    QList<MetricRow> metrics = {
+        {"Total Requests Executed", QString::number(m_sessionReqCount)},
+        {"Successful Responses (2xx/3xx)", QString::number(successes)},
+        {"Failed / Error Responses", QString::number(m_sessionErrorCount)},
+        {"Session Success Rate", QString("%1%").arg(QString::number(successRate, 'f', 1))},
+        {"Total Bandwidth Received", formatTelemetryBytes(m_sessionBytesReceived)},
+        {"Average Request Latency", QString("%1 ms").arg(avgLatency)},
+        {"Total Cumulative Latency", QString("%1 ms (%2 s)").arg(m_sessionTotalLatencyMs).arg(QString::number(m_sessionTotalLatencyMs / 1000.0, 'f', 2))}
+    };
+
+    table->setRowCount(metrics.size());
+    for (int i = 0; i < metrics.size(); ++i) {
+        auto* item0 = new QTableWidgetItem(metrics[i].name);
+        auto* item1 = new QTableWidgetItem(metrics[i].val);
+        QFont monoFont("Consolas", 10);
+        item1->setFont(monoFont);
+        table->setItem(i, 0, item0);
+        table->setItem(i, 1, item1);
+    }
+    layout->addWidget(table, 1);
+
+    auto* btnBox = new QHBoxLayout();
+    auto* resetBtn = new QPushButton("Reset Session Stats", &dlg);
+    resetBtn->setToolTip("Clear session counters back to 0");
+    connect(resetBtn, &QPushButton::clicked, this, [this, &dlg]() {
+        m_sessionReqCount = 0;
+        m_sessionBytesReceived = 0;
+        m_sessionTotalLatencyMs = 0;
+        m_sessionErrorCount = 0;
+        updateSessionTelemetryWidget();
+        dlg.accept();
+        statusBar()->showMessage("Session telemetry statistics reset.", 3000);
+    });
+    btnBox->addWidget(resetBtn);
+    btnBox->addStretch();
+
+    auto* closeBtn = new QPushButton("Close", &dlg);
+    connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    btnBox->addWidget(closeBtn);
+
+    layout->addLayout(btnBox);
+    dlg.exec();
+}
+
+void MainWindow::onExportMarkdown() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString defaultName = m_collectionModel.name().isEmpty() ? "API_RUNBOOK.md" : (m_collectionModel.name().toLower().replace(' ', '_') + "_runbook.md");
+    QString savePath = QFileDialog::getSaveFileName(this, "Export Collection as Markdown Runbook", defaultName, "Markdown (*.md);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    QString colName = m_collectionModel.name().isEmpty() ? "Poppy Collection" : m_collectionModel.name();
+    if (core::MarkdownExporter::exportToFile(savePath, requests, colName, &error)) {
+        QMessageBox::information(this, "Export Succeeded", QString("Collection exported as Markdown Runbook successfully to:\n%1").arg(savePath));
+    } else {
+        QMessageBox::warning(this, "Export Failed", QString("Could not export collection:\n%1").arg(error));
+    }
+}
+
+void MainWindow::onFindAndReplace() {
+    saveUiIntoRequest(m_currentRequest);
+    FindReplaceDialog dlg(&m_collectionModel, this);
+    connect(&dlg, &FindReplaceDialog::requestSelected, this, [this](core::CollectionItem* item) {
+        onRequestSelected(item);
+    });
+    connect(&dlg, &FindReplaceDialog::collectionModified, this, [this]() {
+        m_sidebar->refreshTree();
+        if (m_activeItem && m_activeItem->request()) {
+            loadRequestIntoUi(*m_activeItem->request());
+        }
+    });
+
+    if (m_urlEdit && !m_urlEdit->selectedText().isEmpty()) {
+        dlg.setInitialFindText(m_urlEdit->selectedText());
+    }
+
+    dlg.exec();
 }
 
 } // namespace poppy::gui

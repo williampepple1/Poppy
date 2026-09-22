@@ -118,6 +118,25 @@
 ### ⚡ Quick Sidebar Code Exporters
 - **One-Click Export**: Right-click any request in either the Collection Tree or History Sidebar to instantly `Copy as Fetch (JS)` or `Copy as Python` without opening any modal dialogs.
 
+### ✨ JSON Request Body Prettifier & Minifier
+- **Instant Formatting**: Directly in the Body editor, click **Prettify** to re-indent and align JSON payloads or **Minify** to strip whitespace for compact wire transmission.
+- **Real-Time Syntax Validation**: As you type, dynamic validation highlights valid JSON or points out syntax error details with exact byte offset indicators.
+
+### 🔐 Environment Secrets Vault & Value Masking
+- **Secret Value Masking**: Toggle sensitive environment variables (API tokens, passwords, private keys) with `••••••••` masking and an interactive `👁 Show Secrets` / `🔒 Hide Secrets` switch.
+- **Secure File Isolation**: Secret variables are isolated and persisted into `.env.secret` files to prevent accidental leakage into public Git repositories.
+
+### 📈 Session Network Telemetry & Bandwidth Tracker
+- **Status Bar Live Telemetry**: Persistent status bar widget (`⚡ N reqs | 📦 N KB | ⏱ avg N ms`) continuously tracks request volume, received byte throughput, and average response latency.
+- **Session Breakdown Modal**: Click the telemetry widget anytime to inspect execution counts, 2xx/3xx successes vs. 4xx/5xx failures, success percentage rate, and cumulative network latency, with a one-click session reset button.
+
+### 📝 Markdown API Runbook Exporter (`Tools -> Export Collection as Markdown...`)
+- **GitHub-Flavored API Runbook**: Export any collection to formatted markdown (`API_RUNBOOK.md`) with a table of contents, endpoint badges, query parameter & header tables, formatted JSON request bodies, declarative assertions, and copyable cURL commands.
+
+### 🔎 Global Find & Replace Across Collection (`Ctrl+Shift+F`)
+- **Deep Collection Search**: Search across all request names, URLs, headers, parameters, request bodies, and scripts across your entire collection.
+- **Flexible Match Options**: Supports match case, whole-word matching, granular scope toggles, and selective or batch replacement across all matching requests.
+
 ### 🧪 GUI Data-Driven Collection Runner
 - **CSV & JSON Fixture Support**: Load test data files directly inside the GUI Collection Runner dialog. Poppy automatically sets iteration counts matching your fixture rows and injects each row's columns into `{{variable}}` templates on every cycle.
 

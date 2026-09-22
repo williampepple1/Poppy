@@ -25,6 +25,7 @@ private slots:
     void addVariable();
     void deleteVariable();
     void saveCurrentEnv();
+    void toggleSecrets();
 
 private:
     void populateEnvList();
@@ -34,6 +35,7 @@ private:
     QString m_activeEnvName;
     QString m_rootPath;
     int m_currentIdx{-1};
+    bool m_showSecrets{false};
 
     QListWidget* m_envListWidget;
     QPushButton* m_addEnvBtn;
@@ -42,6 +44,7 @@ private:
     QTableWidget* m_varsTable;
     QPushButton* m_addVarBtn;
     QPushButton* m_delVarBtn;
+    QPushButton* m_toggleSecretsBtn;
     QPushButton* m_saveBtn;
     QPushButton* m_closeBtn;
 };

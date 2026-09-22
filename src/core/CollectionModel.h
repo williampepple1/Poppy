@@ -79,6 +79,7 @@ public:
     const QString& rootPath() const { return m_rootPath; }
     QString name() const { return m_rootItem ? m_rootItem->name() : QString(); }
     QList<RequestModel> allRequests() const;
+    QList<CollectionItem*> allRequestItems() const;
 
     // Request & Folder operations
     CollectionItem* addRequest(CollectionItem* parent, const QString& name, const RequestModel& req);

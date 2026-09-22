@@ -5,6 +5,7 @@
 #include <QPlainTextEdit>
 #include <QStackedWidget>
 #include <QPushButton>
+#include <QLabel>
 #include <components/KeyValueTable.h>
 #include <components/JsonSyntaxHighlighter.h>
 #include <core/RequestModel.h>
@@ -25,10 +26,14 @@ signals:
 private slots:
     void onFormatChanged(int index);
     void formatJson();
+    void minifyJson();
+    void validateJson();
 
 private:
     QComboBox* m_typeCombo;
     QPushButton* m_formatBtn;
+    QPushButton* m_minifyBtn;
+    QLabel* m_jsonStatusLabel;
     QStackedWidget* m_stack;
 
     // View 0: None

@@ -83,3 +83,8 @@ add_test(NAME test_mock_server COMMAND test_mock_server)
 add_executable(test_doc_generator test_doc_generator.cpp)
 target_link_libraries(test_doc_generator PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_doc_generator COMMAND test_doc_generator)
+
+add_executable(test_markdown_exporter test_markdown_exporter.cpp)
+target_link_libraries(test_markdown_exporter PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_markdown_exporter COMMAND test_markdown_exporter)
+

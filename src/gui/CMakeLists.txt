@@ -33,6 +33,7 @@ add_executable(poppy
     dialogs/SseDialog.h dialogs/SseDialog.cpp
     dialogs/MockServerDialog.h dialogs/MockServerDialog.cpp
     dialogs/GitSyncDialog.h dialogs/GitSyncDialog.cpp
+    dialogs/FindReplaceDialog.h dialogs/FindReplaceDialog.cpp
 )
 
 target_include_directories(poppy PRIVATE

@@ -226,4 +226,20 @@ QList<RequestModel> CollectionModel::allRequests() const {
     return list;
 }
 
+static void collectAllRequestItemsRecursively(CollectionItem* item, QList<CollectionItem*>& list) {
+    if (!item) return;
+    if (item->type() == CollectionItemType::Request && item->request()) {
+        list.append(item);
+    }
+    for (auto* child : item->children()) {
+        collectAllRequestItemsRecursively(child, list);
+    }
+}
+
+QList<CollectionItem*> CollectionModel::allRequestItems() const {
+    QList<CollectionItem*> list;
+    collectAllRequestItemsRecursively(m_rootItem.get(), list);
+    return list;
+}
+
 } // namespace poppy::core
