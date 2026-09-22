@@ -36,7 +36,9 @@ private slots:
     void onAddFolder();
     void onRenameItem();
     void onDeleteItem();
+    void onDuplicateRequest();
     void onCopyAsCurl();
+    void onCollectionFilterChanged(const QString& query);
 
     // History slots
     void onHistoryItemClicked(QTreeWidgetItem* item, int column);
@@ -56,6 +58,7 @@ private:
     QTabWidget* m_tabs;
 
     // Collections Tab widgets
+    QLineEdit* m_collectionFilterEdit{nullptr};
     QComboBox* m_envCombo;
     QPushButton* m_manageEnvBtn;
     QPushButton* m_openBtn;

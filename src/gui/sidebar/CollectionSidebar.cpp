@@ -7,6 +7,7 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <Theme.h>
+#include <functional>
 
 namespace poppy::gui {
 
@@ -75,6 +76,13 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     topBtnLayout->addWidget(m_addFolderBtn);
 
     layout->addLayout(topBtnLayout);
+
+    // 1b. Collection search filter
+    m_collectionFilterEdit = new QLineEdit(container);
+    m_collectionFilterEdit->setPlaceholderText("🔍  Search requests...");
+    m_collectionFilterEdit->setClearButtonEnabled(true);
+    connect(m_collectionFilterEdit, &QLineEdit::textChanged, this, &CollectionSidebar::onCollectionFilterChanged);
+    layout->addWidget(m_collectionFilterEdit);
 
     // 2. Environment Selector Bar
     auto* envLayout = new QHBoxLayout();
@@ -215,6 +223,7 @@ void CollectionSidebar::onContextMenu(const QPoint& pos) {
         }
     } else if (modelItem->type() == core::CollectionItemType::Request) {
         menu.addAction("Rename", this, &CollectionSidebar::onRenameItem);
+        menu.addAction("Duplicate", this, &CollectionSidebar::onDuplicateRequest);
         menu.addAction("Copy as cURL", this, &CollectionSidebar::onCopyAsCurl);
         menu.addSeparator();
         menu.addAction("Delete", this, &CollectionSidebar::onDeleteItem);
@@ -290,6 +299,25 @@ void CollectionSidebar::onDeleteItem() {
     if (res == QMessageBox::Yes) {
         m_model->deleteItem(item);
         refreshTree();
+    }
+}
+
+void CollectionSidebar::onDuplicateRequest() {
+    auto* currentWidget = m_tree->currentItem();
+    auto* item = itemFromWidget(currentWidget);
+    if (!item || !item->request()) return;
+
+    auto* parent = item->parent();
+    if (!parent) parent = m_model->rootItem();
+    if (!parent) return;
+
+    QString newName = item->name() + " (copy)";
+    core::RequestModel newReq = *item->request();
+    newReq.name = newName;
+    auto* newItem = m_model->addRequest(parent, newName, newReq);
+    if (newItem) {
+        refreshTree();
+        emit requestSelected(newItem);
     }
 }
 
@@ -395,6 +423,28 @@ void CollectionSidebar::onClearHistory() {
         QMessageBox::Yes | QMessageBox::No);
     if (res == QMessageBox::Yes) {
         m_historyManager->clear();
+    }
+}
+
+void CollectionSidebar::onCollectionFilterChanged(const QString& query) {
+    if (!m_tree) return;
+    QString q = query.trimmed();
+
+    // Recursive helper that returns true if any child of 'item' matches
+    std::function<bool(QTreeWidgetItem*)> applyFilter = [&](QTreeWidgetItem* item) -> bool {
+        bool childVisible = false;
+        for (int i = 0; i < item->childCount(); ++i) {
+            childVisible |= applyFilter(item->child(i));
+        }
+        bool selfMatch = q.isEmpty() || item->text(0).contains(q, Qt::CaseInsensitive);
+        bool visible = selfMatch || childVisible;
+        item->setHidden(!visible);
+        if (childVisible && !q.isEmpty()) item->setExpanded(true);
+        return visible;
+    };
+
+    for (int i = 0; i < m_tree->topLevelItemCount(); ++i) {
+        applyFilter(m_tree->topLevelItem(i));
     }
 }
 

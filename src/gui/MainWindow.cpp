@@ -23,6 +23,9 @@
 #include <core/CookieJar.h>
 #include <QTabBar>
 #include <QDir>
+#include <QInputDialog>
+#include <QTextBrowser>
+#include <QDialog>
 
 namespace poppy::gui {
 
@@ -90,6 +93,7 @@ void MainWindow::setupUi() {
     );
     connect(m_openRequestsTabBar, &QTabBar::currentChanged, this, &MainWindow::onTabChanged);
     connect(m_openRequestsTabBar, &QTabBar::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
+    connect(m_openRequestsTabBar, &QTabBar::tabBarDoubleClicked, this, &MainWindow::onRenameTab);
     reqLayout->addWidget(m_openRequestsTabBar);
 
     // Top Request Info Bar
@@ -223,6 +227,8 @@ void MainWindow::setupMenus() {
     });
 
     auto* helpMenu = menuBar()->addMenu("&Help");
+    helpMenu->addAction("&Keyboard Shortcuts...", QKeySequence(Qt::CTRL | Qt::Key_Slash), this, &MainWindow::onShowShortcuts);
+    helpMenu->addSeparator();
     helpMenu->addAction("&About Poppy", this, [this]() {
         QMessageBox::about(this, "About Poppy",
             "<h3>Poppy API Client</h3>"
@@ -595,6 +601,72 @@ void MainWindow::onClearCookieJar() {
 
 void MainWindow::onOpenSettings() {
     SettingsDialog dlg(&m_networkEngine, this);
+    dlg.exec();
+}
+
+void MainWindow::onRenameTab(int index) {
+    if (index < 0 || index >= m_openTabs.size()) return;
+    QString current = m_openTabs[index].request.name;
+    bool ok;
+    QString newName = QInputDialog::getText(this, "Rename Tab", "Request name:", QLineEdit::Normal, current, &ok);
+    if (ok && !newName.trimmed().isEmpty()) {
+        m_openTabs[index].request.name = newName.trimmed();
+        m_openTabs[index].isDirty = true;
+        m_openRequestsTabBar->setTabText(index, "* " + newName.trimmed());
+        if (m_currentTabIndex == index) {
+            m_requestNameLabel->setText(newName.trimmed());
+        }
+    }
+}
+
+void MainWindow::onShowShortcuts() {
+    QDialog dlg(this);
+    dlg.setWindowTitle("Keyboard Shortcuts");
+    dlg.resize(460, 520);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* text = new QTextBrowser(&dlg);
+    text->setOpenExternalLinks(false);
+    text->setHtml(R"(
+<style>
+  body { font-family: sans-serif; font-size: 13px; color: #f4f4f5; background: #18181b; margin: 8px; }
+  h3   { color: #a78bfa; margin-top: 14px; margin-bottom: 4px; }
+  table { width: 100%; border-collapse: collapse; }
+  td   { padding: 4px 8px; }
+  td:first-child { font-weight: bold; color: #fbbf24; white-space: nowrap; }
+  tr:hover td { background: #27272a; }
+</style>
+<body>
+<h3>Request</h3>
+<table>
+  <tr><td>Ctrl+Return</td><td>Send request</td></tr>
+  <tr><td>Ctrl+S</td><td>Save request</td></tr>
+  <tr><td>Ctrl+N</td><td>New request tab</td></tr>
+  <tr><td>Ctrl+W</td><td>Close current tab</td></tr>
+  <tr><td>Double-click tab</td><td>Rename tab</td></tr>
+</table>
+<h3>Navigation</h3>
+<table>
+  <tr><td>Ctrl+P</td><td>Quick Open (fuzzy search)</td></tr>
+  <tr><td>Ctrl+O</td><td>Open collection</td></tr>
+  <tr><td>Ctrl+F</td><td>Find in response body</td></tr>
+</table>
+<h3>Tools</h3>
+<table>
+  <tr><td>Ctrl+K</td><td>Cookie Manager</td></tr>
+  <tr><td>Ctrl+E</td><td>Manage Environments</td></tr>
+  <tr><td>Ctrl+/</td><td>Keyboard Shortcuts</td></tr>
+</table>
+<h3>General</h3>
+<table>
+  <tr><td>Ctrl+,</td><td>Settings</td></tr>
+</table>
+</body>)");
+
+    layout->addWidget(text);
+    auto* closeBtn = new QPushButton("Close", &dlg);
+    connect(closeBtn, &QPushButton::clicked, &dlg, &QDialog::accept);
+    layout->addWidget(closeBtn);
     dlg.exec();
 }
 

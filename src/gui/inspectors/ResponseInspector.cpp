@@ -75,6 +75,12 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     connect(m_prettyRawToggleBtn, &QPushButton::clicked, this, &ResponseInspector::togglePrettyRaw);
     topBar->addWidget(m_prettyRawToggleBtn);
 
+    m_wordWrapBtn = new QPushButton("Wrap", this);
+    m_wordWrapBtn->setCheckable(true);
+    m_wordWrapBtn->setToolTip("Toggle word wrap in response body");
+    connect(m_wordWrapBtn, &QPushButton::clicked, this, &ResponseInspector::toggleWordWrap);
+    topBar->addWidget(m_wordWrapBtn);
+
     m_copyBtn = new QPushButton("Copy Body", this);
     connect(m_copyBtn, &QPushButton::clicked, this, &ResponseInspector::copyBodyToClipboard);
     topBar->addWidget(m_copyBtn);
@@ -250,6 +256,25 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
     m_currentResponse = res;
     updateTelemetryBar(res);
 
+    // Body size warning: don't auto-render bodies > 5 MB
+    constexpr qint64 kWarnThresholdBytes = 5 * 1024 * 1024;
+    if (res.rawBody.size() > kWarnThresholdBytes) {
+        auto choice = QMessageBox::question(this, "Large Response",
+            QString("The response body is %1 MB. Rendering may be slow.\nShow it anyway?")
+                .arg(res.rawBody.size() / (1024.0 * 1024.0), 0, 'f', 1),
+            QMessageBox::Yes | QMessageBox::No);
+        if (choice == QMessageBox::No) {
+            m_bodyViewer->setPlainText(QString("[Body too large to display: %1 MB — use Save... to write to file]")
+                .arg(res.rawBody.size() / (1024.0 * 1024.0), 0, 'f', 1));
+            updateHeadersTable(res);
+            updateTestsTab(testReport);
+            return;
+        }
+    }
+
+    // Apply word-wrap setting
+    m_bodyViewer->setLineWrapMode(m_wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
+
     // Body viewer & HTML Preview
     m_isPretty = true;
     m_prettyRawToggleBtn->setText("Raw");
@@ -375,6 +400,14 @@ void ResponseInspector::togglePrettyRaw() {
         m_prettyRawToggleBtn->setText("Pretty");
         m_bodyViewer->setPlainText(m_currentResponse.bodyAsString());
     }
+}
+
+void ResponseInspector::toggleWordWrap() {
+    m_wordWrap = m_wordWrapBtn->isChecked();
+    m_bodyViewer->setLineWrapMode(m_wordWrap ? QPlainTextEdit::WidgetWidth : QPlainTextEdit::NoWrap);
+    m_wordWrapBtn->setStyleSheet(m_wordWrap
+        ? "background-color: #3b82f6; color: #ffffff; font-weight: bold;"
+        : "");
 }
 
 void ResponseInspector::copyBodyToClipboard() {

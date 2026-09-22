@@ -54,6 +54,8 @@ private slots:
     void onHistoryItemSelected(const core::HistoryItem& item);
     void onManageCookies();
     void onClearCookieJar();
+    void onRenameTab(int index);
+    void onShowShortcuts();
 
 private:
     void setupUi();

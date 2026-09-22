@@ -27,6 +27,7 @@ private slots:
     void copyBodyToClipboard();
     void saveBodyToFile();
     void togglePrettyRaw();
+    void toggleWordWrap();
     void filterHeaders(const QString& text);
     void onSearchTextChanged(const QString& text);
     void findNext();
@@ -49,6 +50,7 @@ private:
     QLabel* m_sizeBadge;
     QLabel* m_timingDetails;
     QPushButton* m_prettyRawToggleBtn;
+    QPushButton* m_wordWrapBtn;
     QPushButton* m_copyBtn;
     QPushButton* m_saveToFileBtn;
 
@@ -70,6 +72,7 @@ private:
     QPlainTextEdit* m_bodyViewer;
     JsonSyntaxHighlighter* m_jsonHighlighter;
     bool m_isPretty{true};
+    bool m_wordWrap{false};
     core::ResponseModel m_currentResponse;
 
     // Search & Filter State
