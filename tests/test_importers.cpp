@@ -3,6 +3,8 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QDir>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <core/importers/CurlImporter.h>
 #include <core/importers/PostmanImporter.h>
 #include <core/importers/OpenApiImporter.h>
@@ -111,6 +113,21 @@ int main(int argc, char** argv) {
     assert(pmReq.url == "https://api.sample.com/health");
     assert(pmReq.headers.size() == 1);
     assert(pmReq.headers[0].name == "Accept" && pmReq.headers[0].value == "application/json");
+
+    RequestModel xmlRaw = PostmanImporter::parsePostmanItem(QJsonDocument::fromJson(QByteArray(R"({
+      "name": "Xml Echo",
+      "request": {
+        "method": "POST",
+        "url": "https://api.sample.com/xml",
+        "body": {
+          "mode": "raw",
+          "raw": "<note/>",
+          "options": { "raw": { "language": "xml" } }
+        }
+      }
+    })")).object());
+    assert(xmlRaw.bodyType == BodyType::Xml);
+    assert(xmlRaw.bodyContent.contains("<note/>"));
 
     QDir(tempPostmanDir).removeRecursively();
 

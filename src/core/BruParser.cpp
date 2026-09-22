@@ -243,4 +243,24 @@ QMap<QString, QString> BruParser::parseVarsFile(const QString& filePath) {
     return parseVars(in.readAll());
 }
 
+int BruParser::parseMetaSeq(const QString& content, int fallback) {
+    bool inMeta = false;
+    const QStringList lines = content.split('\n');
+    for (const QString& raw : lines) {
+        const QString line = raw.trimmed();
+        if (line.startsWith("meta") && line.endsWith('{')) {
+            inMeta = true;
+            continue;
+        }
+        if (!inMeta) continue;
+        if (line == "}") break;
+        if (line.startsWith("seq:")) {
+            bool ok = false;
+            const int seq = line.mid(4).trimmed().toInt(&ok);
+            if (ok && seq > 0) return seq;
+        }
+    }
+    return fallback;
+}
+
 } // namespace poppy::core

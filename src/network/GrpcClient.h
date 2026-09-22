@@ -5,6 +5,7 @@
 #include <QMap>
 #include <QList>
 #include <QByteArray>
+#include <QThread>
 #include <atomic>
 
 namespace poppy::network {
@@ -75,6 +76,7 @@ private:
                          uint64_t generation);
 
     std::atomic<uint64_t> m_generation{0};
+    QThread* m_worker{nullptr};
 };
 
 } // namespace poppy::network

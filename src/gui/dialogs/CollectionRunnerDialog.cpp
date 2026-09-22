@@ -339,7 +339,7 @@ void CollectionRunnerDialog::executeNextRequest() {
     if (!m_dataRows.isEmpty() && currentIter < m_dataRows.size()) {
         const auto& rowData = m_dataRows[currentIter];
         for (auto it = rowData.begin(); it != rowData.end(); ++it) {
-            m_activeEnv.addOrUpdateVariable(it.key(), it.value(), false, true);
+            m_activeEnv.setVariableValue(it.key(), it.value());
         }
     }
 
@@ -370,7 +370,7 @@ void CollectionRunnerDialog::executeNextRequest() {
             m_summaryLabel->setText(QString("Run stopped on pre-request script error at request #%1").arg(row + 1));
             return;
         }
-        executeNextRequest();
+        QTimer::singleShot(0, this, &CollectionRunnerDialog::executeNextRequest);
         return;
     }
 
@@ -396,7 +396,9 @@ void CollectionRunnerDialog::executeNextRequest() {
 
         // Post-response script
         QString postErr;
-        m_scriptRunner->runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, m_activeEnv, &postErr);
+        if (!m_scriptRunner->runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, m_activeEnv, &postErr)) {
+            if (postErr.isEmpty()) postErr = QStringLiteral("Post-response script failed");
+        }
 
         // Run JavaScript tests
         core::TestReport report = m_scriptRunner->runTests(resolvedReq.scripts.tests, resolvedReq, res, m_activeEnv);
@@ -410,7 +412,7 @@ void CollectionRunnerDialog::executeNextRequest() {
         m_totalTests += report.totalCount();
         m_passedTests += report.passedCount();
 
-        bool success = res.isHttpSuccess() && (report.failedCount() == 0);
+        bool success = res.isHttpSuccess() && (report.failedCount() == 0) && postErr.isEmpty();
         if (success) ++m_passedRequests;
 
         // Status code cell
@@ -428,6 +430,13 @@ void CollectionRunnerDialog::executeNextRequest() {
         testsItem->setForeground((report.failedCount() == 0) ? QColor("#10b981") : QColor("#ef4444"));
         m_resultsTable->setItem(row, 5, testsItem);
 
+        if (!postErr.isEmpty()) {
+            auto* errItem = m_resultsTable->item(row, 5);
+            if (errItem) {
+                errItem->setToolTip(postErr);
+            }
+        }
+
         ++m_currentIndex;
         m_progressBar->setValue(m_currentIndex);
 
@@ -441,7 +450,7 @@ void CollectionRunnerDialog::executeNextRequest() {
         if (delay > 0) {
             QTimer::singleShot(delay, this, &CollectionRunnerDialog::executeNextRequest);
         } else {
-            executeNextRequest();
+            QTimer::singleShot(0, this, &CollectionRunnerDialog::executeNextRequest);
         }
     });
 }

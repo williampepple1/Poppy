@@ -91,6 +91,15 @@ int main(int argc, char* argv[]) {
     assert(report.results[3].passed == false);
     assert(!report.results[3].errorMessage.isEmpty());
 
+    QString headerScript = R"(
+        poppy.setEnvVar("ct", res.getHeader("Content-Type"));
+        poppy.setEnvVar("missing", res.getHeader("X-None"));
+    )";
+    bool headerOk = runner.runPostResponseScript(headerScript, req, res, env);
+    assert(headerOk);
+    assert(env.variableValue("ct") == "application/json");
+    assert(env.variableValue("missing").isEmpty());
+
     std::cout << "test_script_runner PASSED!" << std::endl;
     return 0;
 }

@@ -190,6 +190,11 @@ void EnvironmentDialog::addEnvironment() {
         m_envs.append(core::EnvironmentModel(name));
         populateEnvList();
         m_envListWidget->setCurrentRow(m_envs.size() - 1);
+        if (!m_rootPath.isEmpty()) {
+            QDir dir(m_rootPath);
+            dir.mkpath(QStringLiteral("environments"));
+            m_envs.last().saveToEnvFile(dir.filePath("environments/" + name + ".env"));
+        }
         emit environmentsModified();
     }
 }

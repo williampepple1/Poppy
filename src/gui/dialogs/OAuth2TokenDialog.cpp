@@ -9,6 +9,8 @@
 #include <QTcpSocket>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QCryptographicHash>
+#include <QRandomGenerator>
 
 namespace poppy::gui {
 
@@ -162,12 +164,22 @@ void OAuth2TokenDialog::startAuthCodeFlow() {
         return;
     }
 
+    QByteArray verifierBytes(32, 0);
+    for (int i = 0; i < verifierBytes.size(); ++i) {
+        verifierBytes[i] = static_cast<char>(QRandomGenerator::global()->bounded(256));
+    }
+    m_codeVerifier = QString::fromLatin1(verifierBytes.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals));
+    const QByteArray challenge = QCryptographicHash::hash(m_codeVerifier.toLatin1(), QCryptographicHash::Sha256)
+        .toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+
     // Build Authorization URL with query parameters
     QUrl url(authUrl);
     QUrlQuery query(url.query());
     query.addQueryItem("response_type", "code");
     query.addQueryItem("client_id", m_clientIdEdit->text().trimmed());
     query.addQueryItem("redirect_uri", QString("http://127.0.0.1:%1/callback").arg(port));
+    query.addQueryItem("code_challenge", QString::fromLatin1(challenge));
+    query.addQueryItem("code_challenge_method", "S256");
     if (!m_scopeEdit->text().trimmed().isEmpty()) {
         query.addQueryItem("scope", m_scopeEdit->text().trimmed());
     }
@@ -250,6 +262,9 @@ void OAuth2TokenDialog::exchangeCodeForToken(const QString& code) {
     bodyParts.append("redirect_uri=" + QUrl::toPercentEncoding(QString("http://127.0.0.1:%1/callback").arg(port)));
     bodyParts.append("client_id=" + QUrl::toPercentEncoding(m_clientIdEdit->text().trimmed()));
     bodyParts.append("client_secret=" + QUrl::toPercentEncoding(m_clientSecretEdit->text().trimmed()));
+    if (!m_codeVerifier.isEmpty()) {
+        bodyParts.append("code_verifier=" + QUrl::toPercentEncoding(m_codeVerifier));
+    }
     req.bodyContent = bodyParts.join('&');
 
     core::ResponseModel res = m_engine ? m_engine->sendRequestSync(req) : core::ResponseModel{};

@@ -5,6 +5,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTimer>
+#include <algorithm>
 
 namespace poppy::core {
 
@@ -16,14 +17,44 @@ CollectionItem::~CollectionItem() {
 }
 
 void CollectionItem::appendChild(CollectionItem* child) {
-    if (child) {
-        child->setParent(this);
+    insertChild(-1, child);
+}
+
+void CollectionItem::insertChild(int index, CollectionItem* child) {
+    if (!child) return;
+    child->setParent(this);
+    if (index < 0 || index > m_children.size()) {
         m_children.append(child);
+    } else {
+        m_children.insert(index, child);
     }
 }
 
 void CollectionItem::removeChild(CollectionItem* child) {
     m_children.removeOne(child);
+}
+
+int CollectionItem::seq() const {
+    if (m_request) return m_request->seq;
+    return m_seq;
+}
+
+void CollectionItem::setSeq(int seq) {
+    m_seq = seq;
+    if (m_request) {
+        m_request->seq = seq;
+    }
+}
+
+void CollectionItem::sortChildrenBySeq() {
+    std::stable_sort(m_children.begin(), m_children.end(), [](const CollectionItem* a, const CollectionItem* b) {
+        if (!a || !b) return a != nullptr;
+        if (a->seq() != b->seq()) return a->seq() < b->seq();
+        return a->name().localeAwareCompare(b->name()) < 0;
+    });
+    for (auto* child : m_children) {
+        child->sortChildrenBySeq();
+    }
 }
 
 void CollectionItem::setRequest(const RequestModel& req) {
@@ -103,7 +134,12 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
             auto* folderItem = new CollectionItem(CollectionItemType::Folder, dirName, entry.canonicalFilePath());
             QString folderBru = QDir(entry.canonicalFilePath()).filePath(QStringLiteral("folder.bru"));
             if (QFile::exists(folderBru)) {
-                folderItem->setVariables(BruParser::parseVarsFile(folderBru));
+                QFile fb(folderBru);
+                if (fb.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    const QString folderContent = QString::fromUtf8(fb.readAll());
+                    folderItem->setVariables(BruParser::parseVars(folderContent));
+                    folderItem->setSeq(BruParser::parseMetaSeq(folderContent, 1));
+                }
             }
             parentItem->appendChild(folderItem);
             m_fileWatcher.addPath(entry.canonicalFilePath());
@@ -112,15 +148,20 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
             const QString fileName = entry.fileName();
             // Bruno folder/collection metadata files are not requests
             if (fileName.compare(QLatin1String("folder.bru"), Qt::CaseInsensitive) == 0) continue;
-            if (fileName.compare(QLatin1String("collection.bru"), Qt::CaseInsensitive) == 0) continue;
+            if (fileName.compare(QLatin1String("collection.bru"), Qt::CaseInsensitive) == 0) {
+                parentItem->setVariables(BruParser::parseVarsFile(entry.canonicalFilePath()));
+                continue;
+            }
 
             RequestModel req = BruParser::parseFile(entry.canonicalFilePath());
             QString reqName = req.name.isEmpty() ? entry.completeBaseName() : req.name;
             auto* reqItem = new CollectionItem(CollectionItemType::Request, reqName, entry.canonicalFilePath());
             reqItem->setRequest(req);
+            reqItem->setSeq(req.seq);
             parentItem->appendChild(reqItem);
         }
     }
+    parentItem->sortChildrenBySeq();
 }
 
 void CollectionModel::reloadEnvironments() {
@@ -145,6 +186,29 @@ void CollectionModel::reloadEnvironments() {
 
         m_environments.append(env);
     }
+}
+
+bool CollectionModel::saveEnvironment(const EnvironmentModel& env) {
+    if (m_rootPath.isEmpty() || env.name().trimmed().isEmpty()) return false;
+    suppressDiskWatcher();
+    QDir dir(m_rootPath);
+    if (!dir.mkpath(QStringLiteral("environments"))) return false;
+    const QString envPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".env"));
+    const QString secretPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".secret.env"));
+    bool ok = env.saveToEnvFile(envPath);
+    env.saveSecretsToEnvFile(secretPath);
+    bool found = false;
+    for (auto& existing : m_environments) {
+        if (existing.name() == env.name()) {
+            existing = env;
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        m_environments.append(env);
+    }
+    return ok;
 }
 
 CollectionItem* CollectionModel::addRequest(CollectionItem* parent, const QString& name, const RequestModel& req) {
@@ -201,7 +265,7 @@ bool CollectionModel::saveFolderVariables(CollectionItem* folder) {
         return false;
     }
     suppressDiskWatcher();
-    return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables());
+    return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables(), folder->seq());
 }
 
 void CollectionModel::notifyItemTreeDeleted(CollectionItem* item) {
@@ -290,14 +354,32 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
     return true;
 }
 
-bool CollectionModel::moveItem(CollectionItem* item, CollectionItem* newParent) {
+bool CollectionModel::moveItem(CollectionItem* item, CollectionItem* newParent, int insertIndex) {
     if (!item || item == m_rootItem.get()) return false;
     if (!newParent) newParent = m_rootItem.get();
     if (!newParent || newParent->type() == CollectionItemType::Request) return false;
-    if (item->parent() == newParent) return true;
 
     for (auto* p = newParent; p; p = p->parent()) {
         if (p == item) return false;
+    }
+
+    CollectionItem* oldParent = item->parent();
+    const bool sameParent = (oldParent == newParent);
+
+    auto clampIndex = [&](int idx, int count) {
+        if (idx < 0 || idx > count) return count;
+        return idx;
+    };
+
+    if (sameParent) {
+        const int oldIndex = oldParent->children().indexOf(item);
+        if (oldIndex < 0) return false;
+        oldParent->removeChild(item);
+        const int dest = clampIndex(insertIndex, oldParent->children().size());
+        oldParent->insertChild(dest, item);
+        persistSiblingOrder(oldParent);
+        emit itemModified(item);
+        return true;
     }
 
     const QString oldPath = item->path();
@@ -314,10 +396,11 @@ bool CollectionModel::moveItem(CollectionItem* item, CollectionItem* newParent) 
     }
     if (!renamed) return false;
 
-    if (item->parent()) {
-        item->parent()->removeChild(item);
+    if (oldParent) {
+        oldParent->removeChild(item);
     }
-    newParent->appendChild(item);
+    const int dest = clampIndex(insertIndex, newParent->children().size());
+    newParent->insertChild(dest, item);
 
     const QString canonicalDest = QFileInfo(destPath).canonicalFilePath();
     item->setPath(canonicalDest.isEmpty() ? destPath : canonicalDest);
@@ -329,8 +412,25 @@ bool CollectionModel::moveItem(CollectionItem* item, CollectionItem* newParent) 
         m_fileWatcher.addPath(item->path());
     }
 
+    if (oldParent) persistSiblingOrder(oldParent);
+    persistSiblingOrder(newParent);
     emit itemModified(item);
     return true;
+}
+
+void CollectionModel::persistSiblingOrder(CollectionItem* parent) {
+    if (!parent) return;
+    suppressDiskWatcher();
+    const auto kids = parent->children();
+    for (int i = 0; i < kids.size(); ++i) {
+        auto* child = kids[i];
+        child->setSeq(i + 1);
+        if (child->type() == CollectionItemType::Request) {
+            saveRequest(child);
+        } else {
+            saveFolderVariables(child);
+        }
+    }
 }
 
 CollectionItem* CollectionModel::findItemByPath(const QString& path) const {

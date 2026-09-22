@@ -19,6 +19,11 @@ GrpcClient::GrpcClient(QObject* parent)
 
 GrpcClient::~GrpcClient() {
     cancel();
+    if (m_worker) {
+        m_worker->wait(16000);
+        delete m_worker;
+        m_worker = nullptr;
+    }
 }
 
 void GrpcClient::cancel() {
@@ -172,6 +177,9 @@ static size_t grpcHeaderCallback(void* ptr, size_t size, size_t nmemb, void* use
             QString k = line.left(colon).trimmed().toLower();
             QString v = line.mid(colon + 1).trimmed();
             response->responseHeaders[k] = v;
+            if (k.startsWith("grpc-")) {
+                response->responseTrailers[k] = v;
+            }
 
             if (k == "grpc-status") {
                 response->statusCode = v.toInt();
@@ -194,11 +202,16 @@ void GrpcClient::invokeUnary(const QString& endpoint,
     emit callStarted();
     const uint64_t generation = ++m_generation;
 
-    auto* thread = QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation]() {
+    if (m_worker) {
+        m_worker->wait(16000);
+        delete m_worker;
+        m_worker = nullptr;
+    }
+
+    m_worker = QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation]() {
         executeHttp2Call(endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation);
     });
-    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
-    thread->start();
+    m_worker->start();
 }
 
 void GrpcClient::executeHttp2Call(const QString& endpoint,

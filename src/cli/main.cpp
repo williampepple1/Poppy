@@ -17,6 +17,7 @@
 #include <core/assertions/DeclarativeAssertion.h>
 #include <network/CurlNetworkEngine.h>
 #include <QThread>
+#include <QUuid>
 #include <thread>
 #include <atomic>
 #include <vector>
@@ -37,13 +38,14 @@ static QString jsonValueToString(const QJsonValue& val) {
     return val.toString();
 }
 
-void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list) {
+void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list, QList<QMap<QString, QString>>& folderVars) {
     if (!item) return;
     if (item->type() == core::CollectionItemType::Request && item->request()) {
         list.append(*item->request());
+        folderVars.append(item->effectiveVariables());
     }
     for (auto* child : item->children()) {
-        collectRequests(child, list);
+        collectRequests(child, list, folderVars);
     }
 }
 
@@ -63,6 +65,8 @@ SuiteResult executeCliRequest(
     const core::RequestModel& req,
     core::EnvironmentModel& env,
     const QMap<QString, QString>& fixtureRow,
+    const QMap<QString, QString>& folderVars,
+    const QMap<QString, QString>& collectionVars,
     network::CurlNetworkEngine& engine,
     core::ScriptRunner& scriptRunner,
     int iter,
@@ -70,6 +74,8 @@ SuiteResult executeCliRequest(
 ) {
     core::VariableResolver resolver;
     resolver.setEnvironment(env);
+    resolver.setCollectionVariables(collectionVars);
+    resolver.setFolderVariables(folderVars);
     for (auto it = fixtureRow.constBegin(); it != fixtureRow.constEnd(); ++it) {
         resolver.setRuntimeVariable(it.key(), it.value());
     }
@@ -223,6 +229,7 @@ int main(int argc, char *argv[]) {
 
     core::CollectionModel collection;
     QList<core::RequestModel> requestsToRun;
+    QList<QMap<QString, QString>> folderVarsToRun;
 
     QFileInfo fi(collectionPath);
     if (!fi.exists()) {
@@ -235,10 +242,11 @@ int main(int argc, char *argv[]) {
             std::cerr << "Error: Could not open collection directory." << std::endl;
             return 1;
         }
-        collectRequests(collection.rootItem(), requestsToRun);
+        collectRequests(collection.rootItem(), requestsToRun, folderVarsToRun);
     } else if (fi.isFile() && fi.suffix().toLower() == "bru") {
         core::RequestModel single = core::BruParser::parseFile(collectionPath);
         requestsToRun.append(single);
+        folderVarsToRun.append(QMap<QString, QString>());
         QDir dir = fi.absoluteDir();
         for (int up = 0; up < 8; ++up) {
             if (QDir(dir.filePath(QStringLiteral("environments"))).exists()
@@ -253,6 +261,11 @@ int main(int argc, char *argv[]) {
     if (requestsToRun.isEmpty()) {
         std::cout << "No requests found in target path." << std::endl;
         return 0;
+    }
+
+    QMap<QString, QString> collectionVars;
+    if (collection.rootItem()) {
+        collectionVars = collection.rootItem()->variables();
     }
 
     // Resolve environment
@@ -362,7 +375,7 @@ int main(int argc, char *argv[]) {
                     QThread::msleep(delayMs);
                 }
                 SuiteResult sr = executeCliRequest(requestsToRun[i], activeEnv, fixtureForIter(iter),
-                                                   engine, scriptRunner, iter, iterations);
+                                                   folderVarsToRun.value(i), collectionVars, engine, scriptRunner, iter, iterations);
                 recordResult(sr, i + 1, requestsToRun.size());
             }
         }
@@ -372,6 +385,10 @@ int main(int argc, char *argv[]) {
         std::atomic<int> nextJob{0};
         auto worker = [&]() {
             network::CurlNetworkEngine localEngine;
+            localEngine.setCookieJarPath(QDir::temp().filePath(
+                QStringLiteral("poppy_cookies_%1_%2.txt")
+                    .arg(QCoreApplication::applicationPid())
+                    .arg(QUuid::createUuid().toString(QUuid::Id128))));
             core::ScriptRunner localScripts;
             while (true) {
                 const int job = nextJob.fetch_add(1);
@@ -380,7 +397,7 @@ int main(int argc, char *argv[]) {
                 const int i = job % requestsToRun.size();
                 core::EnvironmentModel envCopy = activeEnv;
                 ordered[static_cast<size_t>(job)] = executeCliRequest(
-                    requestsToRun[i], envCopy, fixtureForIter(iter),
+                    requestsToRun[i], envCopy, fixtureForIter(iter), folderVarsToRun.value(i), collectionVars,
                     localEngine, localScripts, iter, iterations);
             }
         };

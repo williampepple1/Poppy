@@ -177,12 +177,13 @@ bool BruWriter::writeToFile(const QString& filePath, const RequestModel& req) {
     return true;
 }
 
-QString BruWriter::serializeFolder(const QString& name, const QMap<QString, QString>& vars) {
+QString BruWriter::serializeFolder(const QString& name, const QMap<QString, QString>& vars, int seq) {
     QString out;
     QTextStream ts(&out);
     ts << "meta {\n";
     ts << "  name: " << (name.isEmpty() ? QStringLiteral("folder") : name) << "\n";
     ts << "  type: folder\n";
+    ts << "  seq: " << (seq > 0 ? seq : 1) << "\n";
     ts << "}\n\n";
     if (!vars.isEmpty()) {
         ts << "vars {\n";
@@ -194,7 +195,7 @@ QString BruWriter::serializeFolder(const QString& name, const QMap<QString, QStr
     return out;
 }
 
-bool BruWriter::writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars) {
+bool BruWriter::writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars, int seq) {
     QDir dir(dirPath);
     if (!dir.exists() && !dir.mkpath(".")) {
         return false;
@@ -204,7 +205,7 @@ bool BruWriter::writeFolderFile(const QString& dirPath, const QString& name, con
         return false;
     }
     QTextStream out(&file);
-    out << serializeFolder(name, vars);
+    out << serializeFolder(name, vars, seq);
     return true;
 }
 

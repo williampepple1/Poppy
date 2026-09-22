@@ -116,6 +116,31 @@ int main(int argc, char* argv[]) {
 
     QFile::remove(tmpFile);
 
+    RequestModel secretReq;
+    secretReq.name = "Login";
+    secretReq.url = "https://api.example.com/login";
+    secretReq.auth.type = AuthType::Bearer;
+    secretReq.auth.bearerToken = "super-secret-token";
+    secretReq.auth.basicPassword = "hunter2";
+    secretReq.auth.awsSecretKey = "aws-secret";
+    ResponseModel secretRes;
+    secretRes.statusCode = 200;
+    HistoryManager secretMgr;
+    secretMgr.setAutoSave(false);
+    secretMgr.addEntry(secretReq, secretRes);
+    QString secretFile = QDir::tempPath() + "/poppy_test_history_secrets.json";
+    QFile::remove(secretFile);
+    assert(secretMgr.saveToFile(secretFile));
+    QFile disk(secretFile);
+    assert(disk.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString saved = QString::fromUtf8(disk.readAll());
+    disk.close();
+    assert(!saved.contains("super-secret-token"));
+    assert(!saved.contains("hunter2"));
+    assert(!saved.contains("aws-secret"));
+    assert(saved.contains("***"));
+    QFile::remove(secretFile);
+
     std::cout << "test_history_manager PASSED!" << std::endl;
     return 0;
 }

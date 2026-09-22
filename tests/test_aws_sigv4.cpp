@@ -66,6 +66,33 @@ int main() {
     }
     assert(effHasAuth);
 
+    RequestModel jsonReq = req;
+    jsonReq.method = HttpMethod::POST;
+    jsonReq.bodyType = BodyType::Json;
+    jsonReq.bodyContent = QStringLiteral("{\"ok\":true}");
+    auto jsonAuth = AwsSigV4Signer::generateAuthHeaders(jsonReq);
+    bool signedContentType = false;
+    for (const auto& h : jsonAuth) {
+        if (h.name.compare("Authorization", Qt::CaseInsensitive) == 0) {
+            assert(h.value.contains("content-type"));
+            signedContentType = true;
+        }
+    }
+    assert(signedContentType);
+    auto jsonEff = jsonReq.effectiveHeaders();
+    bool effHasCt = false;
+    for (const auto& h : jsonEff) {
+        if (h.enabled && h.name.compare("Content-Type", Qt::CaseInsensitive) == 0) {
+            effHasCt = true;
+        }
+    }
+    assert(effHasCt);
+
+    RequestModel pathReq = req;
+    pathReq.url = "https://example.execute-api.us-east-1.amazonaws.com/prod/foo bar";
+    auto pathHeaders = AwsSigV4Signer::generateAuthHeaders(pathReq);
+    assert(!pathHeaders.isEmpty());
+
     RequestModel gqlReq;
     gqlReq.method = HttpMethod::POST;
     gqlReq.url = req.url;

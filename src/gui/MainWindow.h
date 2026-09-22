@@ -96,6 +96,9 @@ private:
     void updateTopEnvCombo();
     void rebindOpenTabs();
     void updateSessionTelemetryWidget();
+    void refreshEnvironmentUi();
+    core::EnvironmentModel* mutableActiveEnvironment();
+    void persistActiveEnvironment();
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -105,14 +108,19 @@ private:
 
     // Active state & Tab management
     struct OpenTabInfo {
+        quint64 tabId{0};
         core::CollectionItem* item{nullptr};
         QString itemPath;
         core::RequestModel request;
         bool isDirty{false};
         bool isPinned{false};
+        core::ResponseModel lastResponse;
+        core::TestReport lastReport;
+        bool hasResponse{false};
     };
     QList<OpenTabInfo> m_openTabs;
     int m_currentTabIndex{-1};
+    quint64 m_nextTabId{1};
     class QTabBar* m_openRequestsTabBar{nullptr};
     QTimer* m_autoSaveTimer{nullptr};
     bool m_loadingUi{false};

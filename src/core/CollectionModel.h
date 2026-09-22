@@ -33,7 +33,12 @@ public:
 
     const QList<CollectionItem*>& children() const { return m_children; }
     void appendChild(CollectionItem* child);
+    void insertChild(int index, CollectionItem* child);
     void removeChild(CollectionItem* child);
+    void sortChildrenBySeq();
+
+    int seq() const;
+    void setSeq(int seq);
 
     RequestModel* request() { return m_request.get(); }
     const RequestModel* request() const { return m_request.get(); }
@@ -65,6 +70,7 @@ private:
     QList<CollectionItem*> m_children;
     std::unique_ptr<RequestModel> m_request;
     QMap<QString, QString> m_variables;
+    int m_seq{1};
 };
 
 class CollectionModel : public QObject {
@@ -89,13 +95,14 @@ public:
     bool saveFolderVariables(CollectionItem* folder);
     bool deleteItem(CollectionItem* item);
     bool renameItem(CollectionItem* item, const QString& newName);
-    bool moveItem(CollectionItem* item, CollectionItem* newParent);
+    bool moveItem(CollectionItem* item, CollectionItem* newParent, int insertIndex = -1);
     CollectionItem* findItemByPath(const QString& path) const;
 
     // Environments discovered in collection
     const QList<EnvironmentModel>& environments() const { return m_environments; }
     QList<EnvironmentModel>& environments() { return m_environments; }
     void reloadEnvironments();
+    bool saveEnvironment(const EnvironmentModel& env);
 
 signals:
     void collectionAboutToReload();
@@ -108,6 +115,7 @@ private:
     void scanDirectory(const QString& dirPath, CollectionItem* parentItem);
     void notifyItemTreeDeleted(CollectionItem* item);
     void rewriteDescendantPaths(CollectionItem* item, const QString& oldPrefix, const QString& newPrefix);
+    void persistSiblingOrder(CollectionItem* parent);
     CollectionItem* findItemByPathRecursive(CollectionItem* item, const QString& canonicalPath) const;
     void scheduleReloadFromDisk();
     void suppressDiskWatcher();

@@ -48,6 +48,7 @@ private:
 
     QTcpServer* m_server{nullptr};
     QHash<QTcpSocket*, QByteArray> m_callbackBuffers;
+    QString m_codeVerifier;
 };
 
 } // namespace poppy::gui

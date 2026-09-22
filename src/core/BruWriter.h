@@ -10,8 +10,8 @@ class BruWriter {
 public:
     static QString serialize(const RequestModel& req);
     static bool writeToFile(const QString& filePath, const RequestModel& req);
-    static QString serializeFolder(const QString& name, const QMap<QString, QString>& vars);
-    static bool writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars);
+    static QString serializeFolder(const QString& name, const QMap<QString, QString>& vars, int seq = 1);
+    static bool writeFolderFile(const QString& dirPath, const QString& name, const QMap<QString, QString>& vars, int seq = 1);
 
     // Strip characters illegal on Windows (and other reserved names) so
     // imported request files actually land on disk.

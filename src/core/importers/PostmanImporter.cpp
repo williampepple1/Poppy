@@ -59,8 +59,23 @@ RequestModel PostmanImporter::parsePostmanItem(const QJsonObject& itemObj) {
     QJsonObject bodyObj = reqObj.value("body").toObject();
     QString mode = bodyObj.value("mode").toString();
     if (mode == "raw") {
-        req.bodyType = BodyType::Json;
+        QString language = bodyObj.value("options").toObject()
+            .value("raw").toObject()
+            .value("language").toString().toLower();
+        if (language == "xml") {
+            req.bodyType = BodyType::Xml;
+        } else if (language == "graphql") {
+            req.bodyType = BodyType::GraphQL;
+            req.graphqlQuery = bodyObj.value("raw").toString();
+        } else if (language == "text" || language == "html" || language == "javascript") {
+            req.bodyType = BodyType::Text;
+        } else {
+            req.bodyType = BodyType::Json;
+        }
         req.bodyContent = bodyObj.value("raw").toString();
+        if (req.bodyType == BodyType::GraphQL && req.graphqlQuery.isEmpty()) {
+            req.graphqlQuery = req.bodyContent;
+        }
     } else if (mode == "urlencoded") {
         req.bodyType = BodyType::FormUrlEncoded;
         QStringList pairs;

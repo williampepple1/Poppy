@@ -48,13 +48,28 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
         payloadHash = QString::fromLatin1(QCryptographicHash::hash(bodyBytes, QCryptographicHash::Sha256).toHex());
     }
 
-    // 2. Canonical headers
+    // 2. Canonical headers — include user headers and the Content-Type
+    // effectiveHeaders() will send, so the signature matches the wire request.
     QMap<QString, QString> headersToSign;
     headersToSign["host"] = host;
     headersToSign["x-amz-date"] = amzDate;
     headersToSign["x-amz-content-sha256"] = payloadHash;
     if (!req.auth.awsSessionToken.isEmpty()) {
         headersToSign["x-amz-security-token"] = req.auth.awsSessionToken;
+    }
+    for (const auto& h : req.headers) {
+        if (!h.enabled || h.name.trimmed().isEmpty()) continue;
+        headersToSign[h.name.trimmed().toLower()] = h.value.trimmed();
+    }
+    QString autoContentType;
+    if ((req.bodyType == BodyType::Json && !req.bodyContent.trimmed().isEmpty()) ||
+        req.bodyType == BodyType::GraphQL) {
+        autoContentType = QStringLiteral("application/json");
+    } else if (req.bodyType == BodyType::FormUrlEncoded) {
+        autoContentType = QStringLiteral("application/x-www-form-urlencoded");
+    }
+    if (!autoContentType.isEmpty() && !headersToSign.contains(QStringLiteral("content-type"))) {
+        headersToSign[QStringLiteral("content-type")] = autoContentType;
     }
 
     QString canonicalHeaders;
@@ -66,7 +81,9 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
     QString signedHeaders = signedHeadersList.join(';');
 
     // 3. Canonical URI & Query string
-    QString canonicalUri = url.path().isEmpty() ? "/" : url.path();
+    QString canonicalUri = url.path(QUrl::FullyEncoded);
+    if (canonicalUri.isEmpty()) canonicalUri = QStringLiteral("/");
+    if (!canonicalUri.startsWith('/')) canonicalUri.prepend('/');
     
     // Sort query parameters
     QUrlQuery query(url.query());
@@ -110,6 +127,18 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
     authHeaders.append(HttpHeader{.name = "X-Amz-Content-Sha256", .value = payloadHash, .enabled = true});
     if (!req.auth.awsSessionToken.isEmpty()) {
         authHeaders.append(HttpHeader{.name = "X-Amz-Security-Token", .value = req.auth.awsSessionToken, .enabled = true});
+    }
+    if (!autoContentType.isEmpty()) {
+        bool hasCt = false;
+        for (const auto& h : req.headers) {
+            if (h.enabled && h.name.compare("Content-Type", Qt::CaseInsensitive) == 0) {
+                hasCt = true;
+                break;
+            }
+        }
+        if (!hasCt) {
+            authHeaders.append(HttpHeader{.name = "Content-Type", .value = autoContentType, .enabled = true});
+        }
     }
 
     return authHeaders;

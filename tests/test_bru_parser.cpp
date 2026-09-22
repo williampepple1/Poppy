@@ -2,13 +2,16 @@
 #include <cassert>
 #include <core/BruParser.h>
 #include <core/BruWriter.h>
+#include <core/CollectionModel.h>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
+#include <QCoreApplication>
 
 using namespace poppy::core;
 
-int main() {
+int main(int argc, char* argv[]) {
+    QCoreApplication app(argc, argv);
     std::cout << "Running test_bru_parser..." << std::endl;
 
     QString bruSample = R"(meta {
@@ -125,6 +128,17 @@ tests {
     assert(QDir::cleanPath(reused) == QDir::cleanPath(existing.fileName()));
     QString other = BruWriter::uniqueFilePath(tmp.path(), "Get_User", ".bru");
     assert(QDir::cleanPath(other) != QDir::cleanPath(existing.fileName()));
+
+    QTemporaryDir collDir;
+    assert(collDir.isValid());
+    QFile collBru(collDir.filePath("collection.bru"));
+    assert(collBru.open(QIODevice::WriteOnly | QIODevice::Text));
+    collBru.write("meta {\n  name: Vars Collection\n}\n\nvars {\n  baseUrl: https://api.example.com\n}\n");
+    collBru.close();
+    CollectionModel coll;
+    assert(coll.openDirectory(collDir.path()));
+    assert(coll.rootItem());
+    assert(coll.rootItem()->variables().value("baseUrl") == "https://api.example.com");
 
     std::cout << "test_bru_parser PASSED!" << std::endl;
     return 0;

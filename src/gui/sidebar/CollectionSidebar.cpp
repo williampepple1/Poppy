@@ -272,7 +272,8 @@ void CollectionSidebar::onTreeItemDropped(QTreeWidgetItem* widget) {
         refreshTree();
         return;
     }
-    if (!m_model->moveItem(item, newParent)) {
+    int insertIndex = parentWidget ? parentWidget->indexOfChild(widget) : m_tree->indexOfTopLevelItem(widget);
+    if (!m_model->moveItem(item, newParent, insertIndex)) {
         refreshTree();
     }
 }

@@ -7,6 +7,9 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QThread>
+#include <atomic>
+#include <thread>
 
 namespace poppy::core {
 
@@ -32,6 +35,43 @@ private:
 
 ScriptRunner::ScriptRunner(QObject* parent) : QObject(parent) {}
 
+namespace {
+
+QJSValue evaluateWithTimeout(QJSEngine& engine, const QString& script, int timeoutMs, QString* outError) {
+    std::atomic<bool> finished{false};
+    std::thread watchdog([&engine, &finished, timeoutMs]() {
+        const int sliceMs = 50;
+        int waited = 0;
+        while (waited < timeoutMs) {
+            if (finished.load()) return;
+            QThread::msleep(static_cast<unsigned long>(sliceMs));
+            waited += sliceMs;
+        }
+        if (!finished.load()) {
+            engine.setInterrupted(true);
+        }
+    });
+
+    QJSValue result = engine.evaluate(script);
+    finished.store(true);
+    watchdog.join();
+    const bool timedOut = engine.isInterrupted()
+        || (result.isError() && result.toString().contains(QLatin1String("interrupted"), Qt::CaseInsensitive));
+    engine.setInterrupted(false);
+
+    if (timedOut) {
+        if (outError) {
+            *outError = QStringLiteral("Script timed out after %1 ms").arg(timeoutMs);
+        }
+        return QJSValue();
+    }
+    return result;
+}
+
+constexpr int kScriptTimeoutMs = 8000;
+
+} // namespace
+
 void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const RequestModel& req, const ResponseModel* res) {
     // 1. ScriptBridge for poppy object
     auto* bridge = new ScriptBridge(&env, &engine);
@@ -53,6 +93,13 @@ void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const 
         resObj.setProperty("responseTime", static_cast<double>(res->latencyMs));
         resObj.setProperty("bodyRaw", res->bodyAsString());
 
+        QJSValue headerObj = engine.newObject();
+        for (const auto& h : res->headers) {
+            if (!h.enabled || h.name.isEmpty()) continue;
+            headerObj.setProperty(h.name, h.value);
+        }
+        resObj.setProperty("headers", headerObj);
+
         // Parse JSON body into JS object if JSON
         if (res->isJson()) {
             QJsonDocument doc = QJsonDocument::fromJson(res->rawBody);
@@ -73,6 +120,15 @@ void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const 
                 res.getStatus = function() { return res.status; };
                 res.getBody = function() { return res.body; };
                 res.getResponseTime = function() { return res.responseTime; };
+                res.getHeader = function(name) {
+                    if (!name) return "";
+                    var want = String(name).toLowerCase();
+                    var headers = res.headers || {};
+                    for (var key in headers) {
+                        if (String(key).toLowerCase() === want) return headers[key];
+                    }
+                    return "";
+                };
             })
         )";
         QJSValue resHelper = engine.evaluate(resHelperScript);
@@ -165,7 +221,10 @@ bool ScriptRunner::runPreRequestScript(const QString& script, RequestModel& req,
     QJSEngine engine;
     setupSandbox(engine, env, req, nullptr);
 
-    QJSValue result = engine.evaluate(script);
+    QJSValue result = evaluateWithTimeout(engine, script, kScriptTimeoutMs, outError);
+    if (outError && !outError->isEmpty()) {
+        return false;
+    }
     if (result.isError()) {
         if (outError) {
             *outError = QString("Line %1: %2").arg(result.property("lineNumber").toInt()).arg(result.toString());
@@ -182,7 +241,10 @@ bool ScriptRunner::runPostResponseScript(const QString& script, const RequestMod
     QJSEngine engine;
     setupSandbox(engine, env, req, &res);
 
-    QJSValue result = engine.evaluate(script);
+    QJSValue result = evaluateWithTimeout(engine, script, kScriptTimeoutMs, outError);
+    if (outError && !outError->isEmpty()) {
+        return false;
+    }
     if (result.isError()) {
         if (outError) {
             *outError = QString("Line %1: %2").arg(result.property("lineNumber").toInt()).arg(result.toString());
@@ -203,7 +265,17 @@ TestReport ScriptRunner::runTests(const QString& testScript, const RequestModel&
     totalTimer.start();
 
     // 1. Evaluate tests script to register all test() callbacks
-    QJSValue evalResult = engine.evaluate(testScript);
+    QString timeoutErr;
+    QJSValue evalResult = evaluateWithTimeout(engine, testScript, kScriptTimeoutMs, &timeoutErr);
+    if (!timeoutErr.isEmpty()) {
+        TestCaseResult timeoutResult;
+        timeoutResult.name = "Test Script Timeout";
+        timeoutResult.passed = false;
+        timeoutResult.errorMessage = timeoutErr;
+        report.results.append(timeoutResult);
+        report.totalDurationMs = totalTimer.elapsed();
+        return report;
+    }
     if (evalResult.isError()) {
         TestCaseResult syntaxErr;
         syntaxErr.name = "Test Script Compilation";

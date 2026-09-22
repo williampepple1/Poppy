@@ -38,6 +38,8 @@ void WebSocketClient::open(const QUrl& url, const QMap<QString, QString>& custom
     m_headers = customHeaders;
     m_handshakeDone = false;
     m_rxBuffer.clear();
+    m_fragmentBuffer.clear();
+    m_fragmentOpcode = 0;
 
     QString scheme = url.scheme().toLower();
     bool isSecure = (scheme == "wss" || scheme == "https");

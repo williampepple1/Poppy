@@ -94,24 +94,28 @@ QJsonObject requestToJson(const RequestModel& req) {
     }
     ro["formDataParams"] = formArr;
 
+    auto redact = [](const QString& value) {
+        return value.isEmpty() ? QString() : QStringLiteral("***");
+    };
+
     QJsonObject auth;
     auth["type"] = static_cast<int>(req.auth.type);
-    auth["bearerToken"] = req.auth.bearerToken;
+    auth["bearerToken"] = redact(req.auth.bearerToken);
     auth["basicUsername"] = req.auth.basicUsername;
-    auth["basicPassword"] = req.auth.basicPassword;
+    auth["basicPassword"] = redact(req.auth.basicPassword);
     auth["apiKeyName"] = req.auth.apiKeyName;
-    auth["apiKeyValue"] = req.auth.apiKeyValue;
+    auth["apiKeyValue"] = redact(req.auth.apiKeyValue);
     auth["apiKeyPlacement"] = req.auth.apiKeyPlacement;
-    auth["oauth2AccessToken"] = req.auth.oauth2AccessToken;
+    auth["oauth2AccessToken"] = redact(req.auth.oauth2AccessToken);
     auth["awsAccessKey"] = req.auth.awsAccessKey;
-    auth["awsSecretKey"] = req.auth.awsSecretKey;
-    auth["awsSessionToken"] = req.auth.awsSessionToken;
+    auth["awsSecretKey"] = redact(req.auth.awsSecretKey);
+    auth["awsSessionToken"] = redact(req.auth.awsSessionToken);
     auth["awsRegion"] = req.auth.awsRegion;
     auth["awsService"] = req.auth.awsService;
     auth["digestUsername"] = req.auth.digestUsername;
-    auth["digestPassword"] = req.auth.digestPassword;
+    auth["digestPassword"] = redact(req.auth.digestPassword);
     auth["ntlmUsername"] = req.auth.ntlmUsername;
-    auth["ntlmPassword"] = req.auth.ntlmPassword;
+    auth["ntlmPassword"] = redact(req.auth.ntlmPassword);
     auth["ntlmDomain"] = req.auth.ntlmDomain;
     auth["ntlmWorkstation"] = req.auth.ntlmWorkstation;
     ro["auth"] = auth;

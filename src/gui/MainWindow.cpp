@@ -78,6 +78,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_currentRequest.method = core::HttpMethod::GET;
     m_currentRequest.url = "https://httpbin.org/get";
     OpenTabInfo initTab;
+    initTab.tabId = ++m_nextTabId;
     initTab.request = m_currentRequest;
     m_openTabs.append(initTab);
     m_openRequestsTabBar->addTab("Quick Request");
@@ -484,6 +485,8 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
         m_openRequestsTabBar->setTabText(0, item->name());
         m_activeItem = item;
         loadRequestIntoUi(*item->request());
+        m_openTabs[0].hasResponse = false;
+        m_responseInspector->clear();
         return;
     }
 
@@ -493,6 +496,7 @@ void MainWindow::onRequestSelected(core::CollectionItem* item) {
     }
 
     OpenTabInfo newTab;
+    newTab.tabId = ++m_nextTabId;
     newTab.item = item;
     newTab.itemPath = item->path();
     newTab.request = *item->request();
@@ -515,6 +519,11 @@ void MainWindow::onTabChanged(int index) {
     m_currentTabIndex = index;
     m_activeItem = m_openTabs[index].item;
     loadRequestIntoUi(m_openTabs[index].request);
+    if (m_openTabs[index].hasResponse) {
+        m_responseInspector->setResponse(m_openTabs[index].lastResponse, &m_openTabs[index].lastReport);
+    } else {
+        m_responseInspector->clear();
+    }
 }
 
 void MainWindow::onTabMoved(int from, int to) {
@@ -644,6 +653,7 @@ void MainWindow::closeTab(int index) {
         quickReq.method = core::HttpMethod::GET;
         quickReq.url = "https://httpbin.org/get";
         OpenTabInfo quickTab;
+        quickTab.tabId = ++m_nextTabId;
         quickTab.request = quickReq;
         m_openTabs.append(quickTab);
         m_openRequestsTabBar->addTab("Quick Request");
@@ -684,6 +694,7 @@ void MainWindow::onNewRequest() {
     newReq.url = "";
 
     OpenTabInfo tabInfo;
+    tabInfo.tabId = ++m_nextTabId;
     tabInfo.item = nullptr;
     tabInfo.request = newReq;
     tabInfo.isDirty = false;
@@ -853,6 +864,7 @@ void MainWindow::onImport() {
     connect(&dlg, &ImportDialog::collectionImported, this, [this](const QString& dirPath) {
         m_collectionModel.openDirectory(dirPath);
         m_sidebar->refreshTree();
+        refreshEnvironmentUi();
         statusBar()->showMessage("Collection imported successfully!", 3000);
     });
     dlg.exec();
@@ -875,78 +887,83 @@ void MainWindow::onRunCollection() {
 
 void MainWindow::onManageEnvironments() {
     EnvironmentDialog dlg(m_collectionModel.environments(), m_activeEnvName, m_collectionModel.rootPath(), this);
-    if (dlg.exec() == QDialog::Accepted) {
-        bool found = false;
-        for (const auto& env : m_collectionModel.environments()) {
-            if (env.name() == m_activeEnvName) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            m_activeEnvName.clear();
-            m_sidebar->setActiveEnvironment(QString());
-        }
-        m_sidebar->updateEnvironmentsCombo();
-        updateTopEnvCombo();
-        updateUrlVariableInspection();
-    }
+    connect(&dlg, &EnvironmentDialog::environmentsModified, this, &MainWindow::refreshEnvironmentUi);
+    dlg.exec();
+    refreshEnvironmentUi();
 }
 
 void MainWindow::onSendClicked() {
     saveUiIntoRequest(m_currentRequest);
-    m_networkEngine.cancelAll();
 
-    // 1. Get active environment model
-    core::EnvironmentModel activeEnv(m_activeEnvName);
-    for (const auto& env : m_collectionModel.environments()) {
-        if (env.name() == m_activeEnvName) {
-            activeEnv = env;
-            break;
-        }
-    }
+    core::EnvironmentModel* liveEnv = mutableActiveEnvironment();
+    core::EnvironmentModel scratch(m_activeEnvName);
+    core::EnvironmentModel& activeEnv = liveEnv ? *liveEnv : scratch;
 
-    // 2. Variable resolution
-    core::VariableResolver resolver = currentVariableResolver();
-    core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
-
-    // 3. Pre-request script
+    core::RequestModel toSend = m_currentRequest;
     QString scriptErr;
-    if (!m_scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, activeEnv, &scriptErr)) {
+    if (!m_scriptRunner.runPreRequestScript(toSend.scripts.preRequestScript, toSend, activeEnv, &scriptErr)) {
         QMessageBox::warning(this, "Pre-request Script Error", scriptErr);
         return;
     }
+    persistActiveEnvironment();
 
-    // 4. Update UI to Sending state
+    core::VariableResolver resolver = currentVariableResolver();
+    core::RequestModel resolvedReq = resolver.resolveRequest(toSend);
+
+    m_networkEngine.cancelAll();
+
     m_sendBtn->setEnabled(false);
     m_sendBtn->setText("Sending...");
 
     const quint64 sendGen = ++m_sendGeneration;
-    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, activeEnv, sendGen](const core::ResponseModel& res) mutable {
+    const quint64 sentTabId = (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size())
+        ? m_openTabs[m_currentTabIndex].tabId : 0;
+    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, sendGen, sentTabId](const core::ResponseModel& res) mutable {
         QPointer<MainWindow> self(this);
-        if (!self || sendGen != self->m_sendGeneration) return;
+        if (!self) return;
 
-        m_sendBtn->setEnabled(true);
-        m_sendBtn->setText("Send");
+        if (sendGen == self->m_sendGeneration) {
+            m_sendBtn->setEnabled(true);
+            m_sendBtn->setText("Send");
+        }
+        if (sendGen != self->m_sendGeneration) return;
 
-        // 6. Post-response script
+        core::EnvironmentModel* live = mutableActiveEnvironment();
+        core::EnvironmentModel scratchEnv(m_activeEnvName);
+        core::EnvironmentModel& envForScripts = live ? *live : scratchEnv;
+
         QString postErr;
-        m_scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, activeEnv, &postErr);
+        if (!m_scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, envForScripts, &postErr)) {
+            if (postErr.isEmpty()) postErr = QStringLiteral("Post-response script failed");
+        }
+        persistActiveEnvironment();
 
-        // 7. Tests & Declarative Assertions
-        core::TestReport report = m_scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, activeEnv);
+        core::TestReport report = m_scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, envForScripts);
         auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
         for (const auto& dr : declResults) {
             report.results.append(dr);
         }
 
-        // 8. Update Response Inspector
-        m_responseInspector->setResponse(res, &report);
+        int targetTab = -1;
+        for (int i = 0; i < m_openTabs.size(); ++i) {
+            if (m_openTabs[i].tabId == sentTabId) {
+                targetTab = i;
+                break;
+            }
+        }
+        if (targetTab >= 0) {
+            m_openTabs[targetTab].lastResponse = res;
+            m_openTabs[targetTab].lastReport = report;
+            m_openTabs[targetTab].hasResponse = true;
+            if (m_currentTabIndex == targetTab) {
+                m_responseInspector->setResponse(res, &report);
+            }
+        } else if (m_currentTabIndex < 0) {
+            m_responseInspector->setResponse(res, &report);
+        }
 
-        // 9. Add to History
         m_historyManager.addEntry(resolvedReq, res);
 
-        // 10. Session Network Telemetry Accounting
         m_sessionReqCount++;
         qint64 bytes = res.sizeBytes > 0 ? res.sizeBytes : res.rawBody.size();
         m_sessionBytesReceived += bytes;
@@ -955,6 +972,10 @@ void MainWindow::onSendClicked() {
             m_sessionErrorCount++;
         }
         updateSessionTelemetryWidget();
+
+        if (!postErr.isEmpty()) {
+            QMessageBox::warning(this, "Post-response Script Error", postErr);
+        }
     });
 }
 
@@ -1189,10 +1210,46 @@ core::VariableResolver MainWindow::currentVariableResolver() const {
         }
     }
     resolver.setEnvironment(activeEnv);
+    if (m_collectionModel.rootItem()) {
+        resolver.setCollectionVariables(m_collectionModel.rootItem()->variables());
+    }
     if (m_activeItem) {
         resolver.setFolderVariables(m_activeItem->effectiveVariables());
     }
     return resolver;
+}
+
+void MainWindow::refreshEnvironmentUi() {
+    bool found = m_activeEnvName.isEmpty();
+    for (const auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            found = true;
+            break;
+        }
+    }
+    if (!found) {
+        m_activeEnvName.clear();
+        m_sidebar->setActiveEnvironment(QString());
+    }
+    m_sidebar->updateEnvironmentsCombo();
+    updateTopEnvCombo();
+    updateUrlVariableInspection();
+}
+
+core::EnvironmentModel* MainWindow::mutableActiveEnvironment() {
+    if (m_activeEnvName.isEmpty()) return nullptr;
+    for (auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            return &env;
+        }
+    }
+    return nullptr;
+}
+
+void MainWindow::persistActiveEnvironment() {
+    core::EnvironmentModel* live = mutableActiveEnvironment();
+    if (!live) return;
+    m_collectionModel.saveEnvironment(*live);
 }
 
 void MainWindow::onGenerateDocumentation() {
@@ -1376,6 +1433,19 @@ void MainWindow::updateTopEnvCombo() {
     }
     m_topEnvCombo->setCurrentIndex(selectIdx);
     m_topEnvCombo->blockSignals(false);
+    if (selectIdx == 0 && !m_activeEnvName.isEmpty()) {
+        bool found = false;
+        for (const auto& env : m_collectionModel.environments()) {
+            if (env.name() == m_activeEnvName) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            m_activeEnvName.clear();
+            m_sidebar->setActiveEnvironment(QString());
+        }
+    }
 }
 
 static QString formatTelemetryBytes(qint64 bytes) {
@@ -1510,8 +1580,10 @@ void MainWindow::onFindAndReplace() {
             if (!tab.item) {
                 tab.item = m_collectionModel.findItemByPath(tab.itemPath);
             }
-            if (tab.item && tab.item->request() && !tab.isDirty) {
+            if (tab.item && tab.item->request()) {
                 tab.request = *tab.item->request();
+                tab.isDirty = false;
+                updateTabTitle(i);
             }
         }
         if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
