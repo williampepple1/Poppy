@@ -3,6 +3,7 @@
 #include <QUuid>
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <optional>
 
 namespace poppy::core {
 
@@ -94,15 +95,19 @@ QString VariableResolver::resolveString(const QString& input) const {
     while (matchIterator.hasNext()) {
         auto match = matchIterator.next();
         QString varName = match.captured(1).trimmed();
-        
-        // Lookup
-        QString resolved = lookupVariable(varName);
-        if (!resolved.isEmpty()) {
-            // Replace in result
+
+        std::optional<QString> resolved;
+        QString scoped;
+        QString value = lookupVariableWithScope(varName, &scoped);
+        if (scoped != "Unresolved") {
+            resolved = value;
+        }
+
+        if (resolved) {
             int matchStart = match.capturedStart(0) + offset;
             int matchLength = match.capturedLength(0);
-            result.replace(matchStart, matchLength, resolved);
-            offset += (resolved.length() - matchLength);
+            result.replace(matchStart, matchLength, *resolved);
+            offset += (resolved->length() - matchLength);
         }
     }
 
@@ -130,6 +135,14 @@ RequestModel VariableResolver::resolveRequest(const RequestModel& req) const {
     }
 
     res.bodyContent = resolveString(req.bodyContent);
+    res.graphqlQuery = resolveString(req.graphqlQuery);
+    res.graphqlVariables = resolveString(req.graphqlVariables);
+    res.proxy = resolveString(req.proxy);
+
+    for (auto& p : res.formDataParams) {
+        p.key = resolveString(p.key);
+        p.value = resolveString(p.value);
+    }
 
     res.auth.bearerToken = resolveString(req.auth.bearerToken);
     res.auth.basicUsername = resolveString(req.auth.basicUsername);
@@ -137,6 +150,17 @@ RequestModel VariableResolver::resolveRequest(const RequestModel& req) const {
     res.auth.apiKeyName = resolveString(req.auth.apiKeyName);
     res.auth.apiKeyValue = resolveString(req.auth.apiKeyValue);
     res.auth.oauth2AccessToken = resolveString(req.auth.oauth2AccessToken);
+    res.auth.awsAccessKey = resolveString(req.auth.awsAccessKey);
+    res.auth.awsSecretKey = resolveString(req.auth.awsSecretKey);
+    res.auth.awsSessionToken = resolveString(req.auth.awsSessionToken);
+    res.auth.awsRegion = resolveString(req.auth.awsRegion);
+    res.auth.awsService = resolveString(req.auth.awsService);
+    res.auth.digestUsername = resolveString(req.auth.digestUsername);
+    res.auth.digestPassword = resolveString(req.auth.digestPassword);
+    res.auth.ntlmUsername = resolveString(req.auth.ntlmUsername);
+    res.auth.ntlmPassword = resolveString(req.auth.ntlmPassword);
+    res.auth.ntlmDomain = resolveString(req.auth.ntlmDomain);
+    res.auth.ntlmWorkstation = resolveString(req.auth.ntlmWorkstation);
 
     return res;
 }

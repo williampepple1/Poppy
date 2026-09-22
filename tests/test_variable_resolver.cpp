@@ -40,6 +40,35 @@ int main() {
     assert(resolvedReq.headers[0].value == "Bearer secret123");
     assert(resolvedReq.bodyContent == "{\"user\": \"99\"}");
 
+    // Empty-but-defined variables must still be substituted
+    env.addOrUpdateVariable("emptyHost", "");
+    resolver.setEnvironment(env);
+    QString emptyResolved = resolver.resolveString("https://api/{{emptyHost}}/x");
+    assert(emptyResolved == "https://api//x");
+
+    // GraphQL + form + AWS fields are resolved
+    RequestModel gqlReq;
+    gqlReq.bodyType = BodyType::GraphQL;
+    gqlReq.graphqlQuery = "query { user(id: \"{{userId}}\") { name } }";
+    gqlReq.graphqlVariables = "{\"token\":\"{{token}}\"}";
+    gqlReq.formDataParams.append(FormDataParam{.key = "k", .value = "{{token}}", .isFile = false, .enabled = true});
+    gqlReq.auth.awsAccessKey = "{{token}}";
+    RequestModel gqlResolved = resolver.resolveRequest(gqlReq);
+    assert(gqlResolved.graphqlQuery.contains("99"));
+    assert(gqlResolved.graphqlVariables.contains("secret123"));
+    assert(gqlResolved.formDataParams[0].value == "secret123");
+    assert(gqlResolved.auth.awsAccessKey == "secret123");
+
+    RequestModel pathReq;
+    pathReq.url = "https://api.test.com/users/:id";
+    pathReq.pathParams.append(HttpParam{.key = "id", .value = "a b", .enabled = true});
+    assert(pathReq.effectiveUrl().contains("a%20b"));
+
+    RequestModel formReq;
+    formReq.bodyType = BodyType::FormUrlEncoded;
+    formReq.bodyContent = "q=hello world";
+    assert(QString::fromUtf8(formReq.effectiveBody()).contains("hello%20world"));
+
     std::cout << "test_variable_resolver PASSED!" << std::endl;
     return 0;
 }

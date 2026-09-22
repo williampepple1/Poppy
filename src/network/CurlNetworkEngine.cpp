@@ -7,16 +7,27 @@
 #include <QDir>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QMutexLocker>
 #include <mutex>
 
 namespace poppy::network {
 
 namespace {
     std::once_flag curlInitOnce;
+    std::mutex g_curlShareMutex;
+
     void ensureCurlInitialized() {
         std::call_once(curlInitOnce, []() {
             curl_global_init(CURL_GLOBAL_DEFAULT);
         });
+    }
+
+    void shareLock(CURL*, curl_lock_data, curl_lock_access, void*) {
+        g_curlShareMutex.lock();
+    }
+
+    void shareUnlock(CURL*, curl_lock_data, void*) {
+        g_curlShareMutex.unlock();
     }
 
     size_t headerCallback(char* buffer, size_t size, size_t nitems, void* userdata) {
@@ -44,23 +55,38 @@ namespace {
         }
         return totalBytes;
     }
+
+    struct CancelContext {
+        std::atomic<uint64_t>* generation{nullptr};
+        uint64_t expected{0};
+    };
+
+    int xferInfoCallback(void* clientp, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
+        auto* ctx = static_cast<CancelContext*>(clientp);
+        if (ctx && ctx->generation && ctx->generation->load() != ctx->expected) {
+            return 1;
+        }
+        return 0;
+    }
 }
 
 class RequestTask : public QRunnable {
 public:
     RequestTask(CurlNetworkEngine* engine,
                 const core::RequestModel& req,
-                CompletionCallback onComplete,
-                ProgressCallback onProgress)
-        : m_engine(engine), m_req(req), m_onComplete(std::move(onComplete)), m_onProgress(std::move(onProgress)) {
+                uint64_t generation,
+                CompletionCallback onComplete)
+        : m_engine(engine), m_req(req), m_generation(generation), m_onComplete(std::move(onComplete)) {
         setAutoDelete(true);
     }
 
     void run() override {
         if (!m_engine) return;
-        core::ResponseModel res = m_engine->sendRequestSync(m_req);
+        core::ResponseModel res = m_engine->executeCurl(m_req, m_generation, nullptr);
+        if (!m_engine->isGenerationCurrent(m_generation)) {
+            return;
+        }
 
-        // Deliver result back on the engine's Qt thread
         QPointer<CurlNetworkEngine> safeEngine = m_engine;
         auto callback = m_onComplete;
         QMetaObject::invokeMethod(m_engine, [safeEngine, res, callback]() {
@@ -76,42 +102,155 @@ public:
 private:
     CurlNetworkEngine* m_engine;
     core::RequestModel m_req;
+    uint64_t m_generation;
     CompletionCallback m_onComplete;
-    ProgressCallback m_onProgress;
 };
 
 CurlNetworkEngine::CurlNetworkEngine(QObject* parent) : QObject(parent) {
     ensureCurlInitialized();
     m_threadPool.setMaxThreadCount(8);
+
+    auto* share = curl_share_init();
+    if (share) {
+        curl_share_setopt(share, CURLSHOPT_SHARE, CURL_LOCK_DATA_COOKIE);
+        curl_share_setopt(share, CURLSHOPT_LOCKFUNC, shareLock);
+        curl_share_setopt(share, CURLSHOPT_UNLOCKFUNC, shareUnlock);
+        m_cookieShare = share;
+    }
 }
 
 CurlNetworkEngine::~CurlNetworkEngine() {
     cancelAll();
     m_threadPool.waitForDone();
+    if (m_cookieShare) {
+        curl_share_cleanup(static_cast<CURLSH*>(m_cookieShare));
+        m_cookieShare = nullptr;
+    }
 }
 
 void CurlNetworkEngine::cancelAll() {
-    m_cancelled = true;
+    m_cancelGeneration.fetch_add(1);
     m_threadPool.clear();
+}
+
+bool CurlNetworkEngine::isGenerationCurrent(uint64_t generation) const {
+    return m_cancelGeneration.load() == generation;
+}
+
+void CurlNetworkEngine::setSslVerifyPeer(bool verify) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_sslVerifyPeer = verify;
+}
+bool CurlNetworkEngine::sslVerifyPeer() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_sslVerifyPeer;
+}
+
+void CurlNetworkEngine::setTimeoutMs(long ms) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_timeoutMs = ms;
+}
+long CurlNetworkEngine::timeoutMs() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_timeoutMs;
+}
+
+void CurlNetworkEngine::setProxy(const QString& proxy) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_proxy = proxy;
+}
+QString CurlNetworkEngine::proxy() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_proxy;
+}
+
+void CurlNetworkEngine::setCookieJarEnabled(bool enabled) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_cookieJarEnabled = enabled;
+}
+bool CurlNetworkEngine::cookieJarEnabled() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_cookieJarEnabled;
+}
+
+void CurlNetworkEngine::setCookieJarPath(const QString& path) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_cookieJarPath = path;
+}
+QString CurlNetworkEngine::cookieJarPath() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_cookieJarPath;
+}
+
+void CurlNetworkEngine::setClientCertPath(const QString& path) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_clientCertPath = path;
+}
+QString CurlNetworkEngine::clientCertPath() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_clientCertPath;
+}
+
+void CurlNetworkEngine::setClientCertType(const QString& type) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_clientCertType = type;
+}
+QString CurlNetworkEngine::clientCertType() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_clientCertType;
+}
+
+void CurlNetworkEngine::setClientKeyPath(const QString& path) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_clientKeyPath = path;
+}
+QString CurlNetworkEngine::clientKeyPath() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_clientKeyPath;
+}
+
+void CurlNetworkEngine::setClientKeyPassword(const QString& pass) {
+    QMutexLocker lock(&m_settingsMutex);
+    m_clientKeyPassword = pass;
+}
+QString CurlNetworkEngine::clientKeyPassword() const {
+    QMutexLocker lock(&m_settingsMutex);
+    return m_clientKeyPassword;
+}
+
+CurlNetworkEngine::SettingsSnapshot CurlNetworkEngine::snapshotSettings() const {
+    QMutexLocker lock(&m_settingsMutex);
+    SettingsSnapshot snap;
+    snap.sslVerifyPeer = m_sslVerifyPeer;
+    snap.timeoutMs = m_timeoutMs;
+    snap.proxy = m_proxy;
+    snap.cookieJarEnabled = m_cookieJarEnabled;
+    snap.cookieJarPath = m_cookieJarPath;
+    snap.clientCertPath = m_clientCertPath;
+    snap.clientCertType = m_clientCertType;
+    snap.clientKeyPath = m_clientKeyPath;
+    snap.clientKeyPassword = m_clientKeyPassword;
+    return snap;
 }
 
 void CurlNetworkEngine::sendRequestAsync(
     const core::RequestModel& req,
     CompletionCallback onComplete,
-    ProgressCallback onProgress
+    ProgressCallback /*onProgress*/
 ) {
-    m_cancelled = false;
     emit requestStarted();
-    auto* task = new RequestTask(this, req, std::move(onComplete), std::move(onProgress));
+    const uint64_t generation = m_cancelGeneration.load();
+    auto* task = new RequestTask(this, req, generation, std::move(onComplete));
     m_threadPool.start(task);
 }
 
 core::ResponseModel CurlNetworkEngine::sendRequestSync(const core::RequestModel& req) {
-    return executeCurl(req, nullptr);
+    return executeCurl(req, m_cancelGeneration.load(), nullptr);
 }
 
-core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req, ProgressCallback /*onProgress*/) {
+core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req, uint64_t generation, ProgressCallback /*onProgress*/) {
     core::ResponseModel response;
+    const SettingsSnapshot settings = snapshotSettings();
 
     CURL* curl = curl_easy_init();
     if (!curl) {
@@ -119,7 +258,6 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         return response;
     }
 
-    // 1. URL
     QString effectiveUrl = req.effectiveUrl();
     if (effectiveUrl.isEmpty()) {
         response.errorString = "URL is empty";
@@ -127,8 +265,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         return response;
     }
 
-    // Default to http:// if scheme missing
-    if (!effectiveUrl.startsWith("http://", Qt::CaseInsensitive) && 
+    if (!effectiveUrl.startsWith("http://", Qt::CaseInsensitive) &&
         !effectiveUrl.startsWith("https://", Qt::CaseInsensitive)) {
         effectiveUrl = "http://" + effectiveUrl;
     }
@@ -136,8 +273,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     QByteArray urlBytes = effectiveUrl.toUtf8();
     curl_easy_setopt(curl, CURLOPT_URL, urlBytes.constData());
 
-    // 2. HTTP Method
-    QString methodStr = core::methodToString(req.method);
+    QByteArray methodBytes = core::methodToString(req.method).toUtf8();
     if (req.method == core::HttpMethod::GET) {
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
     } else if (req.method == core::HttpMethod::POST) {
@@ -145,69 +281,64 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     } else if (req.method == core::HttpMethod::HEAD) {
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     } else {
-        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, methodStr.toUtf8().constData());
+        curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, methodBytes.constData());
     }
 
-    // 3. Headers
     struct curl_slist* headerList = nullptr;
+    QList<QByteArray> headerStorage;
     for (const auto& h : req.effectiveHeaders()) {
         if (!h.enabled || h.name.isEmpty()) continue;
-        QByteArray headerLine = (h.name + ": " + h.value).toUtf8();
-        headerList = curl_slist_append(headerList, headerLine.constData());
+        headerStorage.append((h.name + ": " + h.value).toUtf8());
+        headerList = curl_slist_append(headerList, headerStorage.last().constData());
     }
     if (headerList) {
         curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headerList);
     }
 
-    // 4. Request Body
     curl_mime* mime = nullptr;
     QByteArray bodyBytes;
-    if (req.bodyType == core::BodyType::GraphQL) {
-        QJsonObject gqlObj;
-        gqlObj["query"] = req.graphqlQuery;
-        if (!req.graphqlVariables.trimmed().isEmpty()) {
-            QJsonDocument vDoc = QJsonDocument::fromJson(req.graphqlVariables.toUtf8());
-            if (vDoc.isObject()) {
-                gqlObj["variables"] = vDoc.object();
-            }
-        }
-        bodyBytes = QJsonDocument(gqlObj).toJson(QJsonDocument::Compact);
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
-    } else if (req.bodyType == core::BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
+    QList<QByteArray> mimeStorage;
+    if (req.bodyType == core::BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
         mime = curl_mime_init(curl);
         for (const auto& p : req.formDataParams) {
             if (!p.enabled || p.key.isEmpty()) continue;
             curl_mimepart* part = curl_mime_addpart(mime);
-            curl_mime_name(part, p.key.toUtf8().constData());
+            mimeStorage.append(p.key.toUtf8());
+            curl_mime_name(part, mimeStorage.last().constData());
             if (p.isFile) {
-                curl_mime_filedata(part, p.value.toUtf8().constData());
+                mimeStorage.append(p.value.toUtf8());
+                curl_mime_filedata(part, mimeStorage.last().constData());
             } else {
-                curl_mime_data(part, p.value.toUtf8().constData(), CURL_ZERO_TERMINATED);
+                mimeStorage.append(p.value.toUtf8());
+                curl_mime_data(part, mimeStorage.last().constData(), CURL_ZERO_TERMINATED);
             }
         }
         curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
-    } else if (req.bodyType != core::BodyType::None && !req.bodyContent.isEmpty()) {
-        bodyBytes = req.bodyContent.toUtf8();
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
-    } else if (req.method == core::HttpMethod::POST || req.method == core::HttpMethod::PUT || req.method == core::HttpMethod::PATCH) {
-        curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
+    } else {
+        bodyBytes = req.effectiveBody();
+        if (!bodyBytes.isEmpty()) {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
+        } else if (req.method == core::HttpMethod::POST || req.method == core::HttpMethod::PUT || req.method == core::HttpMethod::PATCH) {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
+        }
     }
 
-    // 5. Callbacks for response
     curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, headerCallback);
     curl_easy_setopt(curl, CURLOPT_HEADERDATA, &response.headers);
-
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response.rawBody);
 
-    // 6. Redirects & SSL
+    CancelContext cancelCtx{&m_cancelGeneration, generation};
+    curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, xferInfoCallback);
+    curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &cancelCtx);
+    curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
+
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
     curl_easy_setopt(curl, CURLOPT_CERTINFO, 1L);
 
-    if (m_sslVerifyPeer) {
+    if (settings.sslVerifyPeer) {
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
     } else {
@@ -215,28 +346,31 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     }
 
-    // 7. Timeouts & Proxy
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, m_timeoutMs);
+    curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, settings.timeoutMs);
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, 10000L);
 
-    QString effectiveProxy = !req.proxy.trimmed().isEmpty() ? req.proxy.trimmed() : m_proxy;
+    QString effectiveProxy = !req.proxy.trimmed().isEmpty() ? req.proxy.trimmed() : settings.proxy;
+    QByteArray proxyBytes = effectiveProxy.toUtf8();
     if (!effectiveProxy.isEmpty()) {
-        curl_easy_setopt(curl, CURLOPT_PROXY, effectiveProxy.toUtf8().constData());
+        curl_easy_setopt(curl, CURLOPT_PROXY, proxyBytes.constData());
     }
 
-    // Cookie Jar
-    if (m_cookieJarEnabled) {
-        QString cpath = m_cookieJarPath.isEmpty() ? (QDir::tempPath() + "/poppy_cookies.txt") : m_cookieJarPath;
-        QByteArray pathBytes = cpath.toUtf8();
-        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, pathBytes.constData());
-        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, pathBytes.constData());
+    QByteArray cookiePathBytes;
+    if (settings.cookieJarEnabled) {
+        QString cpath = settings.cookieJarPath.isEmpty() ? (QDir::tempPath() + "/poppy_cookies.txt") : settings.cookieJarPath;
+        cookiePathBytes = cpath.toUtf8();
+        curl_easy_setopt(curl, CURLOPT_COOKIEJAR, cookiePathBytes.constData());
+        curl_easy_setopt(curl, CURLOPT_COOKIEFILE, cookiePathBytes.constData());
+        if (m_cookieShare) {
+            curl_easy_setopt(curl, CURLOPT_SHARE, static_cast<CURLSH*>(m_cookieShare));
+        }
     }
 
-    // Digest and NTLM Authentication
+    QByteArray userPwdBytes;
     if (req.auth.type == core::AuthType::Digest) {
         curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_DIGEST);
-        QString creds = req.auth.digestUsername + ":" + req.auth.digestPassword;
-        curl_easy_setopt(curl, CURLOPT_USERPWD, creds.toUtf8().constData());
+        userPwdBytes = (req.auth.digestUsername + ":" + req.auth.digestPassword).toUtf8();
+        curl_easy_setopt(curl, CURLOPT_USERPWD, userPwdBytes.constData());
     } else if (req.auth.type == core::AuthType::NTLM) {
         curl_easy_setopt(curl, CURLOPT_HTTPAUTH, CURLAUTH_NTLM);
         QString creds = req.auth.ntlmUsername;
@@ -244,31 +378,37 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
             creds = req.auth.ntlmDomain + "\\" + creds;
         }
         creds += ":" + req.auth.ntlmPassword;
-        curl_easy_setopt(curl, CURLOPT_USERPWD, creds.toUtf8().constData());
+        userPwdBytes = creds.toUtf8();
+        curl_easy_setopt(curl, CURLOPT_USERPWD, userPwdBytes.constData());
     }
 
-    // mTLS Client Certificates
-    if (!m_clientCertPath.isEmpty()) {
-        QByteArray certBytes = m_clientCertPath.toUtf8();
+    QByteArray certBytes = settings.clientCertPath.toUtf8();
+    QByteArray certTypeBytes = settings.clientCertType.toUtf8();
+    QByteArray keyBytes = settings.clientKeyPath.toUtf8();
+    QByteArray passBytes = settings.clientKeyPassword.toUtf8();
+    if (!settings.clientCertPath.isEmpty()) {
         curl_easy_setopt(curl, CURLOPT_SSLCERT, certBytes.constData());
-        if (!m_clientCertType.isEmpty()) {
-            QByteArray certTypeBytes = m_clientCertType.toUtf8();
+        if (!settings.clientCertType.isEmpty()) {
             curl_easy_setopt(curl, CURLOPT_SSLCERTTYPE, certTypeBytes.constData());
         }
-        if (!m_clientKeyPath.isEmpty()) {
-            QByteArray keyBytes = m_clientKeyPath.toUtf8();
+        if (!settings.clientKeyPath.isEmpty()) {
             curl_easy_setopt(curl, CURLOPT_SSLKEY, keyBytes.constData());
         }
-        if (!m_clientKeyPassword.isEmpty()) {
-            QByteArray passBytes = m_clientKeyPassword.toUtf8();
+        if (!settings.clientKeyPassword.isEmpty()) {
             curl_easy_setopt(curl, CURLOPT_KEYPASSWD, passBytes.constData());
         }
     }
 
-    // 8. Execute request
     CURLcode resCode = curl_easy_perform(curl);
 
-    // 9. Collect Telemetry
+    if (m_cancelGeneration.load() != generation) {
+        response.errorString = "Request cancelled";
+        if (mime) curl_mime_free(mime);
+        if (headerList) curl_slist_free_all(headerList);
+        curl_easy_cleanup(curl);
+        return response;
+    }
+
     long httpCode = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
     response.statusCode = static_cast<int>(httpCode);
@@ -316,7 +456,6 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         else response.statusText = QString::number(response.statusCode);
     }
 
-    // Protocol version
     long httpVer = 0;
     if (curl_easy_getinfo(curl, CURLINFO_HTTP_VERSION, &httpVer) == CURLE_OK) {
         if (httpVer == CURL_HTTP_VERSION_1_0) response.protocol = "HTTP/1.0";
@@ -326,7 +465,6 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         else response.protocol = "HTTP";
     }
 
-    // SSL Certificate Chain
     struct curl_certinfo* ci = nullptr;
     if (curl_easy_getinfo(curl, CURLINFO_CERTINFO, &ci) == CURLE_OK && ci) {
         for (int i = 0; i < ci->num_of_certs; ++i) {
@@ -341,7 +479,6 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         }
     }
 
-    // Cleanup
     if (mime) {
         curl_mime_free(mime);
     }
@@ -354,7 +491,10 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
 }
 
 void CurlNetworkEngine::clearCookies() {
-    QString cpath = m_cookieJarPath.isEmpty() ? (QDir::tempPath() + "/poppy_cookies.txt") : m_cookieJarPath;
+    QString cpath = cookieJarPath();
+    if (cpath.isEmpty()) {
+        cpath = QDir::tempPath() + "/poppy_cookies.txt";
+    }
     QFile::remove(cpath);
 }
 

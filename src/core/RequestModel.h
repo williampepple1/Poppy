@@ -154,6 +154,9 @@ public:
     // Computed effective URL after query and path parameter resolution
     QString effectiveUrl() const;
 
+    // Body bytes actually sent (GraphQL JSON envelope, encoded form, etc.)
+    QByteArray effectiveBody() const;
+
     // Compute effective headers with Auth headers injected
     QList<HttpHeader> effectiveHeaders() const;
 

@@ -47,6 +47,8 @@ bool CollectionModel::openDirectory(const QString& dirPath) {
     QDir dir(dirPath);
     if (!dir.exists()) return false;
 
+    emit collectionAboutToReload();
+
     m_rootPath = dir.canonicalPath();
     m_rootItem = std::make_unique<CollectionItem>(CollectionItemType::Collection, dir.dirName(), m_rootPath);
 
@@ -163,6 +165,15 @@ bool CollectionModel::saveRequest(CollectionItem* item) {
     return BruWriter::writeToFile(item->path(), *item->request());
 }
 
+void CollectionModel::notifyItemTreeDeleted(CollectionItem* item) {
+    if (!item) return;
+    const auto children = item->children();
+    for (auto* child : children) {
+        notifyItemTreeDeleted(child);
+    }
+    emit itemAboutToBeDeleted(item);
+}
+
 bool CollectionModel::deleteItem(CollectionItem* item) {
     if (!item || item == m_rootItem.get()) return false;
 
@@ -177,6 +188,7 @@ bool CollectionModel::deleteItem(CollectionItem* item) {
     if (item->parent()) {
         item->parent()->removeChild(item);
     }
+    notifyItemTreeDeleted(item);
     emit itemModified(nullptr);
     delete item;
     return true;

@@ -30,6 +30,7 @@ private slots:
 private:
     void populateEnvList();
     void populateVarsTable(int envIdx);
+    void applyTableToEnv(int envIdx);
 
     QList<core::EnvironmentModel>& m_envs;
     QString m_activeEnvName;

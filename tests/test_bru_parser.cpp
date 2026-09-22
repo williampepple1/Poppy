@@ -90,6 +90,20 @@ tests {
     assert(roundTrip.queryParams.size() == req.queryParams.size());
     assert(roundTrip.headers.size() == req.headers.size());
 
+    RequestModel multipart;
+    multipart.name = "Upload";
+    multipart.method = HttpMethod::POST;
+    multipart.url = "https://example.com/upload";
+    multipart.bodyType = BodyType::MultipartForm;
+    multipart.formDataParams.append(FormDataParam{.key = "title", .value = "hello", .isFile = false, .enabled = true});
+    multipart.formDataParams.append(FormDataParam{.key = "file", .value = "/tmp/a.txt", .isFile = true, .enabled = true});
+    QString mpSerialized = BruWriter::serialize(multipart);
+    RequestModel mpRoundTrip = BruParser::parse(mpSerialized);
+    assert(mpRoundTrip.bodyType == BodyType::MultipartForm);
+    assert(mpRoundTrip.formDataParams.size() == 2);
+    assert(mpRoundTrip.formDataParams[0].key == "title" && mpRoundTrip.formDataParams[0].value == "hello");
+    assert(mpRoundTrip.formDataParams[1].isFile && mpRoundTrip.formDataParams[1].value == "/tmp/a.txt");
+
     std::cout << "test_bru_parser PASSED!" << std::endl;
     return 0;
 }

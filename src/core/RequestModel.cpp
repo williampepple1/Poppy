@@ -3,6 +3,9 @@
 #include <QUuid>
 #include <QUrlQuery>
 #include <QRegularExpression>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
 
 namespace poppy::core {
 
@@ -93,8 +96,9 @@ QString RequestModel::effectiveUrl() const {
     // Substitute path params: :param or {param}
     for (const auto& param : pathParams) {
         if (!param.enabled || param.key.isEmpty()) continue;
-        resUrl.replace(":" + param.key, param.value);
-        resUrl.replace("{" + param.key + "}", param.value);
+        const QString encoded = QString::fromUtf8(QUrl::toPercentEncoding(param.value));
+        resUrl.replace(":" + param.key, encoded);
+        resUrl.replace("{" + param.key + "}", encoded);
     }
 
     // Append query params
@@ -115,6 +119,42 @@ QString RequestModel::effectiveUrl() const {
     }
 
     return resUrl;
+}
+
+QByteArray RequestModel::effectiveBody() const {
+    if (bodyType == BodyType::None) {
+        return {};
+    }
+    if (bodyType == BodyType::GraphQL) {
+        QJsonObject gqlObj;
+        gqlObj["query"] = graphqlQuery;
+        if (!graphqlVariables.trimmed().isEmpty()) {
+            QJsonDocument vDoc = QJsonDocument::fromJson(graphqlVariables.toUtf8());
+            if (vDoc.isObject()) {
+                gqlObj["variables"] = vDoc.object();
+            } else if (vDoc.isArray()) {
+                gqlObj["variables"] = vDoc.array();
+            }
+        }
+        return QJsonDocument(gqlObj).toJson(QJsonDocument::Compact);
+    }
+    if (bodyType == BodyType::FormUrlEncoded) {
+        QByteArray out;
+        const QStringList pairs = bodyContent.split('&');
+        for (const QString& pair : pairs) {
+            if (pair.isEmpty()) continue;
+            const int eq = pair.indexOf('=');
+            const QString key = eq >= 0 ? pair.left(eq) : pair;
+            const QString value = eq >= 0 ? pair.mid(eq + 1) : QString();
+            if (!out.isEmpty()) out += '&';
+            out += QUrl::toPercentEncoding(key) + '=' + QUrl::toPercentEncoding(value);
+        }
+        return out;
+    }
+    if (bodyType == BodyType::MultipartForm) {
+        return {};
+    }
+    return bodyContent.toUtf8();
 }
 
 QList<HttpHeader> RequestModel::effectiveHeaders() const {

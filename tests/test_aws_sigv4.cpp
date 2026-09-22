@@ -66,6 +66,17 @@ int main() {
     }
     assert(effHasAuth);
 
+    RequestModel gqlReq;
+    gqlReq.method = HttpMethod::POST;
+    gqlReq.url = req.url;
+    gqlReq.auth = req.auth;
+    gqlReq.bodyType = BodyType::GraphQL;
+    gqlReq.graphqlQuery = "query { user { id } }";
+    gqlReq.bodyContent = "this-is-not-the-graphql-envelope";
+    QByteArray sent = gqlReq.effectiveBody();
+    assert(QString::fromUtf8(sent).contains("query { user { id } }"));
+    assert(!QString::fromUtf8(sent).contains("this-is-not-the-graphql-envelope"));
+
     std::cout << "test_aws_sigv4 passed successfully!" << std::endl;
     return 0;
 }

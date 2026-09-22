@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QRegularExpression>
+#include <QPointer>
 #include <core/VariableResolver.h>
 #include <core/assertions/DeclarativeAssertion.h>
 #include <Theme.h>
@@ -204,6 +205,7 @@ void CollectionRunnerDialog::startRun() {
     m_passedTests = 0;
     m_totalDurationMs = 0;
     m_isRunning = true;
+    ++m_runGeneration;
 
     m_progressBar->setMaximum(m_queue.size());
     m_progressBar->setValue(0);
@@ -218,6 +220,10 @@ void CollectionRunnerDialog::startRun() {
 
 void CollectionRunnerDialog::stopRun() {
     m_isRunning = false;
+    ++m_runGeneration;
+    if (m_networkEngine) {
+        m_networkEngine->cancelAll();
+    }
     m_stopBtn->setEnabled(false);
     m_startBtn->setEnabled(true);
     m_closeBtn->setEnabled(true);
@@ -300,7 +306,10 @@ void CollectionRunnerDialog::loadDataFile(const QString& filePath) {
 }
 
 void CollectionRunnerDialog::executeNextRequest() {
-    if (!m_isRunning || m_currentIndex >= m_queue.size()) {
+    if (!m_isRunning) {
+        return;
+    }
+    if (m_currentIndex >= m_queue.size()) {
         m_isRunning = false;
         m_startBtn->setEnabled(true);
         m_stopBtn->setEnabled(false);
@@ -336,7 +345,28 @@ void CollectionRunnerDialog::executeNextRequest() {
 
     // Pre-request script
     QString preErr;
-    m_scriptRunner->runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, m_activeEnv, &preErr);
+    if (!m_scriptRunner->runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, m_activeEnv, &preErr)) {
+        m_resultsTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
+        auto* methodItem = new QTableWidgetItem(core::methodToString(resolvedReq.method));
+        methodItem->setForeground(Theme::methodColor(resolvedReq.method));
+        m_resultsTable->setItem(row, 1, methodItem);
+        QString displayName = (iters > 1) ? QString("[#%1] %2").arg(currentIter + 1).arg(resolvedReq.name) : resolvedReq.name;
+        m_resultsTable->setItem(row, 2, new QTableWidgetItem(displayName));
+        auto* statusItem = new QTableWidgetItem("Script Error");
+        statusItem->setForeground(QColor("#ef4444"));
+        m_resultsTable->setItem(row, 3, statusItem);
+        m_resultsTable->setItem(row, 5, new QTableWidgetItem(preErr));
+
+        ++m_currentIndex;
+        m_progressBar->setValue(m_currentIndex);
+        if (m_stopOnFailureChk->isChecked()) {
+            stopRun();
+            m_summaryLabel->setText(QString("Run stopped on pre-request script error at request #%1").arg(row + 1));
+            return;
+        }
+        executeNextRequest();
+        return;
+    }
 
     // Populate initial row info
     m_resultsTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
@@ -351,8 +381,10 @@ void CollectionRunnerDialog::executeNextRequest() {
     m_resultsTable->setItem(row, 3, new QTableWidgetItem("Running..."));
     m_resultsTable->scrollToBottom();
 
-    m_networkEngine->sendRequestAsync(resolvedReq, [this, row, resolvedReq](const core::ResponseModel& res) {
-        if (!m_isRunning) return;
+    const quint64 runGen = m_runGeneration;
+    m_networkEngine->sendRequestAsync(resolvedReq, [this, row, resolvedReq, runGen](const core::ResponseModel& res) {
+        QPointer<CollectionRunnerDialog> self(this);
+        if (!self || !m_isRunning || runGen != m_runGeneration) return;
 
         m_totalDurationMs += res.latencyMs;
 

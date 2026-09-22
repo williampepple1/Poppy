@@ -48,6 +48,7 @@ public:
 
 private:
     void setupSandbox(QJSEngine& engine, EnvironmentModel& env, const RequestModel& req, const ResponseModel* res);
+    void applyJsRequestMutations(QJSEngine& engine, RequestModel& req);
 };
 
 } // namespace poppy::core

@@ -94,12 +94,15 @@ public:
     void reloadEnvironments();
 
 signals:
+    void collectionAboutToReload();
     void collectionLoaded();
     void directoryChangedOnDisk(const QString& path);
     void itemModified(CollectionItem* item);
+    void itemAboutToBeDeleted(CollectionItem* item);
 
 private:
     void scanDirectory(const QString& dirPath, CollectionItem* parentItem);
+    void notifyItemTreeDeleted(CollectionItem* item);
 
     QString m_rootPath;
     std::unique_ptr<CollectionItem> m_rootItem;

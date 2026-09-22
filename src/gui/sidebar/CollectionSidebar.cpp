@@ -161,6 +161,15 @@ void CollectionSidebar::updateEnvironmentsCombo() {
     if (idx >= 0) m_envCombo->setCurrentIndex(idx);
 }
 
+void CollectionSidebar::setActiveEnvironment(const QString& name) {
+    if (!m_envCombo) return;
+    int idx = m_envCombo->findData(name);
+    if (idx < 0) return;
+    m_envCombo->blockSignals(true);
+    m_envCombo->setCurrentIndex(idx);
+    m_envCombo->blockSignals(false);
+}
+
 void CollectionSidebar::refreshTree() {
     m_tree->clear();
     updateEnvironmentsCombo();

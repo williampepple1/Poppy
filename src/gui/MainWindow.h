@@ -7,6 +7,7 @@
 #include <QTabWidget>
 #include <QSplitter>
 #include <QLabel>
+#include <QCloseEvent>
 #include <core/RequestModel.h>
 #include <core/ResponseModel.h>
 #include <core/CollectionModel.h>
@@ -31,6 +32,9 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+protected:
+    void closeEvent(QCloseEvent* event) override;
+
 private slots:
     void onNewRequest();
     void onQuickOpen();
@@ -51,8 +55,11 @@ private slots:
     void onMethodChanged(int index);
     void onOpenSettings();
     void onTabChanged(int index);
+    void onTabMoved(int from, int to);
     void onTabCloseRequested(int index);
     void onCloseCurrentTab();
+    void onItemAboutToBeDeleted(core::CollectionItem* item);
+    void onCollectionAboutToReload();
     void markCurrentTabDirty();
     void onHistoryItemSelected(const core::HistoryItem& item);
     void onManageCookies();
@@ -105,6 +112,8 @@ private:
     int m_currentTabIndex{-1};
     class QTabBar* m_openRequestsTabBar{nullptr};
     QTimer* m_autoSaveTimer{nullptr};
+    bool m_loadingUi{false};
+    quint64 m_sendGeneration{0};
 
     core::CollectionItem* m_activeItem{nullptr};
     core::RequestModel m_currentRequest;

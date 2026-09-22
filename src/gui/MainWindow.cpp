@@ -48,6 +48,8 @@
 #include <QTableWidget>
 #include <QDialogButtonBox>
 #include <QHeaderView>
+#include <QCloseEvent>
+#include <QPointer>
 #include <core/DocGenerator.h>
 #include <core/VariableResolver.h>
 
@@ -63,6 +65,11 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     setupUi();
     setupMenus();
+
+    connect(&m_collectionModel, &core::CollectionModel::itemAboutToBeDeleted,
+            this, &MainWindow::onItemAboutToBeDeleted);
+    connect(&m_collectionModel, &core::CollectionModel::collectionAboutToReload,
+            this, &MainWindow::onCollectionAboutToReload);
 
     // Set default initial request tab
     m_currentRequest.name = "Quick Request";
@@ -117,6 +124,7 @@ void MainWindow::setupUi() {
     );
     m_openRequestsTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_openRequestsTabBar, &QTabBar::currentChanged, this, &MainWindow::onTabChanged);
+    connect(m_openRequestsTabBar, &QTabBar::tabMoved, this, &MainWindow::onTabMoved);
     connect(m_openRequestsTabBar, &QTabBar::tabCloseRequested, this, &MainWindow::onTabCloseRequested);
     connect(m_openRequestsTabBar, &QTabBar::tabBarDoubleClicked, this, &MainWindow::onRenameTab);
     connect(m_openRequestsTabBar, &QTabBar::customContextMenuRequested, this, &MainWindow::onTabContextMenu);
@@ -230,6 +238,13 @@ void MainWindow::setupUi() {
     m_requestTabs->addTab(m_authEditor, "Auth");
     m_requestTabs->addTab(m_assertionsEditor, "Assertions");
     m_requestTabs->addTab(m_scriptEditor, "Scripts & Tests");
+
+    connect(m_paramsEditor, &ParamsEditor::paramsChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_headersEditor, &HeadersEditor::headersChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_bodyEditor, &BodyEditor::bodyChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_authEditor, &AuthEditor::authChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_assertionsEditor, &AssertionsEditor::assertionsChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_scriptEditor, &ScriptEditor::scriptChanged, this, &MainWindow::markCurrentTabDirty);
 
     reqLayout->addWidget(m_requestTabs);
     contentSplitter->addWidget(requestEditorWidget);
@@ -382,6 +397,7 @@ void MainWindow::onMethodChanged(int index) {
 }
 
 void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
+    m_loadingUi = true;
     m_currentRequest = req;
     m_requestNameLabel->setText(req.name.isEmpty() ? "Untitled Request" : req.name);
 
@@ -403,6 +419,7 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
 
     m_responseInspector->clear();
     updateUrlVariableInspection();
+    m_loadingUi = false;
 }
 
 void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
@@ -430,6 +447,7 @@ void MainWindow::updateTabTitle(int index) {
 }
 
 void MainWindow::markCurrentTabDirty() {
+    if (m_loadingUi) return;
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         if (!m_openTabs[m_currentTabIndex].isDirty) {
             m_openTabs[m_currentTabIndex].isDirty = true;
@@ -492,6 +510,42 @@ void MainWindow::onTabChanged(int index) {
     loadRequestIntoUi(m_openTabs[index].request);
 }
 
+void MainWindow::onTabMoved(int from, int to) {
+    if (from < 0 || to < 0 || from >= m_openTabs.size() || to >= m_openTabs.size()) return;
+    m_openTabs.move(from, to);
+    m_currentTabIndex = m_openRequestsTabBar->currentIndex();
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        m_activeItem = m_openTabs[m_currentTabIndex].item;
+    }
+}
+
+void MainWindow::onItemAboutToBeDeleted(core::CollectionItem* item) {
+    if (!item) return;
+    auto isOrContains = [](core::CollectionItem* ancestor, core::CollectionItem* node) {
+        for (auto* p = node; p; p = p->parent()) {
+            if (p == ancestor) return true;
+        }
+        return false;
+    };
+    for (int i = 0; i < m_openTabs.size(); ++i) {
+        if (isOrContains(item, m_openTabs[i].item)) {
+            m_openTabs[i].item = nullptr;
+            m_openTabs[i].isDirty = true;
+            updateTabTitle(i);
+        }
+    }
+    if (isOrContains(item, m_activeItem)) {
+        m_activeItem = nullptr;
+    }
+}
+
+void MainWindow::onCollectionAboutToReload() {
+    for (auto& tab : m_openTabs) {
+        tab.item = nullptr;
+    }
+    m_activeItem = nullptr;
+}
+
 void MainWindow::onTabCloseRequested(int index) {
     closeTab(index);
 }
@@ -510,13 +564,17 @@ void MainWindow::closeTab(int index) {
         return;
     }
 
-    if (m_openTabs[index].isDirty && m_openTabs[index].item) {
+    const int previousCurrent = m_currentTabIndex;
+    if (index == m_currentTabIndex) {
+        saveUiIntoRequest(m_openTabs[index].request);
+    }
+
+    if (m_openTabs[index].isDirty) {
         auto res = QMessageBox::question(this, "Unsaved Changes",
             QString("Save changes to '%1' before closing?").arg(m_openTabs[index].request.name),
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
         if (res == QMessageBox::Cancel) return;
         if (res == QMessageBox::Save) {
-            saveUiIntoRequest(m_openTabs[index].request);
             if (m_openTabs[index].item && m_openTabs[index].item->request()) {
                 *m_openTabs[index].item->request() = m_openTabs[index].request;
                 m_collectionModel.saveRequest(m_openTabs[index].item);
@@ -540,11 +598,26 @@ void MainWindow::closeTab(int index) {
         m_currentTabIndex = 0;
         m_activeItem = nullptr;
         loadRequestIntoUi(quickReq);
-    } else {
+        return;
+    }
+
+    if (index == previousCurrent) {
         int nextIdx = qBound(0, index == 0 ? 0 : index - 1, m_openTabs.size() - 1);
         m_currentTabIndex = -1;
         m_openRequestsTabBar->setCurrentIndex(nextIdx);
         onTabChanged(nextIdx);
+    } else {
+        if (index < previousCurrent) {
+            m_currentTabIndex = previousCurrent - 1;
+        } else {
+            m_currentTabIndex = previousCurrent;
+        }
+        m_openRequestsTabBar->blockSignals(true);
+        m_openRequestsTabBar->setCurrentIndex(m_currentTabIndex);
+        m_openRequestsTabBar->blockSignals(false);
+        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+            m_activeItem = m_openTabs[m_currentTabIndex].item;
+        }
     }
 }
 
@@ -672,8 +745,7 @@ void MainWindow::onSaveRequest() {
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         m_openTabs[m_currentTabIndex].request = m_currentRequest;
         m_openTabs[m_currentTabIndex].isDirty = false;
-        QString title = m_currentRequest.name.isEmpty() ? "Untitled" : m_currentRequest.name;
-        m_openRequestsTabBar->setTabText(m_currentTabIndex, title);
+        updateTabTitle(m_currentTabIndex);
     }
     if (m_activeItem) {
         if (m_activeItem->request()) {
@@ -698,6 +770,9 @@ void MainWindow::onCopyAsCurl() {
 
 void MainWindow::onEnvironmentChanged(const QString& envName) {
     m_activeEnvName = envName;
+    if (m_sidebar) {
+        m_sidebar->setActiveEnvironment(envName);
+    }
     updateTopEnvCombo();
     updateUrlVariableInspection();
     statusBar()->showMessage(envName.isEmpty() ? "No environment active." : ("Active environment: " + envName), 3000);
@@ -767,8 +842,11 @@ void MainWindow::onSendClicked() {
     m_sendBtn->setEnabled(false);
     m_sendBtn->setText("Sending...");
 
-    // 5. Send asynchronously via libcurl
-    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, activeEnv](const core::ResponseModel& res) mutable {
+    const quint64 sendGen = ++m_sendGeneration;
+    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, activeEnv, sendGen](const core::ResponseModel& res) mutable {
+        QPointer<MainWindow> self(this);
+        if (!self || sendGen != self->m_sendGeneration) return;
+
         m_sendBtn->setEnabled(true);
         m_sendBtn->setText("Send");
 
@@ -802,7 +880,15 @@ void MainWindow::onSendClicked() {
 }
 
 void MainWindow::onHistoryItemSelected(const core::HistoryItem& item) {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+    }
     loadRequestIntoUi(item.request);
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        m_openTabs[m_currentTabIndex].request = item.request;
+        m_openTabs[m_currentTabIndex].isDirty = true;
+        updateTabTitle(m_currentTabIndex);
+    }
     core::ResponseModel res = item.toResponseModel();
     m_responseInspector->setResponse(res, nullptr);
     statusBar()->showMessage(QString("Loaded historical request: %1 (%2)").arg(item.request.url).arg(item.statusCode), 3000);
@@ -841,7 +927,7 @@ void MainWindow::onRenameTab(int index) {
     if (ok && !newName.trimmed().isEmpty()) {
         m_openTabs[index].request.name = newName.trimmed();
         m_openTabs[index].isDirty = true;
-        m_openRequestsTabBar->setTabText(index, "* " + newName.trimmed());
+        updateTabTitle(index);
         if (m_currentTabIndex == index) {
             m_requestNameLabel->setText(newName.trimmed());
         }
@@ -1312,8 +1398,10 @@ void MainWindow::onFindAndReplace() {
     });
     connect(&dlg, &FindReplaceDialog::collectionModified, this, [this]() {
         m_sidebar->refreshTree();
-        if (m_activeItem && m_activeItem->request()) {
-            loadRequestIntoUi(*m_activeItem->request());
+        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size() &&
+            m_openTabs[m_currentTabIndex].item && m_openTabs[m_currentTabIndex].item->request()) {
+            m_openTabs[m_currentTabIndex].request = *m_openTabs[m_currentTabIndex].item->request();
+            loadRequestIntoUi(m_openTabs[m_currentTabIndex].request);
         }
     });
 
@@ -1322,6 +1410,42 @@ void MainWindow::onFindAndReplace() {
     }
 
     dlg.exec();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+        m_currentRequest = m_openTabs[m_currentTabIndex].request;
+    }
+
+    QStringList dirtyNames;
+    for (const auto& tab : m_openTabs) {
+        if (tab.isDirty) {
+            dirtyNames.append(tab.request.name.isEmpty() ? QString("Untitled") : tab.request.name);
+        }
+    }
+
+    if (!dirtyNames.isEmpty()) {
+        auto res = QMessageBox::question(this, "Unsaved Changes",
+            QString("You have unsaved changes in:\n%1\n\nSave before quitting?").arg(dirtyNames.join("\n")),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+        if (res == QMessageBox::Cancel) {
+            event->ignore();
+            return;
+        }
+        if (res == QMessageBox::Save) {
+            for (auto& tab : m_openTabs) {
+                if (!tab.isDirty) continue;
+                if (tab.item && tab.item->request()) {
+                    *tab.item->request() = tab.request;
+                    m_collectionModel.saveRequest(tab.item);
+                }
+            }
+        }
+    }
+
+    m_networkEngine.cancelAll();
+    event->accept();
 }
 
 } // namespace poppy::gui

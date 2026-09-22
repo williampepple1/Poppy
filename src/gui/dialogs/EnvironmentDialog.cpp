@@ -93,7 +93,12 @@ EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const 
     rightBtnLayout->addWidget(m_saveBtn);
 
     m_closeBtn = new QPushButton("Close", this);
-    connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(m_closeBtn, &QPushButton::clicked, this, [this]() {
+        if (m_currentIdx >= 0) {
+            saveCurrentEnv();
+        }
+        accept();
+    });
     rightBtnLayout->addWidget(m_closeBtn);
 
     rightLayout->addLayout(rightBtnLayout);
@@ -131,6 +136,9 @@ void EnvironmentDialog::onEnvSelected(int row) {
         m_varsTable->setRowCount(0);
         m_currentIdx = -1;
         return;
+    }
+    if (m_currentIdx >= 0 && m_currentIdx < m_envs.size() && m_currentIdx != row) {
+        applyTableToEnv(m_currentIdx);
     }
     m_currentIdx = row;
     populateVarsTable(row);
@@ -240,10 +248,10 @@ void EnvironmentDialog::toggleSecrets() {
     m_varsTable->blockSignals(false);
 }
 
-void EnvironmentDialog::saveCurrentEnv() {
-    if (m_currentIdx < 0 || m_currentIdx >= m_envs.size()) return;
+void EnvironmentDialog::applyTableToEnv(int envIdx) {
+    if (envIdx < 0 || envIdx >= m_envs.size()) return;
 
-    auto& env = m_envs[m_currentIdx];
+    auto& env = m_envs[envIdx];
     env.variables().clear();
 
     for (int i = 0; i < m_varsTable->rowCount(); ++i) {
@@ -266,6 +274,13 @@ void EnvironmentDialog::saveCurrentEnv() {
             env.addOrUpdateVariable(name->text().trimmed(), realVal, isSecret, isEnabled);
         }
     }
+}
+
+void EnvironmentDialog::saveCurrentEnv() {
+    if (m_currentIdx < 0 || m_currentIdx >= m_envs.size()) return;
+
+    applyTableToEnv(m_currentIdx);
+    auto& env = m_envs[m_currentIdx];
 
     // Save to disk if rootPath has environments/
     if (!m_rootPath.isEmpty()) {

@@ -110,6 +110,13 @@ QString BruWriter::serialize(const RequestModel& req) {
             ts << req.graphqlVariables << "\n";
             ts << "}\n\n";
         }
+    } else if (req.bodyType == BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
+        ts << "body:multipart-form {\n";
+        for (const auto& p : req.formDataParams) {
+            if (p.key.isEmpty()) continue;
+            ts << "  " << (p.enabled ? "" : "~") << p.key << ": " << (p.isFile ? "@" : "") << p.value << "\n";
+        }
+        ts << "}\n\n";
     } else if (req.bodyType != BodyType::None && !req.bodyContent.trimmed().isEmpty()) {
         QString bodyBlock = "body:" + bodyTypeToString(req.bodyType);
         ts << bodyBlock << " {\n";

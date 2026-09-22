@@ -201,7 +201,14 @@ void MockServer::handleClientSocket(QTcpSocket* socket) {
     m_logs.append(log);
     emit requestReceived(log);
 
-    auto sendResponse = [socket, status, contentType, respBody, route]() {
+    MockRoute routeCopy;
+    bool hasRoute = false;
+    if (route) {
+        routeCopy = *route;
+        hasRoute = true;
+    }
+
+    auto sendResponse = [socket, status, contentType, respBody, hasRoute, routeCopy]() {
         if (!socket || !socket->isOpen()) return;
 
         QByteArray bodyBytes = respBody.toUtf8();
@@ -211,8 +218,8 @@ void MockServer::handleClientSocket(QTcpSocket* socket) {
         resp.append("Access-Control-Allow-Origin: *\r\n");
         resp.append("Connection: close\r\n");
 
-        if (route) {
-            for (auto it = route->headers.cbegin(); it != route->headers.cend(); ++it) {
+        if (hasRoute) {
+            for (auto it = routeCopy.headers.cbegin(); it != routeCopy.headers.cend(); ++it) {
                 if (!it.key().isEmpty()) {
                     resp.append(QString("%1: %2\r\n").arg(it.key(), it.value()).toUtf8());
                 }

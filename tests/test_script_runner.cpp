@@ -27,6 +27,17 @@ int main(int argc, char* argv[]) {
     assert(env.variableValue("authToken") == "token-xyz");
     assert(env.variableValue("calc") == "30");
 
+    QString mutateScript = R"(
+        req.url = "http://example.com/mutated";
+        req.method = "POST";
+        req.body = "{\"ok\":true}";
+    )";
+    bool mutateOk = runner.runPreRequestScript(mutateScript, req, env);
+    assert(mutateOk);
+    assert(req.url == "http://example.com/mutated");
+    assert(req.method == HttpMethod::POST);
+    assert(req.bodyContent == "{\"ok\":true}");
+
     // 2. Setup mock response
     ResponseModel res;
     res.statusCode = 200;

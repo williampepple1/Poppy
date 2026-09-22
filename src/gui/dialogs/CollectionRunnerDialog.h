@@ -67,6 +67,7 @@ private:
     int m_passedTests{0};
     qint64 m_totalDurationMs{0};
     bool m_isRunning{false};
+    quint64 m_runGeneration{0};
     core::EnvironmentModel m_activeEnv;
 };
 

@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QMap>
 #include <iostream>
 #include <core/CollectionModel.h>
 #include <core/BruParser.h>
@@ -14,6 +15,10 @@
 #include <core/assertions/DeclarativeAssertion.h>
 #include <network/CurlNetworkEngine.h>
 #include <QThread>
+#include <thread>
+#include <atomic>
+#include <vector>
+#include <algorithm>
 
 using namespace poppy;
 
@@ -25,6 +30,80 @@ void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list
     for (auto* child : item->children()) {
         collectRequests(child, list);
     }
+}
+
+struct SuiteResult {
+    QString name;
+    QString url;
+    QString method;
+    int statusCode{0};
+    qint64 latencyMs{0};
+    qint64 sizeBytes{0};
+    bool success{false};
+    QString errorString;
+    QList<core::TestCaseResult> tests;
+};
+
+SuiteResult executeCliRequest(
+    const core::RequestModel& req,
+    const core::EnvironmentModel& baseEnv,
+    const QMap<QString, QString>& fixtureRow,
+    network::CurlNetworkEngine& engine,
+    core::ScriptRunner& scriptRunner,
+    int iter,
+    int iterations
+) {
+    core::EnvironmentModel envCopy = baseEnv;
+    core::VariableResolver resolver;
+    resolver.setEnvironment(envCopy);
+    for (auto it = fixtureRow.constBegin(); it != fixtureRow.constEnd(); ++it) {
+        resolver.setRuntimeVariable(it.key(), it.value());
+    }
+
+    core::RequestModel resolvedReq = resolver.resolveRequest(req);
+
+    SuiteResult sr;
+    QString reqTitle = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
+    sr.name = (iterations > 1) ? QString("[%1/%2] %3").arg(iter + 1).arg(iterations).arg(reqTitle) : reqTitle;
+    sr.url = resolvedReq.effectiveUrl();
+    sr.method = core::methodToString(resolvedReq.method);
+
+    QString preErr;
+    if (!scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, envCopy, &preErr)) {
+        sr.success = false;
+        sr.errorString = preErr.isEmpty() ? QString("Pre-request script failed") : preErr;
+        return sr;
+    }
+
+    sr.url = resolvedReq.effectiveUrl();
+    sr.method = core::methodToString(resolvedReq.method);
+
+    core::ResponseModel res = engine.sendRequestSync(resolvedReq);
+    sr.statusCode = res.statusCode;
+    sr.latencyMs = res.latencyMs;
+    sr.sizeBytes = res.sizeBytes;
+    sr.errorString = res.errorString;
+
+    QString postErr;
+    if (!scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, envCopy, &postErr)) {
+        if (sr.errorString.isEmpty()) {
+            sr.errorString = postErr.isEmpty() ? QString("Post-response script failed") : postErr;
+        }
+    }
+
+    core::TestReport report = scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, envCopy);
+    auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
+    for (const auto& dr : declResults) {
+        report.results.append(dr);
+    }
+    sr.tests = report.results;
+
+    const bool scriptsOk = preErr.isEmpty() && postErr.isEmpty();
+    sr.success = res.isHttpSuccess() && (report.failedCount() == 0) && scriptsOk;
+    if (!scriptsOk && sr.errorString.isEmpty()) {
+        sr.errorString = postErr;
+    }
+    return sr;
 }
 
 int main(int argc, char *argv[]) {
@@ -164,8 +243,6 @@ int main(int argc, char *argv[]) {
 
     network::CurlNetworkEngine engine;
     core::ScriptRunner scriptRunner;
-    core::VariableResolver resolver;
-    resolver.setEnvironment(activeEnv);
 
     if (reporter == "cli") {
         std::cout << "\n=======================================================\n";
@@ -191,82 +268,30 @@ int main(int argc, char *argv[]) {
     int passedTests = 0;
     qint64 totalLatencyMs = 0;
 
-    struct SuiteResult {
-        QString name;
-        QString url;
-        QString method;
-        int statusCode{0};
-        qint64 latencyMs{0};
-        bool success{false};
-        QString errorString;
-        QList<core::TestCaseResult> tests;
-    };
     QList<SuiteResult> suiteResults;
     QJsonArray jsonResults;
 
-    for (int iter = 0; iter < iterations; ++iter) {
-        resolver.clearRuntimeVariables();
-        if (!fixtureRows.isEmpty()) {
-            const auto& row = fixtureRows[iter % fixtureRows.size()];
-            for (auto it = row.constBegin(); it != row.constEnd(); ++it) {
-                resolver.setRuntimeVariable(it.key(), it.value());
-            }
+    auto recordResult = [&](const SuiteResult& sr, int requestIndex, int requestCount) {
+        totalLatencyMs += sr.latencyMs;
+        int testCount = sr.tests.size();
+        int testPassed = 0;
+        for (const auto& t : sr.tests) {
+            if (t.passed) ++testPassed;
         }
-
-        if (reporter == "cli" && iterations > 1) {
-            std::cout << "--- Iteration " << (iter + 1) << "/" << iterations << " ---\n";
-        }
-
-        for (int i = 0; i < requestsToRun.size(); ++i) {
-            if (delayMs > 0 && (i > 0 || iter > 0)) {
-                QThread::msleep(delayMs);
-            }
-
-        core::RequestModel req = requestsToRun[i];
-        core::RequestModel resolvedReq = resolver.resolveRequest(req);
-
-        // Pre-request script
-        QString preErr;
-        scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, activeEnv, &preErr);
+        totalTests += testCount;
+        passedTests += testPassed;
+        if (sr.success) ++passedRequests;
+        suiteResults.append(sr);
 
         if (reporter == "cli") {
-            std::cout << "[" << (i + 1) << "/" << requestsToRun.size() << "] "
-                      << core::methodToString(resolvedReq.method).toStdString() << " "
-                      << resolvedReq.effectiveUrl().toStdString() << "\n";
-        }
-
-        // Execute request synchronously
-        core::ResponseModel res = engine.sendRequestSync(resolvedReq);
-        totalLatencyMs += res.latencyMs;
-
-        // Post-response script
-        QString postErr;
-        scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, activeEnv, &postErr);
-
-        // Tests
-        core::TestReport report = scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, activeEnv);
-
-        // Declarative Assertions
-        auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
-        for (const auto& dr : declResults) {
-            report.results.append(dr);
-        }
-
-        totalTests += report.totalCount();
-        passedTests += report.passedCount();
-
-        bool requestPassed = res.isHttpSuccess() && (report.failedCount() == 0);
-        if (requestPassed) ++passedRequests;
-
-        if (reporter == "cli") {
-            std::cout << "      Status: " << res.statusCode << " " << res.statusText.toStdString()
-                      << " (" << res.latencyMs << " ms, " << res.sizeBytes << " B)\n";
-
-            if (!res.errorString.isEmpty()) {
-                std::cout << "      ERROR: " << res.errorString.toStdString() << "\n";
+            std::cout << "[" << requestIndex << "/" << requestCount << "] "
+                      << sr.method.toStdString() << " " << sr.url.toStdString() << "\n";
+            std::cout << "      Status: " << sr.statusCode
+                      << " (" << sr.latencyMs << " ms, " << sr.sizeBytes << " B)\n";
+            if (!sr.errorString.isEmpty()) {
+                std::cout << "      ERROR: " << sr.errorString.toStdString() << "\n";
             }
-
-            for (const auto& t : report.results) {
+            for (const auto& t : sr.tests) {
                 if (t.passed) {
                     std::cout << "      [PASS] " << t.name.toStdString() << " (" << t.durationMs << " ms)\n";
                 } else {
@@ -276,22 +301,6 @@ int main(int argc, char *argv[]) {
             std::cout << "\n";
         }
 
-        SuiteResult sr;
-        QString reqTitle = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
-        if (iterations > 1) {
-            sr.name = QString("[%1/%2] %3").arg(iter + 1).arg(iterations).arg(reqTitle);
-        } else {
-            sr.name = reqTitle;
-        }
-        sr.url = resolvedReq.effectiveUrl();
-        sr.method = core::methodToString(resolvedReq.method);
-        sr.statusCode = res.statusCode;
-        sr.latencyMs = res.latencyMs;
-        sr.success = requestPassed;
-        sr.errorString = res.errorString;
-        sr.tests = report.results;
-        suiteResults.append(sr);
-
         if (reporter == "json") {
             QJsonObject reqObj;
             reqObj["name"] = sr.name;
@@ -299,11 +308,10 @@ int main(int argc, char *argv[]) {
             reqObj["method"] = sr.method;
             reqObj["statusCode"] = sr.statusCode;
             reqObj["latencyMs"] = sr.latencyMs;
-            reqObj["sizeBytes"] = res.sizeBytes;
+            reqObj["sizeBytes"] = sr.sizeBytes;
             reqObj["passed"] = sr.success;
-
             QJsonArray testsArr;
-            for (const auto& t : report.results) {
+            for (const auto& t : sr.tests) {
                 QJsonObject tObj;
                 tObj["name"] = t.name;
                 tObj["passed"] = t.passed;
@@ -314,6 +322,54 @@ int main(int argc, char *argv[]) {
             reqObj["tests"] = testsArr;
             jsonResults.append(reqObj);
         }
+    };
+
+    auto fixtureForIter = [&](int iter) -> QMap<QString, QString> {
+        if (fixtureRows.isEmpty()) return {};
+        return fixtureRows[iter % fixtureRows.size()];
+    };
+
+    if (concurrency <= 1) {
+        for (int iter = 0; iter < iterations; ++iter) {
+            if (reporter == "cli" && iterations > 1) {
+                std::cout << "--- Iteration " << (iter + 1) << "/" << iterations << " ---\n";
+            }
+            for (int i = 0; i < requestsToRun.size(); ++i) {
+                if (delayMs > 0 && (i > 0 || iter > 0)) {
+                    QThread::msleep(delayMs);
+                }
+                SuiteResult sr = executeCliRequest(requestsToRun[i], activeEnv, fixtureForIter(iter),
+                                                   engine, scriptRunner, iter, iterations);
+                recordResult(sr, i + 1, requestsToRun.size());
+            }
+        }
+    } else {
+        const int totalJobs = requestsToRun.size() * iterations;
+        std::vector<SuiteResult> ordered(static_cast<size_t>(totalJobs));
+        std::atomic<int> nextJob{0};
+        auto worker = [&]() {
+            while (true) {
+                const int job = nextJob.fetch_add(1);
+                if (job >= totalJobs) break;
+                const int iter = job / requestsToRun.size();
+                const int i = job % requestsToRun.size();
+                ordered[static_cast<size_t>(job)] = executeCliRequest(
+                    requestsToRun[i], activeEnv, fixtureForIter(iter),
+                    engine, scriptRunner, iter, iterations);
+            }
+        };
+        const int workers = std::max(1, std::min(concurrency, totalJobs));
+        std::vector<std::thread> threads;
+        threads.reserve(static_cast<size_t>(workers));
+        for (int w = 0; w < workers; ++w) {
+            threads.emplace_back(worker);
+        }
+        for (auto& t : threads) {
+            t.join();
+        }
+        for (int job = 0; job < totalJobs; ++job) {
+            const int i = job % requestsToRun.size();
+            recordResult(ordered[static_cast<size_t>(job)], i + 1, requestsToRun.size());
         }
     }
 

@@ -141,6 +141,24 @@ void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const 
     engine.evaluate(testHarness);
 }
 
+void ScriptRunner::applyJsRequestMutations(QJSEngine& engine, RequestModel& req) {
+    QJSValue reqObj = engine.globalObject().property("req");
+    if (!reqObj.isObject()) return;
+
+    QJSValue urlVal = reqObj.property("url");
+    if (!urlVal.isUndefined() && !urlVal.isNull()) {
+        req.url = urlVal.toString();
+    }
+    QJSValue methodVal = reqObj.property("method");
+    if (!methodVal.isUndefined() && !methodVal.isNull() && !methodVal.toString().isEmpty()) {
+        req.method = stringToMethod(methodVal.toString());
+    }
+    QJSValue bodyVal = reqObj.property("body");
+    if (!bodyVal.isUndefined() && !bodyVal.isNull()) {
+        req.bodyContent = bodyVal.toString();
+    }
+}
+
 bool ScriptRunner::runPreRequestScript(const QString& script, RequestModel& req, EnvironmentModel& env, QString* outError) {
     if (script.trimmed().isEmpty()) return true;
 
@@ -154,6 +172,7 @@ bool ScriptRunner::runPreRequestScript(const QString& script, RequestModel& req,
         }
         return false;
     }
+    applyJsRequestMutations(engine, req);
     return true;
 }
 

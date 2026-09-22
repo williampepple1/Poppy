@@ -20,6 +20,7 @@ public:
     void refreshTree();
     void refreshHistory();
     void updateEnvironmentsCombo();
+    void setActiveEnvironment(const QString& name);
     QString currentEnvironmentName() const;
 
 signals:

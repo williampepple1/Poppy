@@ -35,8 +35,8 @@ RequestModel BruParser::parse(const QString& content) {
 
             // Check if this is a freeform / code block:
             // body:json, body:text, body:xml, script:pre-request, script:post-response, tests
-            bool isCodeBlock = blockName.startsWith("body:") || 
-                               blockName.startsWith("script:") || 
+            bool isCodeBlock = (blockName.startsWith("body:") && blockName != "body:multipart-form") ||
+                               blockName.startsWith("script:") ||
                                blockName == "tests";
 
             if (isCodeBlock) {
@@ -76,9 +76,6 @@ RequestModel BruParser::parse(const QString& content) {
                     req.bodyContent = blockContent;
                 } else if (blockName == "body:form-urlencoded") {
                     req.bodyType = BodyType::FormUrlEncoded;
-                    req.bodyContent = blockContent;
-                } else if (blockName == "body:multipart-form") {
-                    req.bodyType = BodyType::MultipartForm;
                     req.bodyContent = blockContent;
                 } else if (blockName == "script:pre-request") {
                     req.scripts.preRequestScript = blockContent;
@@ -120,6 +117,9 @@ RequestModel BruParser::parse(const QString& content) {
                         }
 
                         int colonIdx = kvLine.indexOf(':');
+                        if (blockName == "body:multipart-form" && colonIdx < 0) {
+                            colonIdx = kvLine.indexOf('=');
+                        }
                         if (colonIdx > 0) {
                             QString key = kvLine.left(colonIdx).trimmed();
                             QString val = kvLine.mid(colonIdx + 1).trimmed();
@@ -157,6 +157,16 @@ RequestModel BruParser::parse(const QString& content) {
                                 req.pathParams.append(HttpParam{
                                     .key = key,
                                     .value = val,
+                                    .enabled = enabled
+                                });
+                            } else if (blockName == "body:multipart-form") {
+                                req.bodyType = BodyType::MultipartForm;
+                                bool isFile = val.startsWith('@');
+                                if (isFile) val = val.mid(1);
+                                req.formDataParams.append(FormDataParam{
+                                    .key = key,
+                                    .value = val,
+                                    .isFile = isFile,
                                     .enabled = enabled
                                 });
                             } else if (blockName == "auth:bearer") {

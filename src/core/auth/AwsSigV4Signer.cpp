@@ -38,8 +38,8 @@ QList<HttpHeader> AwsSigV4Signer::generateAuthHeaders(const RequestModel& req) {
     QString region = req.auth.awsRegion.isEmpty() ? "us-east-1" : req.auth.awsRegion;
     QString service = req.auth.awsService.isEmpty() ? "execute-api" : req.auth.awsService;
 
-    // 1. Hash of payload
-    QByteArray bodyBytes = req.bodyContent.toUtf8();
+    // 1. Hash of payload actually sent (GraphQL envelope, encoded form, etc.)
+    QByteArray bodyBytes = req.effectiveBody();
     QByteArray payloadHash = QCryptographicHash::hash(bodyBytes, QCryptographicHash::Sha256).toHex();
 
     // 2. Canonical headers
