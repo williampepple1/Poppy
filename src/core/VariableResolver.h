@@ -24,6 +24,9 @@ public:
     // Produces a fully resolved copy of a RequestModel
     RequestModel resolveRequest(const RequestModel& req) const;
 
+    QString lookupVariableWithScope(const QString& name, QString* outScope = nullptr) const;
+    QMap<QString, QPair<QString, QString>> allAvailableVariables() const;
+
 private:
     QString lookupVariable(const QString& name) const;
 

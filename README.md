@@ -89,6 +89,25 @@
   - Automatic event parsing (`event`, `id`, `data`, `retry`) with search and filtering.
   - **LLM Token Accumulator**: Automatically extracts and streams OpenAI/ChatGPT style `delta.content` tokens in real time.
 
+### 📖 Interactive API Documentation Generator (`Tools -> Generate API Documentation...`)
+- **Self-Contained HTML Export**: Export entire collections into a clean, responsive single-file offline documentation site (`docs.html`).
+- **Sidebar & Live Search**: Instant live filtering across endpoints, methods, and paths.
+- **Multi-Language Examples**: Embedded interactive code snippet tabs for cURL, Python (`requests`), and JavaScript (`fetch()`).
+- **Full Variable Resolution**: Automatically evaluates environment and folder variables into realistic examples.
+
+### 📊 Response Visualizer Tab & Summary Charts
+- **Interactive JSON Data Grid**: Dedicated "Visualize" tab transforms JSON arrays into sortable data tables with column resizing and row filtering.
+- **ASCII & Bar Chart Generator**: Automatically renders visual comparative bar charts for numeric metrics against label keys.
+- **Property Inspector**: Nicely formats single JSON objects into Property, Value, and Type tables.
+
+### 🔍 Variable Hover Tooltips & Autocomplete
+- **Live Hover Inspection**: Hover over any `{{variable_name}}` in the URL bar to view its resolved value and originating scope (`Environment: ...`, `Folder: ...`, `Collection: ...`).
+- **Intelligent Autocomplete**: Type `{{` in the URL bar to trigger instant popup completion of all active variable tokens.
+- **Status Bar Quick-Look Widget**: Displays total active variable count with one-click full variable inspection table.
+
+### 🌓 Instant Theme Toggle (`Ctrl+T`)
+- **One-Key Switcher**: Seamlessly toggle between dark and light themes at runtime using `Ctrl+T` or `View -> Toggle Dark/Light Theme`.
+
 ### 💻 Multi-Language Code Generation
 - Export any request with one click to production-ready code across 9 languages and libraries:
   - **Python** (`requests`)

@@ -22,6 +22,7 @@ add_library(poppy_core STATIC
     CookieJar.h CookieJar.cpp
     HistoryManager.h HistoryManager.cpp
     SseParser.h SseParser.cpp
+    DocGenerator.h DocGenerator.cpp
 )
 
 target_include_directories(poppy_core PUBLIC

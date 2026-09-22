@@ -131,6 +131,7 @@ public:
 
     QString id;
     QString name{"New Request"};
+    QString description;
     HttpMethod method{HttpMethod::GET};
     QString url;
     int seq{1};

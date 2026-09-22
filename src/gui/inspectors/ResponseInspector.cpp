@@ -13,6 +13,10 @@
 #include <core/JsonPathEvaluator.h>
 #include <dialogs/DiffViewerDialog.h>
 #include <Theme.h>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QJsonValue>
 
 namespace poppy::gui {
 
@@ -244,6 +248,50 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     sslLayout->addWidget(m_sslCertViewer);
     m_tabWidget->addTab(m_sslTab, "SSL / TLS");
 
+    // Tab 6: Visualize (JSON Table & Charts)
+    m_visualizeTab = new QWidget(this);
+    auto* vLayout = new QVBoxLayout(m_visualizeTab);
+    vLayout->setContentsMargins(0, 4, 0, 0);
+
+    auto* vTop = new QHBoxLayout();
+    m_visualizeFilter = new QLineEdit(m_visualizeTab);
+    m_visualizeFilter->setPlaceholderText("Filter visualized table rows...");
+    connect(m_visualizeFilter, &QLineEdit::textChanged, this, [this](const QString& q) {
+        for (int r = 0; r < m_visualizeTable->rowCount(); ++r) {
+            bool matches = q.isEmpty();
+            for (int c = 0; !matches && c < m_visualizeTable->columnCount(); ++c) {
+                auto* item = m_visualizeTable->item(r, c);
+                if (item && item->text().contains(q, Qt::CaseInsensitive)) {
+                    matches = true;
+                }
+            }
+            m_visualizeTable->setRowHidden(r, !matches);
+        }
+    });
+    vTop->addWidget(m_visualizeFilter, 1);
+
+    m_chartToggleBtn = new QPushButton("Toggle Chart", m_visualizeTab);
+    connect(m_chartToggleBtn, &QPushButton::clicked, this, &ResponseInspector::toggleChartView);
+    vTop->addWidget(m_chartToggleBtn);
+
+    m_visualizeStats = new QLabel("No data visualized", m_visualizeTab);
+    m_visualizeStats->setStyleSheet("color: #71717a; font-size: 11px;");
+    vTop->addWidget(m_visualizeStats);
+    vLayout->addLayout(vTop);
+
+    m_visualizeTable = new QTableWidget(m_visualizeTab);
+    m_visualizeTable->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    m_visualizeTable->setSortingEnabled(true);
+    vLayout->addWidget(m_visualizeTable);
+
+    m_chartViewer = new QPlainTextEdit(m_visualizeTab);
+    m_chartViewer->setReadOnly(true);
+    m_chartViewer->setFont(codeFont);
+    m_chartViewer->setVisible(false);
+    vLayout->addWidget(m_chartViewer);
+
+    m_tabWidget->addTab(m_visualizeTab, "Visualize");
+
     mainLayout->addWidget(m_tabWidget);
 }
 
@@ -266,6 +314,10 @@ void ResponseInspector::clear() {
     m_headersTable->setRowCount(0);
     m_testsTable->setRowCount(0);
     m_sslCertViewer->clear();
+    m_visualizeTable->setRowCount(0);
+    m_visualizeTable->setColumnCount(0);
+    m_chartViewer->clear();
+    m_visualizeStats->setText("No data visualized");
     m_testSummaryLabel->setText("No tests run");
     m_tabWidget->setTabText(4, "Tests (0)");
     m_tabWidget->setTabText(5, "SSL / TLS");
@@ -332,6 +384,9 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
         m_sslCertViewer->setPlainText(!res.protocol.isEmpty() ? QString("Protocol: %1\nNo certificate chain available or connection was unencrypted (HTTP).").arg(res.protocol) : "No SSL/TLS certificate details available for this request.");
         m_tabWidget->setTabText(5, "SSL / TLS");
     }
+
+    // Tab 6: Visualize
+    updateVisualizeTab(res);
 }
 
 void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
@@ -652,6 +707,176 @@ void ResponseInspector::updateSearchHighlights() {
         m_bodyViewer->setTextCursor(m_searchMatches[m_currentMatchIndex]);
         m_bodyViewer->centerCursor();
     }
+}
+
+void ResponseInspector::toggleChartView() {
+    m_showingChart = !m_showingChart;
+    m_visualizeTable->setVisible(!m_showingChart);
+    m_chartViewer->setVisible(m_showingChart);
+    m_chartToggleBtn->setText(m_showingChart ? "Show Table" : "Toggle Chart");
+}
+
+void ResponseInspector::updateVisualizeTab(const core::ResponseModel& res) {
+    m_visualizeTable->setSortingEnabled(false);
+    m_visualizeTable->setRowCount(0);
+    m_visualizeTable->setColumnCount(0);
+    m_chartViewer->clear();
+    m_showingChart = false;
+    m_visualizeTable->setVisible(true);
+    m_chartViewer->setVisible(false);
+    m_chartToggleBtn->setText("Toggle Chart");
+
+    if (!res.isJson() || res.rawBody.trimmed().isEmpty()) {
+        m_visualizeStats->setText("Visualizer requires JSON response");
+        m_chartToggleBtn->setEnabled(false);
+        return;
+    }
+
+    QJsonParseError parseErr;
+    QJsonDocument doc = QJsonDocument::fromJson(res.rawBody, &parseErr);
+    if (parseErr.error != QJsonParseError::NoError) {
+        m_visualizeStats->setText("Invalid JSON");
+        m_chartToggleBtn->setEnabled(false);
+        return;
+    }
+
+    QJsonArray array;
+    if (doc.isArray()) {
+        array = doc.array();
+    } else if (doc.isObject()) {
+        QJsonObject obj = doc.object();
+        if (obj.contains("data") && obj["data"].isArray()) {
+            array = obj["data"].toArray();
+        } else if (obj.contains("items") && obj["items"].isArray()) {
+            array = obj["items"].toArray();
+        } else if (obj.contains("results") && obj["results"].isArray()) {
+            array = obj["results"].toArray();
+        }
+    }
+
+    if (!array.isEmpty() && array.first().isObject()) {
+        // Collect all column keys
+        QStringList headers;
+        for (const auto& val : array) {
+            if (val.isObject()) {
+                for (const QString& key : val.toObject().keys()) {
+                    if (!headers.contains(key)) {
+                        headers.append(key);
+                    }
+                }
+            }
+        }
+
+        m_visualizeTable->setColumnCount(headers.size());
+        m_visualizeTable->setHorizontalHeaderLabels(headers);
+        m_visualizeTable->setRowCount(array.size());
+
+        QString labelKey;
+        QString numericKey;
+
+        // Determine best label and numeric column for chart
+        for (const QString& h : headers) {
+            QString lower = h.toLower();
+            if (labelKey.isEmpty() && (lower.contains("name") || lower.contains("title") || lower.contains("id") || lower.contains("label") || lower.contains("key"))) {
+                labelKey = h;
+            }
+        }
+        if (labelKey.isEmpty() && !headers.isEmpty()) labelKey = headers.first();
+
+        for (const QString& h : headers) {
+            if (h != labelKey) {
+                bool isNum = true;
+                int checkCount = qMin(array.size(), 10);
+                for (int i = 0; i < checkCount; ++i) {
+                    QJsonValue v = array[i].toObject().value(h);
+                    if (!v.isDouble()) { isNum = false; break; }
+                }
+                if (isNum) {
+                    numericKey = h;
+                    break;
+                }
+            }
+        }
+
+        double maxVal = 0.0;
+        QList<QPair<QString, double>> chartData;
+
+        for (int r = 0; r < array.size(); ++r) {
+            QJsonObject rowObj = array[r].toObject();
+            for (int c = 0; c < headers.size(); ++c) {
+                const QString& key = headers[c];
+                QJsonValue val = rowObj.value(key);
+                QString displayStr;
+                if (val.isObject()) {
+                    displayStr = QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact);
+                } else if (val.isArray()) {
+                    displayStr = QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact);
+                } else {
+                    displayStr = val.toVariant().toString();
+                }
+                auto* item = new QTableWidgetItem(displayStr);
+                m_visualizeTable->setItem(r, c, item);
+            }
+
+            if (!numericKey.isEmpty()) {
+                QString lbl = rowObj.value(labelKey).toVariant().toString();
+                double val = rowObj.value(numericKey).toDouble();
+                if (val > maxVal) maxVal = val;
+                chartData.append({lbl, val});
+            }
+        }
+
+        m_visualizeStats->setText(QString("%1 rows × %2 columns").arg(array.size()).arg(headers.size()));
+        m_chartToggleBtn->setEnabled(!numericKey.isEmpty());
+
+        if (!chartData.isEmpty() && maxVal > 0.0) {
+            QString chart;
+            chart += QString("=== Visual Bar Chart (%1 vs %2) ===\n\n").arg(labelKey, numericKey);
+            const int maxBarWidth = 40;
+            for (const auto& pair : chartData) {
+                int barLen = static_cast<int>((pair.second / maxVal) * maxBarWidth);
+                if (barLen < 1 && pair.second > 0) barLen = 1;
+                QString bar = QString("█").repeated(barLen);
+                chart += QString("%1 | %2 %3\n").arg(pair.first.leftJustified(18, ' ').left(18), bar, QString::number(pair.second, 'f', 2));
+            }
+            m_chartViewer->setPlainText(chart);
+        } else {
+            m_chartViewer->setPlainText("No numeric columns found to plot.");
+        }
+    } else if (doc.isObject()) {
+        // Single JSON Object: Display Property / Value / Type
+        QJsonObject obj = doc.object();
+        QStringList keys = obj.keys();
+        m_visualizeTable->setColumnCount(3);
+        m_visualizeTable->setHorizontalHeaderLabels({"Property", "Value", "Type"});
+        m_visualizeTable->setRowCount(keys.size());
+
+        for (int r = 0; r < keys.size(); ++r) {
+            const QString& k = keys[r];
+            QJsonValue v = obj.value(k);
+            QString typeName = "string";
+            QString valStr;
+            if (v.isBool()) { typeName = "boolean"; valStr = v.toBool() ? "true" : "false"; }
+            else if (v.isDouble()) { typeName = "number"; valStr = QString::number(v.toDouble()); }
+            else if (v.isArray()) { typeName = QString("array [%1]").arg(v.toArray().size()); valStr = QJsonDocument(v.toArray()).toJson(QJsonDocument::Compact); }
+            else if (v.isObject()) { typeName = "object"; valStr = QJsonDocument(v.toObject()).toJson(QJsonDocument::Compact); }
+            else if (v.isNull()) { typeName = "null"; valStr = "null"; }
+            else { valStr = v.toString(); }
+
+            m_visualizeTable->setItem(r, 0, new QTableWidgetItem(k));
+            m_visualizeTable->setItem(r, 1, new QTableWidgetItem(valStr));
+            m_visualizeTable->setItem(r, 2, new QTableWidgetItem(typeName));
+        }
+        m_visualizeStats->setText(QString("%1 properties").arg(keys.size()));
+        m_chartToggleBtn->setEnabled(false);
+        m_chartViewer->setPlainText("Chart view requires an array of numeric records.");
+    } else {
+        m_visualizeStats->setText("Array of primitive values");
+        m_chartToggleBtn->setEnabled(false);
+    }
+
+    m_visualizeTable->setSortingEnabled(true);
+    m_visualizeTable->resizeColumnsToContents();
 }
 
 } // namespace poppy::gui

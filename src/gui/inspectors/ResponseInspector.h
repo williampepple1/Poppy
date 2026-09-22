@@ -39,6 +39,7 @@ private slots:
     void toggleRegex();
     void toggleJsonPathMode();
     void resetFilter();
+    void toggleChartView();
 
 private:
     void updateTelemetryBar(const core::ResponseModel& res);
@@ -106,6 +107,17 @@ private:
     // SSL / TLS Certificate Tab
     QWidget* m_sslTab;
     QPlainTextEdit* m_sslCertViewer;
+
+    // Visualize Tab
+    QWidget* m_visualizeTab{nullptr};
+    QLineEdit* m_visualizeFilter{nullptr};
+    QLabel* m_visualizeStats{nullptr};
+    QPushButton* m_chartToggleBtn{nullptr};
+    QTableWidget* m_visualizeTable{nullptr};
+    QPlainTextEdit* m_chartViewer{nullptr};
+    bool m_showingChart{false};
+
+    void updateVisualizeTab(const core::ResponseModel& res);
 };
 
 } // namespace poppy::gui

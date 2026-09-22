@@ -79,3 +79,7 @@ add_test(NAME test_sse COMMAND test_sse)
 add_executable(test_mock_server test_mock_server.cpp)
 target_link_libraries(test_mock_server PRIVATE poppy_network poppy_core Qt6::Core Qt6::Network)
 add_test(NAME test_mock_server COMMAND test_mock_server)
+
+add_executable(test_doc_generator test_doc_generator.cpp)
+target_link_libraries(test_doc_generator PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_doc_generator COMMAND test_doc_generator)

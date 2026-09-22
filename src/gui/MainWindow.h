@@ -69,6 +69,10 @@ private slots:
     void onOpenMockServer();
     void onOpenSse();
     void onOpenGitSync();
+    void onGenerateDocumentation();
+    void onToggleTheme();
+    void onShowQuickVariables();
+    void updateUrlVariableInspection();
 
 private:
     void setupUi();
@@ -77,6 +81,7 @@ private:
     void saveUiIntoRequest(core::RequestModel& req);
     void closeTab(int index);
     void updateTabTitle(int index);
+    core::VariableResolver currentVariableResolver() const;
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -120,6 +125,8 @@ private:
     class AssertionsEditor* m_assertionsEditor;
 
     ResponseInspector* m_responseInspector;
+    class QCompleter* m_urlCompleter{nullptr};
+    QPushButton* m_varQuickBtn{nullptr};
 };
 
 } // namespace poppy::gui

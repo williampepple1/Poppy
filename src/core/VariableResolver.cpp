@@ -11,47 +11,76 @@ void VariableResolver::setEnvironment(const EnvironmentModel& env) {
 }
 
 QString VariableResolver::lookupVariable(const QString& name) const {
+    return lookupVariableWithScope(name, nullptr);
+}
+
+QString VariableResolver::lookupVariableWithScope(const QString& name, QString* outScope) const {
     // 1. Dynamic generators
-    if (name == "$guid" || name == "$uuid") {
+    if (name.startsWith("$guid")) {
+        if (outScope) *outScope = "Dynamic ($guid)";
         return QUuid::createUuid().toString(QUuid::WithoutBraces);
     }
-    if (name == "$timestamp") {
+    if (name.startsWith("$timestamp")) {
+        if (outScope) *outScope = "Dynamic ($timestamp)";
         return QString::number(QDateTime::currentSecsSinceEpoch());
     }
-    if (name == "$isoTimestamp") {
-        return QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
-    }
-    if (name == "$randomInt") {
-        return QString::number(QRandomGenerator::global()->bounded(1, 1000));
+    if (name.startsWith("$randomInt")) {
+        if (outScope) *outScope = "Dynamic ($randomInt)";
+        return QString::number(QRandomGenerator::global()->bounded(1000));
     }
 
-    // 2. Runtime variables
+    // 2. Script runtime variables
     if (m_runtimeVars.contains(name)) {
+        if (outScope) *outScope = "Runtime";
         return m_runtimeVars.value(name);
     }
 
     // 3. Environment variables
     if (m_envVars.contains(name)) {
+        if (outScope) *outScope = "Environment";
         return m_envVars.value(name);
     }
 
     // 3b. Folder-level variables (scoped to folder hierarchy)
     if (m_folderVars.contains(name)) {
+        if (outScope) *outScope = "Folder";
         return m_folderVars.value(name);
     }
 
     // 4. Collection variables
     if (m_collectionVars.contains(name)) {
+        if (outScope) *outScope = "Collection";
         return m_collectionVars.value(name);
     }
 
     // 5. Global variables
     if (m_globals.contains(name)) {
+        if (outScope) *outScope = "Global";
         return m_globals.value(name);
     }
 
-    // If unresolved, leave placeholder intact or return empty? Bruno leaves {{name}} or empties it.
+    if (outScope) *outScope = "Unresolved";
     return {};
+}
+
+QMap<QString, QPair<QString, QString>> VariableResolver::allAvailableVariables() const {
+    QMap<QString, QPair<QString, QString>> result;
+    for (auto it = m_globals.cbegin(); it != m_globals.cend(); ++it) {
+        result[it.key()] = {it.value(), "Global"};
+    }
+    for (auto it = m_collectionVars.cbegin(); it != m_collectionVars.cend(); ++it) {
+        result[it.key()] = {it.value(), "Collection"};
+    }
+    for (auto it = m_folderVars.cbegin(); it != m_folderVars.cend(); ++it) {
+        result[it.key()] = {it.value(), "Folder"};
+    }
+    for (auto it = m_envVars.cbegin(); it != m_envVars.cend(); ++it) {
+        result[it.key()] = {it.value(), "Environment"};
+    }
+    for (auto it = m_runtimeVars.cbegin(); it != m_runtimeVars.cend(); ++it) {
+        result[it.key()] = {it.value(), "Runtime"};
+    }
+    return result;
 }
 
 QString VariableResolver::resolveString(const QString& input) const {

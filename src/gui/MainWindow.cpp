@@ -9,6 +9,7 @@
 #include <QKeySequence>
 #include <QClipboard>
 #include <QGuiApplication>
+#include <QApplication>
 #include <Theme.h>
 #include "dialogs/EnvironmentDialog.h"
 #include "dialogs/CodeSnippetDialog.h"
@@ -37,6 +38,15 @@
 #include <QDialog>
 #include <QTimer>
 #include <QMenu>
+#include <QDesktopServices>
+#include <QUrl>
+#include <QCompleter>
+#include <QStringListModel>
+#include <QTableWidget>
+#include <QDialogButtonBox>
+#include <QHeaderView>
+#include <core/DocGenerator.h>
+#include <core/VariableResolver.h>
 
 namespace poppy::gui {
 
@@ -160,7 +170,14 @@ void MainWindow::setupUi() {
     m_urlEdit = new QLineEdit(this);
     m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Press Enter to send)");
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
+    connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::updateUrlVariableInspection);
     connect(m_urlEdit, &QLineEdit::returnPressed, this, &MainWindow::onSendClicked);
+
+    m_urlCompleter = new QCompleter(this);
+    m_urlCompleter->setCaseSensitivity(Qt::CaseInsensitive);
+    m_urlCompleter->setCompletionMode(QCompleter::PopupCompletion);
+    m_urlEdit->setCompleter(m_urlCompleter);
+
     urlBarLayout->addWidget(m_urlEdit, 1);
 
     m_sendBtn = new QPushButton("Send", this);
@@ -216,6 +233,18 @@ void MainWindow::setupUi() {
     auto* openShortcut = new QShortcut(QKeySequence::Open, this);
     connect(openShortcut, &QShortcut::activated, this, &MainWindow::onOpenCollection);
 
+    auto* themeShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), this);
+    connect(themeShortcut, &QShortcut::activated, this, &MainWindow::onToggleTheme);
+
+    // Status Bar & Variable Quick-Look Widget
+    auto* sb = statusBar();
+    m_varQuickBtn = new QPushButton("Active Variables: 0", this);
+    m_varQuickBtn->setCursor(Qt::PointingHandCursor);
+    m_varQuickBtn->setToolTip("View all active variables across Environment, Folder, and Collection scopes (Click to inspect)");
+    m_varQuickBtn->setStyleSheet("QPushButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-size: 11px; background: #27272a; color: #a1a1aa; } QPushButton:hover { background: #3f3f46; color: #ffffff; }");
+    connect(m_varQuickBtn, &QPushButton::clicked, this, &MainWindow::onShowQuickVariables);
+    sb->addPermanentWidget(m_varQuickBtn);
+
     onMethodChanged(0);
 }
 
@@ -260,6 +289,11 @@ void MainWindow::setupMenus() {
     toolsMenu->addAction("&Server-Sent Events (SSE)...", this, &MainWindow::onOpenSse);
     toolsMenu->addAction("&Mock Server...", this, &MainWindow::onOpenMockServer);
     toolsMenu->addAction("&Git Sync...", this, &MainWindow::onOpenGitSync);
+    toolsMenu->addSeparator();
+    toolsMenu->addAction("&Generate API Documentation...", this, &MainWindow::onGenerateDocumentation);
+
+    auto* viewMenu = menuBar()->addMenu("&View");
+    viewMenu->addAction("Toggle &Dark/Light Theme", QKeySequence(Qt::CTRL | Qt::Key_T), this, &MainWindow::onToggleTheme);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Keyboard Shortcuts...", QKeySequence(Qt::CTRL | Qt::Key_Slash), this, &MainWindow::onShowShortcuts);
@@ -299,6 +333,7 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
     }
 
     m_responseInspector->clear();
+    updateUrlVariableInspection();
 }
 
 void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
@@ -555,6 +590,7 @@ void MainWindow::onOpenCollection() {
     if (!dir.isEmpty()) {
         if (m_collectionModel.openDirectory(dir)) {
             m_sidebar->refreshTree();
+            updateUrlVariableInspection();
         } else {
             QMessageBox::warning(this, "Error", "Failed to open collection directory.");
         }
@@ -592,23 +628,13 @@ void MainWindow::onCopyAsCurl() {
 
 void MainWindow::onEnvironmentChanged(const QString& envName) {
     m_activeEnvName = envName;
+    updateUrlVariableInspection();
     statusBar()->showMessage(envName.isEmpty() ? "No environment active." : ("Active environment: " + envName), 3000);
 }
 
 void MainWindow::onShowCodeSnippets() {
     saveUiIntoRequest(m_currentRequest);
-    core::VariableResolver resolver;
-    core::EnvironmentModel activeEnv(m_activeEnvName);
-    for (const auto& env : m_collectionModel.environments()) {
-        if (env.name() == m_activeEnvName) {
-            activeEnv = env;
-            break;
-        }
-    }
-    resolver.setEnvironment(activeEnv);
-    if (m_activeItem) {
-        resolver.setFolderVariables(m_activeItem->effectiveVariables());
-    }
+    core::VariableResolver resolver = currentVariableResolver();
     core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
 
     CodeSnippetDialog dlg(resolvedReq, this);
@@ -654,11 +680,7 @@ void MainWindow::onSendClicked() {
     }
 
     // 2. Variable resolution
-    core::VariableResolver resolver;
-    resolver.setEnvironment(activeEnv);
-    if (m_activeItem) {
-        resolver.setFolderVariables(m_activeItem->effectiveVariables());
-    }
+    core::VariableResolver resolver = currentVariableResolver();
     core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
 
     // 3. Pre-request script
@@ -900,6 +922,167 @@ void MainWindow::onOpenGitSync() {
     auto dlg = new GitSyncDialog(repoPath, this);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->show();
+}
+
+core::VariableResolver MainWindow::currentVariableResolver() const {
+    core::VariableResolver resolver;
+    core::EnvironmentModel activeEnv(m_activeEnvName);
+    for (const auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            activeEnv = env;
+            break;
+        }
+    }
+    resolver.setEnvironment(activeEnv);
+    if (m_activeItem) {
+        resolver.setFolderVariables(m_activeItem->effectiveVariables());
+    }
+    return resolver;
+}
+
+void MainWindow::onGenerateDocumentation() {
+    auto requests = m_collectionModel.allRequests();
+    if (requests.isEmpty()) {
+        saveUiIntoRequest(m_currentRequest);
+        requests.append(m_currentRequest);
+    }
+
+    QString colName = m_collectionModel.name().isEmpty() ? "Poppy Collection" : m_collectionModel.name();
+    QString defaultPath = QDir::current().filePath(colName.toLower().replace(' ', '_') + "_docs.html");
+    QString savePath = QFileDialog::getSaveFileName(this, "Generate API Documentation", defaultPath, "HTML Document (*.html);;All Files (*.*)");
+    if (savePath.isEmpty()) return;
+
+    QString error;
+    core::VariableResolver resolver = currentVariableResolver();
+    if (core::DocGenerator::generateHtmlFile(savePath, requests, colName, "Generated with Poppy API Client", resolver, &error)) {
+        auto res = QMessageBox::information(this, "Documentation Generated",
+            QString("Interactive API Documentation generated successfully:\n%1\n\nOpen in default web browser?").arg(savePath),
+            QMessageBox::Yes | QMessageBox::No);
+        if (res == QMessageBox::Yes) {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(savePath));
+        }
+    } else {
+        QMessageBox::warning(this, "Documentation Generation Failed", QString("Could not generate documentation:\n%1").arg(error));
+    }
+}
+
+void MainWindow::onToggleTheme() {
+    bool dark = Theme::toggleTheme();
+    if (auto* app = qobject_cast<QApplication*>(QApplication::instance())) {
+        app->setStyleSheet(dark ? Theme::darkStyleSheet() : Theme::lightStyleSheet());
+    }
+    m_responseInspector->setTheme(dark);
+    statusBar()->showMessage(QString("Switched to %1 theme (Ctrl+T)").arg(dark ? "Dark" : "Light"), 3000);
+}
+
+void MainWindow::onShowQuickVariables() {
+    core::VariableResolver resolver = currentVariableResolver();
+    auto allVars = resolver.allAvailableVariables();
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Active Variables Quick-Look");
+    dlg.resize(550, 380);
+    auto* layout = new QVBoxLayout(&dlg);
+
+    auto* headerLabel = new QLabel(QString("Active Environment: <b>%1</b> &bull; Total Available Variables: <b>%2</b>")
+        .arg(m_activeEnvName.isEmpty() ? "None" : m_activeEnvName)
+        .arg(allVars.size()), &dlg);
+    headerLabel->setStyleSheet("padding: 4px; font-size: 12px;");
+    layout->addWidget(headerLabel);
+
+    auto* filterEdit = new QLineEdit(&dlg);
+    filterEdit->setPlaceholderText("Filter active variables...");
+    layout->addWidget(filterEdit);
+
+    auto* table = new QTableWidget(&dlg);
+    table->setColumnCount(3);
+    table->setHorizontalHeaderLabels({"Variable Name", "Scope", "Resolved Value"});
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Interactive);
+    table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Interactive);
+    table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Stretch);
+    table->setColumnWidth(0, 160);
+    table->setColumnWidth(1, 130);
+    table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    table->setSelectionBehavior(QAbstractItemView::SelectRows);
+    table->verticalHeader()->setVisible(false);
+
+    int row = 0;
+    for (auto it = allVars.begin(); it != allVars.end(); ++it) {
+        QString scope;
+        QString val = resolver.lookupVariableWithScope(it.key(), &scope);
+        table->insertRow(row);
+        table->setItem(row, 0, new QTableWidgetItem(it.key()));
+        table->setItem(row, 1, new QTableWidgetItem(scope));
+        table->setItem(row, 2, new QTableWidgetItem(val));
+        row++;
+    }
+    layout->addWidget(table);
+
+    connect(filterEdit, &QLineEdit::textChanged, [&dlg, table](const QString& q) {
+        for (int r = 0; r < table->rowCount(); ++r) {
+            bool matches = q.isEmpty();
+            for (int c = 0; !matches && c < table->columnCount(); ++c) {
+                auto* item = table->item(r, c);
+                if (item && item->text().contains(q, Qt::CaseInsensitive)) {
+                    matches = true;
+                }
+            }
+            table->setRowHidden(r, !matches);
+        }
+    });
+
+    auto* btnBox = new QDialogButtonBox(QDialogButtonBox::Close, &dlg);
+    connect(btnBox, &QDialogButtonBox::rejected, &dlg, &QDialog::accept);
+    layout->addWidget(btnBox);
+
+    dlg.exec();
+}
+
+void MainWindow::updateUrlVariableInspection() {
+    core::VariableResolver resolver = currentVariableResolver();
+    auto allVars = resolver.allAvailableVariables();
+
+    // Update autocompleter list
+    if (m_urlCompleter) {
+        QStringList varTokens;
+        for (auto it = allVars.begin(); it != allVars.end(); ++it) {
+            varTokens.append(QString("{{%1}}").arg(it.key()));
+        }
+        auto* model = new QStringListModel(varTokens, m_urlCompleter);
+        m_urlCompleter->setModel(model);
+    }
+
+    // Update status bar variable count button
+    if (m_varQuickBtn) {
+        m_varQuickBtn->setText(QString("Active Variables: %1").arg(allVars.size()));
+    }
+
+    // Inspect variables in current URL text
+    if (!m_urlEdit) return;
+    QString text = m_urlEdit->text();
+    static const QRegularExpression varRegex(R"(\{\{([^}]+)\}\})");
+    auto matchIter = varRegex.globalMatch(text);
+    if (!matchIter.hasNext()) {
+        m_urlEdit->setToolTip("Enter request URL or use {{variable_name}} for dynamic resolution");
+        return;
+    }
+
+    QString tooltip = "<div style='font-family: Consolas, monospace; font-size: 11px;'><b>Variable Hover Inspection:</b><br/>";
+    while (matchIter.hasNext()) {
+        auto match = matchIter.next();
+        QString varName = match.captured(1).trimmed();
+        QString scope;
+        QString val = resolver.lookupVariableWithScope(varName, &scope);
+        if (!scope.isEmpty()) {
+            tooltip += QString("&bull; <code style='color:#60a5fa;'>{{%1}}</code> &rarr; <b>%2</b> <span style='color:#a1a1aa;'>(Scope: %3)</span><br/>")
+                .arg(varName.toHtmlEscaped(), val.toHtmlEscaped(), scope.toHtmlEscaped());
+        } else {
+            tooltip += QString("&bull; <code style='color:#ef4444;'>{{%1}}</code> &rarr; <span style='color:#ef4444;'><i>[Unresolved Variable]</i></span><br/>")
+                .arg(varName.toHtmlEscaped());
+        }
+    }
+    tooltip += "</div>";
+    m_urlEdit->setToolTip(tooltip);
 }
 
 } // namespace poppy::gui
