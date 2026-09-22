@@ -16,7 +16,8 @@ public:
     // Strip characters illegal on Windows (and other reserved names) so
     // imported request files actually land on disk.
     static QString safeFileStem(const QString& name, const QString& fallback = QStringLiteral("item"));
-    static QString uniqueFilePath(const QString& directory, const QString& stem, const QString& extension);
+    static QString uniqueFilePath(const QString& directory, const QString& stem, const QString& extension,
+                                 const QString& ignorePath = {});
 };
 
 } // namespace poppy::core

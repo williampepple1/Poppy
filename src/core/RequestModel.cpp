@@ -1,6 +1,7 @@
 #include "RequestModel.h"
 #include "auth/AwsSigV4Signer.h"
 #include <QUuid>
+#include <QUrl>
 #include <QUrlQuery>
 #include <QRegularExpression>
 #include <QJsonDocument>
@@ -144,8 +145,8 @@ QByteArray RequestModel::effectiveBody() const {
         for (const QString& pair : pairs) {
             if (pair.isEmpty()) continue;
             const int eq = pair.indexOf('=');
-            const QString key = eq >= 0 ? pair.left(eq) : pair;
-            const QString value = eq >= 0 ? pair.mid(eq + 1) : QString();
+            const QString key = QUrl::fromPercentEncoding((eq >= 0 ? pair.left(eq) : pair).toUtf8());
+            const QString value = QUrl::fromPercentEncoding((eq >= 0 ? pair.mid(eq + 1) : QString()).toUtf8());
             if (!out.isEmpty()) out += '&';
             out += QUrl::toPercentEncoding(key) + '=' + QUrl::toPercentEncoding(value);
         }

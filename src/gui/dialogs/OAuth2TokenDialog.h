@@ -6,6 +6,8 @@
 #include <QPushButton>
 #include <QLabel>
 #include <QTcpServer>
+#include <QTcpSocket>
+#include <QHash>
 #include <network/CurlNetworkEngine.h>
 
 namespace poppy::gui {
@@ -45,6 +47,7 @@ private:
     QLabel* m_statusLabel;
 
     QTcpServer* m_server{nullptr};
+    QHash<QTcpSocket*, QByteArray> m_callbackBuffers;
 };
 
 } // namespace poppy::gui

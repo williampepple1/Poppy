@@ -181,11 +181,19 @@ void OAuth2TokenDialog::onNewTcpConnection() {
     QTcpSocket* socket = m_server->nextPendingConnection();
     if (!socket) return;
 
-    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
-        QByteArray requestData = socket->readAll();
-        QString requestStr = QString::fromUtf8(requestData);
+    connect(socket, &QTcpSocket::disconnected, this, [this, socket]() {
+        m_callbackBuffers.remove(socket);
+        socket->deleteLater();
+    });
 
-        // Parse: GET /callback?code=XXXX HTTP/1.1
+    connect(socket, &QTcpSocket::readyRead, this, [this, socket]() {
+        m_callbackBuffers[socket].append(socket->readAll());
+        const QByteArray& requestData = m_callbackBuffers[socket];
+        const int headerEnd = requestData.indexOf("\r\n\r\n");
+        if (headerEnd < 0) return;
+
+        QString requestStr = QString::fromUtf8(requestData.left(headerEnd));
+
         QString code;
         int firstLineEnd = requestStr.indexOf("\r\n");
         if (firstLineEnd > 0) {
@@ -200,7 +208,6 @@ void OAuth2TokenDialog::onNewTcpConnection() {
             }
         }
 
-        // Send HTML response to browser
         QByteArray html = "<!DOCTYPE html><html><body style='font-family: sans-serif; text-align: center; padding: 50px;'>"
                           "<h2 style='color: #22c55e;'>Poppy: Authorization Successful!</h2>"
                           "<p>You can close this window and return to the application.</p>"
@@ -212,6 +219,7 @@ void OAuth2TokenDialog::onNewTcpConnection() {
         socket->write(response);
         socket->flush();
         socket->disconnectFromHost();
+        m_callbackBuffers.remove(socket);
 
         if (m_server) {
             m_server->close();

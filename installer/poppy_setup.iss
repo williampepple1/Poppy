@@ -1,6 +1,6 @@
 #define MyAppName "Poppy"
 #ifndef MyAppVersion
-#define MyAppVersion "1.4.1"
+#define MyAppVersion "1.4.2"
 #endif
 #define MyAppPublisher "William Pepple"
 #define MyAppURL "https://github.com/williampepple1/Poppy"

@@ -158,6 +158,12 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "}\n\n";
     }
 
+    if (!req.proxy.trimmed().isEmpty()) {
+        ts << "settings {\n";
+        ts << "  proxy: " << req.proxy << "\n";
+        ts << "}\n\n";
+    }
+
     return out.trimmed() + "\n";
 }
 
@@ -241,11 +247,20 @@ QString BruWriter::safeFileStem(const QString& name, const QString& fallback) {
     return s;
 }
 
-QString BruWriter::uniqueFilePath(const QString& directory, const QString& stem, const QString& extension) {
+QString BruWriter::uniqueFilePath(const QString& directory, const QString& stem, const QString& extension,
+                                 const QString& ignorePath) {
     QDir dir(directory);
     QString path = dir.filePath(stem + extension);
+    const QString ignoreCanon = ignorePath.isEmpty() ? QString() : QFileInfo(ignorePath).canonicalFilePath();
+    const QString ignoreClean = ignorePath.isEmpty() ? QString() : QDir::cleanPath(ignorePath);
+    auto isIgnored = [&](const QString& candidate) {
+        if (ignorePath.isEmpty()) return false;
+        const QString canon = QFileInfo(candidate).canonicalFilePath();
+        if (!canon.isEmpty() && !ignoreCanon.isEmpty() && canon == ignoreCanon) return true;
+        return QDir::cleanPath(candidate) == ignoreClean;
+    };
     int n = 1;
-    while (QFileInfo::exists(path)) {
+    while (QFileInfo::exists(path) && !isIgnored(path)) {
         path = dir.filePath(QStringLiteral("%1 (%2)%3").arg(stem).arg(n++).arg(extension));
     }
     return path;

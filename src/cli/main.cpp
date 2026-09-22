@@ -3,6 +3,8 @@
 #include <QCommandLineOption>
 #include <QFileInfo>
 #include <QDir>
+#include <QFile>
+#include <QJsonValue>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
@@ -21,6 +23,19 @@
 #include <algorithm>
 
 using namespace poppy;
+
+static QString jsonValueToString(const QJsonValue& val) {
+    if (val.isArray()) {
+        return QString::fromUtf8(QJsonDocument(val.toArray()).toJson(QJsonDocument::Compact));
+    }
+    if (val.isObject()) {
+        return QString::fromUtf8(QJsonDocument(val.toObject()).toJson(QJsonDocument::Compact));
+    }
+    if (val.isBool()) return val.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+    if (val.isDouble()) return QString::number(val.toDouble(), 'g', 15);
+    if (val.isNull() || val.isUndefined()) return {};
+    return val.toString();
+}
 
 void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list) {
     if (!item) return;
@@ -46,16 +61,15 @@ struct SuiteResult {
 
 SuiteResult executeCliRequest(
     const core::RequestModel& req,
-    const core::EnvironmentModel& baseEnv,
+    core::EnvironmentModel& env,
     const QMap<QString, QString>& fixtureRow,
     network::CurlNetworkEngine& engine,
     core::ScriptRunner& scriptRunner,
     int iter,
     int iterations
 ) {
-    core::EnvironmentModel envCopy = baseEnv;
     core::VariableResolver resolver;
-    resolver.setEnvironment(envCopy);
+    resolver.setEnvironment(env);
     for (auto it = fixtureRow.constBegin(); it != fixtureRow.constEnd(); ++it) {
         resolver.setRuntimeVariable(it.key(), it.value());
     }
@@ -69,7 +83,7 @@ SuiteResult executeCliRequest(
     sr.method = core::methodToString(resolvedReq.method);
 
     QString preErr;
-    if (!scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, envCopy, &preErr)) {
+    if (!scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, env, &preErr)) {
         sr.success = false;
         sr.errorString = preErr.isEmpty() ? QString("Pre-request script failed") : preErr;
         return sr;
@@ -85,13 +99,13 @@ SuiteResult executeCliRequest(
     sr.errorString = res.errorString;
 
     QString postErr;
-    if (!scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, envCopy, &postErr)) {
+    if (!scriptRunner.runPostResponseScript(resolvedReq.scripts.postResponseScript, resolvedReq, res, env, &postErr)) {
         if (sr.errorString.isEmpty()) {
             sr.errorString = postErr.isEmpty() ? QString("Post-response script failed") : postErr;
         }
     }
 
-    core::TestReport report = scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, envCopy);
+    core::TestReport report = scriptRunner.runTests(resolvedReq.scripts.tests, resolvedReq, res, env);
     auto declResults = core::DeclarativeAssertionEvaluator::evaluateAll(resolvedReq.assertions, res);
     for (const auto& dr : declResults) {
         report.results.append(dr);
@@ -178,7 +192,7 @@ int main(int argc, char *argv[]) {
                             QMap<QString, QString> row;
                             QJsonObject obj = val.toObject();
                             for (auto it = obj.begin(); it != obj.end(); ++it) {
-                                row[it.key()] = it.value().toVariant().toString();
+                                row[it.key()] = jsonValueToString(it.value());
                             }
                             fixtureRows.append(row);
                         }
@@ -225,6 +239,15 @@ int main(int argc, char *argv[]) {
     } else if (fi.isFile() && fi.suffix().toLower() == "bru") {
         core::RequestModel single = core::BruParser::parseFile(collectionPath);
         requestsToRun.append(single);
+        QDir dir = fi.absoluteDir();
+        for (int up = 0; up < 8; ++up) {
+            if (QDir(dir.filePath(QStringLiteral("environments"))).exists()
+                || QFile::exists(dir.filePath(QStringLiteral("collection.bru")))) {
+                collection.openDirectory(dir.absolutePath());
+                break;
+            }
+            if (!dir.cdUp()) break;
+        }
     }
 
     if (requestsToRun.isEmpty()) {
@@ -348,14 +371,17 @@ int main(int argc, char *argv[]) {
         std::vector<SuiteResult> ordered(static_cast<size_t>(totalJobs));
         std::atomic<int> nextJob{0};
         auto worker = [&]() {
+            network::CurlNetworkEngine localEngine;
+            core::ScriptRunner localScripts;
             while (true) {
                 const int job = nextJob.fetch_add(1);
                 if (job >= totalJobs) break;
                 const int iter = job / requestsToRun.size();
                 const int i = job % requestsToRun.size();
+                core::EnvironmentModel envCopy = activeEnv;
                 ordered[static_cast<size_t>(job)] = executeCliRequest(
-                    requestsToRun[i], activeEnv, fixtureForIter(iter),
-                    engine, scriptRunner, iter, iterations);
+                    requestsToRun[i], envCopy, fixtureForIter(iter),
+                    localEngine, localScripts, iter, iterations);
             }
         };
         const int workers = std::max(1, std::min(concurrency, totalJobs));

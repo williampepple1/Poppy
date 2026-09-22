@@ -22,7 +22,7 @@ public:
 
     Q_INVOKABLE void setEnvVar(const QString& name, const QString& value) {
         if (m_env) {
-            m_env->addOrUpdateVariable(name, value);
+            m_env->setVariableValue(name, value);
         }
     }
 

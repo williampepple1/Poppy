@@ -3,6 +3,9 @@
 #include <QHBoxLayout>
 #include <QMessageBox>
 #include <QDir>
+#include <QFile>
+#include <QTextStream>
+#include <QColor>
 
 namespace poppy::gui {
 
@@ -85,13 +88,44 @@ void GitSyncDialog::appendLog(const QString& text, bool isError) {
 }
 
 void GitSyncDialog::runGitCommand(const QStringList& args) {
-    if (m_process->state() != QProcess::NotRunning) {
-        m_process->waitForFinished(2000);
-    }
+    m_cmdQueue.append(args);
+    pumpCommandQueue();
+}
 
+void GitSyncDialog::pumpCommandQueue() {
+    if (m_process->state() != QProcess::NotRunning) return;
+    if (m_cmdQueue.isEmpty()) {
+        setBusy(false);
+        return;
+    }
+    setBusy(true);
+    const QStringList args = m_cmdQueue.takeFirst();
     m_process->setWorkingDirectory(m_repoPath);
     appendLog("git " + args.join(' '));
     m_process->start("git", args);
+}
+
+void GitSyncDialog::setBusy(bool busy) {
+    m_busy = busy;
+    if (m_commitBtn) m_commitBtn->setEnabled(!busy);
+    if (m_pullBtn) m_pullBtn->setEnabled(!busy);
+    if (m_pushBtn) m_pushBtn->setEnabled(!busy);
+    if (m_refreshBtn) m_refreshBtn->setEnabled(!busy);
+}
+
+void GitSyncDialog::ensureSecretGitignore() {
+    const QString giPath = QDir(m_repoPath).filePath(QStringLiteral(".gitignore"));
+    QFile gi(giPath);
+    QString content;
+    if (gi.exists() && gi.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        content = QString::fromUtf8(gi.readAll());
+        gi.close();
+    }
+    if (content.contains("*.secret.env")) return;
+    if (!gi.open(QIODevice::Append | QIODevice::Text)) return;
+    QTextStream out(&gi);
+    if (!content.isEmpty() && !content.endsWith('\n')) out << '\n';
+    out << "*.secret.env\n";
 }
 
 void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus) {
@@ -102,14 +136,22 @@ void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
     if (!out.isEmpty()) appendLog(out);
     if (!err.isEmpty()) appendLog(err, exitCode != 0);
 
-    // If it was commit, pull, or push, refresh status
     auto args = m_process->arguments();
-    if (!args.isEmpty() && (args.first() == "commit" || args.first() == "push" || args.first() == "pull")) {
+    const bool shouldRefresh = !args.isEmpty()
+        && (args.first() == "commit" || args.first() == "push" || args.first() == "pull");
+
+    if (!m_cmdQueue.isEmpty()) {
+        pumpCommandQueue();
+        return;
+    }
+    setBusy(false);
+    if (shouldRefresh) {
         onRefreshStatus();
     }
 }
 
 void GitSyncDialog::onRefreshStatus() {
+    if (m_process->state() != QProcess::NotRunning) return;
     m_changedFilesList->clear();
 
     // Query branch
@@ -152,22 +194,29 @@ void GitSyncDialog::onCommit() {
         QMessageBox::warning(this, "Empty Message", "Please enter a commit message.");
         return;
     }
+    if (m_busy || m_process->state() != QProcess::NotRunning) {
+        appendLog("A git command is already running.", true);
+        return;
+    }
 
-    // git add .
-    QProcess addProc;
-    addProc.setWorkingDirectory(m_repoPath);
-    addProc.start("git", {"add", "."});
-    addProc.waitForFinished(5000);
-
-    // git commit
+    ensureSecretGitignore();
+    runGitCommand({"add", "--", ".", ":(exclude)*.secret.env", ":(exclude)**/*.secret.env"});
     runGitCommand({"commit", "-m", msg});
 }
 
 void GitSyncDialog::onPull() {
+    if (m_busy || m_process->state() != QProcess::NotRunning) {
+        appendLog("A git command is already running.", true);
+        return;
+    }
     runGitCommand({"pull", "--rebase"});
 }
 
 void GitSyncDialog::onPush() {
+    if (m_busy || m_process->state() != QProcess::NotRunning) {
+        appendLog("A git command is already running.", true);
+        return;
+    }
     runGitCommand({"push"});
 }
 

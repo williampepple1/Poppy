@@ -69,6 +69,19 @@ int main() {
     formReq.bodyContent = "q=hello world";
     assert(QString::fromUtf8(formReq.effectiveBody()).contains("hello%20world"));
 
+    RequestModel encodedForm;
+    encodedForm.bodyType = BodyType::FormUrlEncoded;
+    encodedForm.bodyContent = "q=hello%20world&note=a%26b";
+    QString encodedBody = QString::fromUtf8(encodedForm.effectiveBody());
+    assert(encodedBody.contains("hello%20world"));
+    assert(encodedBody.contains("a%26b"));
+    assert(!encodedBody.contains("hello%2520"));
+
+    QString tsOk = resolver.resolveString("{{$timestamp}}");
+    assert(!tsOk.contains("{{$timestamp}}"));
+    assert(resolver.resolveString("{{$timestampMillis}}") == "{{$timestampMillis}}");
+    assert(resolver.resolveString("{{$guidExtra}}") == "{{$guidExtra}}");
+
     std::cout << "test_variable_resolver PASSED!" << std::endl;
     return 0;
 }

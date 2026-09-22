@@ -298,7 +298,8 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     curl_mime* mime = nullptr;
     QByteArray bodyBytes;
     QList<QByteArray> mimeStorage;
-    if (req.bodyType == core::BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
+    const bool methodHasBody = req.method != core::HttpMethod::GET && req.method != core::HttpMethod::HEAD;
+    if (methodHasBody && req.bodyType == core::BodyType::MultipartForm && !req.formDataParams.isEmpty()) {
         mime = curl_mime_init(curl);
         for (const auto& p : req.formDataParams) {
             if (!p.enabled || p.key.isEmpty()) continue;
@@ -314,7 +315,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
             }
         }
         curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
-    } else {
+    } else if (methodHasBody) {
         bodyBytes = req.effectiveBody();
         if (!bodyBytes.isEmpty()) {
             curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());

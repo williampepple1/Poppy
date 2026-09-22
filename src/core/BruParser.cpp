@@ -194,6 +194,8 @@ RequestModel BruParser::parse(const QString& content) {
                                 else if (key == "password") req.auth.ntlmPassword = val;
                                 else if (key == "domain") req.auth.ntlmDomain = val;
                                 else if (key == "workstation") req.auth.ntlmWorkstation = val;
+                            } else if (blockName == "settings") {
+                                if (key == "proxy") req.proxy = val;
                             }
                         }
                     }

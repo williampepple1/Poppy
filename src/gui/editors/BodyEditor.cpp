@@ -3,6 +3,7 @@
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QJsonDocument>
+#include <QUrl>
 
 namespace poppy::gui {
 
@@ -185,14 +186,17 @@ void BodyEditor::loadFromRequest(const core::RequestModel& req) {
     } else if (req.bodyType == core::BodyType::MultipartForm) {
         m_multipartTable->setFormData(req.formDataParams);
     } else if (req.bodyType == core::BodyType::FormUrlEncoded) {
-        // Parse key=val&... lines into table
         QList<core::HttpParam> params;
         QStringList pairs = req.bodyContent.split('&', Qt::SkipEmptyParts);
         for (const auto& pair : pairs) {
             int eq = pair.indexOf('=');
-            if (eq > 0) {
-                params.append({.key = pair.left(eq), .value = pair.mid(eq + 1), .enabled = true});
-            }
+            QString rawKey = eq >= 0 ? pair.left(eq) : pair;
+            QString rawVal = eq >= 0 ? pair.mid(eq + 1) : QString();
+            params.append({
+                .key = QUrl::fromPercentEncoding(rawKey.toUtf8()),
+                .value = QUrl::fromPercentEncoding(rawVal.toUtf8()),
+                .enabled = true
+            });
         }
         m_formTable->setParams(params);
     } else {
@@ -220,7 +224,8 @@ void BodyEditor::saveToRequest(core::RequestModel& req) const {
         QStringList parts;
         for (const auto& p : m_formTable->params()) {
             if (p.enabled && !p.key.isEmpty()) {
-                parts.append(p.key + "=" + p.value);
+                parts.append(QString::fromLatin1(QUrl::toPercentEncoding(p.key)) + "="
+                             + QString::fromLatin1(QUrl::toPercentEncoding(p.value)));
             }
         }
         req.bodyContent = parts.join('&');

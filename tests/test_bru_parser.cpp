@@ -2,6 +2,9 @@
 #include <cassert>
 #include <core/BruParser.h>
 #include <core/BruWriter.h>
+#include <QDir>
+#include <QFile>
+#include <QTemporaryDir>
 
 using namespace poppy::core;
 
@@ -103,6 +106,25 @@ tests {
     assert(mpRoundTrip.formDataParams.size() == 2);
     assert(mpRoundTrip.formDataParams[0].key == "title" && mpRoundTrip.formDataParams[0].value == "hello");
     assert(mpRoundTrip.formDataParams[1].isFile && mpRoundTrip.formDataParams[1].value == "/tmp/a.txt");
+
+    RequestModel proxied;
+    proxied.name = "Proxied";
+    proxied.method = HttpMethod::GET;
+    proxied.url = "https://example.com";
+    proxied.proxy = "http://127.0.0.1:8080";
+    RequestModel proxyRoundTrip = BruParser::parse(BruWriter::serialize(proxied));
+    assert(proxyRoundTrip.proxy == "http://127.0.0.1:8080");
+
+    QTemporaryDir tmp;
+    assert(tmp.isValid());
+    QFile existing(tmp.filePath("Get_User.bru"));
+    assert(existing.open(QIODevice::WriteOnly));
+    existing.write("x");
+    existing.close();
+    QString reused = BruWriter::uniqueFilePath(tmp.path(), "Get_User", ".bru", existing.fileName());
+    assert(QDir::cleanPath(reused) == QDir::cleanPath(existing.fileName()));
+    QString other = BruWriter::uniqueFilePath(tmp.path(), "Get_User", ".bru");
+    assert(QDir::cleanPath(other) != QDir::cleanPath(existing.fileName()));
 
     std::cout << "test_bru_parser PASSED!" << std::endl;
     return 0;

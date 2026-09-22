@@ -7,6 +7,8 @@
 #include <QListWidget>
 #include <QPlainTextEdit>
 #include <QProcess>
+#include <QList>
+#include <QStringList>
 
 namespace poppy::gui {
 
@@ -27,9 +29,14 @@ private:
     void setupUi();
     void runGitCommand(const QStringList& args);
     void appendLog(const QString& text, bool isError = false);
+    void pumpCommandQueue();
+    void setBusy(bool busy);
+    void ensureSecretGitignore();
 
     QString m_repoPath;
     QProcess* m_process{nullptr};
+    QList<QStringList> m_cmdQueue;
+    bool m_busy{false};
 
     QLabel* m_branchLabel{nullptr};
     QLabel* m_statusLabel{nullptr};

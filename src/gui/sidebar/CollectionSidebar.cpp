@@ -23,13 +23,27 @@ public:
     std::function<void(QTreeWidgetItem*)> afterDrop;
 
 protected:
+    void startDrag(Qt::DropActions supportedActions) override {
+        const auto selected = selectedItems();
+        m_dragged = selected.isEmpty() ? currentItem() : selected.first();
+        QTreeWidget::startDrag(supportedActions);
+    }
+
     void dropEvent(QDropEvent* event) override {
-        QTreeWidgetItem* dragged = currentItem();
+        QTreeWidgetItem* dragged = m_dragged;
+        if (!dragged) {
+            const auto selected = selectedItems();
+            dragged = selected.isEmpty() ? currentItem() : selected.first();
+        }
+        m_dragged = nullptr;
         QTreeWidget::dropEvent(event);
         if (dragged && afterDrop) {
             afterDrop(dragged);
         }
     }
+
+private:
+    QTreeWidgetItem* m_dragged{nullptr};
 };
 
 } // namespace

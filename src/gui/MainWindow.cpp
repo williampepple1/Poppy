@@ -615,12 +615,20 @@ void MainWindow::closeTab(int index) {
             QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
         if (res == QMessageBox::Cancel) return;
         if (res == QMessageBox::Save) {
+            bool saved = false;
             if (m_openTabs[index].item && m_openTabs[index].item->request()) {
                 *m_openTabs[index].item->request() = m_openTabs[index].request;
-                m_collectionModel.saveRequest(m_openTabs[index].item);
+                saved = m_collectionModel.saveRequest(m_openTabs[index].item);
             } else if (m_collectionModel.rootItem()) {
-                m_collectionModel.addRequest(m_collectionModel.rootItem(),
-                    m_openTabs[index].request.name, m_openTabs[index].request);
+                saved = m_collectionModel.addRequest(m_collectionModel.rootItem(),
+                    m_openTabs[index].request.name, m_openTabs[index].request) != nullptr;
+            } else {
+                saved = true;
+            }
+            if (!saved) {
+                QMessageBox::warning(this, "Save Failed",
+                    "Could not write the request to disk. The tab was left open.");
+                return;
             }
         }
     }
@@ -788,19 +796,24 @@ void MainWindow::onSaveRequest() {
     saveUiIntoRequest(m_currentRequest);
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         m_openTabs[m_currentTabIndex].request = m_currentRequest;
-        m_openTabs[m_currentTabIndex].isDirty = false;
-        updateTabTitle(m_currentTabIndex);
     }
     if (m_activeItem) {
         if (m_activeItem->request()) {
             *m_activeItem->request() = m_currentRequest;
         }
         if (m_collectionModel.saveRequest(m_activeItem)) {
+            if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+                m_openTabs[m_currentTabIndex].isDirty = false;
+                updateTabTitle(m_currentTabIndex);
+            }
             statusBar()->showMessage("Request saved successfully.", 3000);
         } else {
             statusBar()->showMessage("Failed to save request to disk.", 3000);
         }
     } else {
+        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+            updateTabTitle(m_currentTabIndex);
+        }
         statusBar()->showMessage("Quick request updated.", 3000);
     }
 }
@@ -846,7 +859,17 @@ void MainWindow::onImport() {
 }
 
 void MainWindow::onRunCollection() {
-    CollectionRunnerDialog dlg(&m_collectionModel, &m_networkEngine, &m_scriptRunner, m_activeEnvName, this);
+    network::CurlNetworkEngine runnerEngine;
+    runnerEngine.setSslVerifyPeer(m_networkEngine.sslVerifyPeer());
+    runnerEngine.setTimeoutMs(m_networkEngine.timeoutMs());
+    runnerEngine.setProxy(m_networkEngine.proxy());
+    runnerEngine.setCookieJarEnabled(m_networkEngine.cookieJarEnabled());
+    runnerEngine.setCookieJarPath(m_networkEngine.cookieJarPath());
+    runnerEngine.setClientCertPath(m_networkEngine.clientCertPath());
+    runnerEngine.setClientCertType(m_networkEngine.clientCertType());
+    runnerEngine.setClientKeyPath(m_networkEngine.clientKeyPath());
+    runnerEngine.setClientKeyPassword(m_networkEngine.clientKeyPassword());
+    CollectionRunnerDialog dlg(&m_collectionModel, &runnerEngine, &m_scriptRunner, m_activeEnvName, this);
     dlg.exec();
 }
 
@@ -940,8 +963,12 @@ void MainWindow::onHistoryItemSelected(const core::HistoryItem& item) {
         saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
     }
     loadRequestIntoUi(item.request);
+    m_currentRequest = item.request;
+    m_activeItem = nullptr;
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         m_openTabs[m_currentTabIndex].request = item.request;
+        m_openTabs[m_currentTabIndex].item = nullptr;
+        m_openTabs[m_currentTabIndex].itemPath.clear();
         m_openTabs[m_currentTabIndex].isDirty = true;
         updateTabTitle(m_currentTabIndex);
     }
@@ -1235,9 +1262,19 @@ void MainWindow::onShowQuickVariables() {
     table->verticalHeader()->setVisible(false);
 
     int row = 0;
+    const core::EnvironmentModel* activeEnvModel = nullptr;
+    for (const auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            activeEnvModel = &env;
+            break;
+        }
+    }
     for (auto it = allVars.begin(); it != allVars.end(); ++it) {
         QString scope;
         QString val = resolver.lookupVariableWithScope(it.key(), &scope);
+        if (activeEnvModel && activeEnvModel->isSecretVariable(it.key())) {
+            val = QStringLiteral("••••••••");
+        }
         table->insertRow(row);
         table->setItem(row, 0, new QTableWidgetItem(it.key()));
         table->setItem(row, 1, new QTableWidgetItem(scope));
@@ -1295,13 +1332,24 @@ void MainWindow::updateUrlVariableInspection() {
         return;
     }
 
+    const core::EnvironmentModel* activeEnvModel = nullptr;
+    for (const auto& env : m_collectionModel.environments()) {
+        if (env.name() == m_activeEnvName) {
+            activeEnvModel = &env;
+            break;
+        }
+    }
+
     QString tooltip = "<div style='font-family: Consolas, monospace; font-size: 11px;'><b>Variable Hover Inspection:</b><br/>";
     while (matchIter.hasNext()) {
         auto match = matchIter.next();
         QString varName = match.captured(1).trimmed();
         QString scope;
         QString val = resolver.lookupVariableWithScope(varName, &scope);
-        if (!scope.isEmpty()) {
+        if (activeEnvModel && activeEnvModel->isSecretVariable(varName)) {
+            val = QStringLiteral("••••••••");
+        }
+        if (!scope.isEmpty() && scope != "Unresolved") {
             tooltip += QString("&bull; <code style='color:#60a5fa;'>{{%1}}</code> &rarr; <b>%2</b> <span style='color:#a1a1aa;'>(Scope: %3)</span><br/>")
                 .arg(varName.toHtmlEscaped(), val.toHtmlEscaped(), scope.toHtmlEscaped());
         } else {
@@ -1501,14 +1549,25 @@ void MainWindow::closeEvent(QCloseEvent* event) {
             return;
         }
         if (res == QMessageBox::Save) {
+            bool allSaved = true;
             for (auto& tab : m_openTabs) {
                 if (!tab.isDirty) continue;
+                bool saved = false;
                 if (tab.item && tab.item->request()) {
                     *tab.item->request() = tab.request;
-                    m_collectionModel.saveRequest(tab.item);
+                    saved = m_collectionModel.saveRequest(tab.item);
                 } else if (m_collectionModel.rootItem()) {
-                    m_collectionModel.addRequest(m_collectionModel.rootItem(), tab.request.name, tab.request);
+                    saved = m_collectionModel.addRequest(m_collectionModel.rootItem(), tab.request.name, tab.request) != nullptr;
+                } else {
+                    saved = true;
                 }
+                if (!saved) allSaved = false;
+            }
+            if (!allSaved) {
+                QMessageBox::warning(this, "Save Failed",
+                    "One or more requests could not be written to disk.");
+                event->ignore();
+                return;
             }
         }
     }

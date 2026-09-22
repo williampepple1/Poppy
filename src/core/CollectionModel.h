@@ -110,12 +110,14 @@ private:
     void rewriteDescendantPaths(CollectionItem* item, const QString& oldPrefix, const QString& newPrefix);
     CollectionItem* findItemByPathRecursive(CollectionItem* item, const QString& canonicalPath) const;
     void scheduleReloadFromDisk();
+    void suppressDiskWatcher();
 
     QString m_rootPath;
     std::unique_ptr<CollectionItem> m_rootItem;
     QList<EnvironmentModel> m_environments;
     QFileSystemWatcher m_fileWatcher;
     QTimer m_reloadDebounce;
+    QTimer m_suppressClearTimer;
     bool m_suppressWatchReload{false};
 };
 

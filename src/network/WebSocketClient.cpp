@@ -249,6 +249,9 @@ void WebSocketClient::processFrames() {
 
         switch (opcode) {
             case 0x0: { // Continuation
+                if (m_fragmentOpcode == 0) {
+                    break;
+                }
                 m_fragmentBuffer.append(payload);
                 if (fin) {
                     emitComplete(m_fragmentOpcode, m_fragmentBuffer);

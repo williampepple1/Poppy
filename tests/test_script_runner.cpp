@@ -55,6 +55,12 @@ int main(int argc, char* argv[]) {
     assert(postOk);
     assert(env.variableValue("savedUserId") == "1234");
 
+    env.addOrUpdateVariable("apiKey", "old-secret", true, true);
+    bool secretOk = runner.runPreRequestScript(QStringLiteral("poppy.setEnvVar(\"apiKey\", \"rotated\");"), req, env);
+    assert(secretOk);
+    assert(env.variableValue("apiKey") == "rotated");
+    assert(env.isSecretVariable("apiKey"));
+
     // 4. Test assertions runner
     QString testScript = R"(
         test("Status is 200", function() {

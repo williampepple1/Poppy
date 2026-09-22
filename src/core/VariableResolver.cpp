@@ -16,16 +16,16 @@ QString VariableResolver::lookupVariable(const QString& name) const {
 }
 
 QString VariableResolver::lookupVariableWithScope(const QString& name, QString* outScope) const {
-    // 1. Dynamic generators
-    if (name.startsWith("$guid")) {
+    // 1. Dynamic generators (exact token names only)
+    if (name == QLatin1String("$guid")) {
         if (outScope) *outScope = "Dynamic ($guid)";
         return QUuid::createUuid().toString(QUuid::WithoutBraces);
     }
-    if (name.startsWith("$timestamp")) {
+    if (name == QLatin1String("$timestamp")) {
         if (outScope) *outScope = "Dynamic ($timestamp)";
         return QString::number(QDateTime::currentSecsSinceEpoch());
     }
-    if (name.startsWith("$randomInt")) {
+    if (name == QLatin1String("$randomInt")) {
         if (outScope) *outScope = "Dynamic ($randomInt)";
         return QString::number(QRandomGenerator::global()->bounded(1000));
     }

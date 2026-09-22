@@ -22,6 +22,16 @@ void EnvironmentModel::addOrUpdateVariable(const QString& name, const QString& v
     });
 }
 
+void EnvironmentModel::setVariableValue(const QString& name, const QString& value) {
+    for (auto& v : m_variables) {
+        if (v.name == name) {
+            v.value = value;
+            return;
+        }
+    }
+    addOrUpdateVariable(name, value, false, true);
+}
+
 void EnvironmentModel::removeVariable(const QString& name) {
     for (int i = 0; i < m_variables.size(); ++i) {
         if (m_variables[i].name == name) {
@@ -43,6 +53,13 @@ QString EnvironmentModel::variableValue(const QString& name) const {
 bool EnvironmentModel::hasVariable(const QString& name) const {
     for (const auto& v : m_variables) {
         if (v.name == name) return true;
+    }
+    return false;
+}
+
+bool EnvironmentModel::isSecretVariable(const QString& name) const {
+    for (const auto& v : m_variables) {
+        if (v.name == name) return v.isSecret;
     }
     return false;
 }

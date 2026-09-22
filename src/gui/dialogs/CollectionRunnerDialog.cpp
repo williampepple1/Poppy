@@ -259,8 +259,12 @@ void CollectionRunnerDialog::loadDataFile(const QString& filePath) {
                 QJsonObject obj = val.toObject();
                 QMap<QString, QString> row;
                 for (auto it = obj.begin(); it != obj.end(); ++it) {
-                    if (it.value().isObject() || it.value().isArray()) {
-                        row[it.key()] = QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact);
+                    if (it.value().isArray()) {
+                        row[it.key()] = QString::fromUtf8(QJsonDocument(it.value().toArray()).toJson(QJsonDocument::Compact));
+                    } else if (it.value().isObject()) {
+                        row[it.key()] = QString::fromUtf8(QJsonDocument(it.value().toObject()).toJson(QJsonDocument::Compact));
+                    } else if (it.value().isBool()) {
+                        row[it.key()] = it.value().toBool() ? QStringLiteral("true") : QStringLiteral("false");
                     } else {
                         row[it.key()] = it.value().toVariant().toString();
                     }

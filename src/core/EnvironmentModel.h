@@ -27,9 +27,11 @@ public:
     QList<EnvironmentVariable>& variables() { return m_variables; }
 
     void addOrUpdateVariable(const QString& name, const QString& value, bool isSecret = false, bool enabled = true);
+    void setVariableValue(const QString& name, const QString& value);
     void removeVariable(const QString& name);
     QString variableValue(const QString& name) const;
     bool hasVariable(const QString& name) const;
+    bool isSecretVariable(const QString& name) const;
 
     // Load / Save standard .env file format
     static EnvironmentModel loadFromEnvFile(const QString& filePath, const QString& envName = {});

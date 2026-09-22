@@ -18,3 +18,6 @@ release-installer/
 *.suo
 *.userosv
 CMakeUserPresets.json
+
+# Secret environment files
+*.secret.env

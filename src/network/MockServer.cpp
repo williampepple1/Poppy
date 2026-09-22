@@ -142,6 +142,32 @@ void MockServer::onNewConnection() {
     }
 }
 
+static bool decodeChunkedBody(const QByteArray& in, QByteArray& bodyOut, int& consumed) {
+    int pos = 0;
+    QByteArray body;
+    while (pos < in.size()) {
+        const int lineEnd = in.indexOf("\r\n", pos);
+        if (lineEnd < 0) return false;
+        bool ok = false;
+        const int chunkSize = in.mid(pos, lineEnd - pos).trimmed().toInt(&ok, 16);
+        if (!ok || chunkSize < 0) return false;
+        pos = lineEnd + 2;
+        if (chunkSize == 0) {
+            const int trailEnd = in.indexOf("\r\n", pos);
+            if (trailEnd < 0) return false;
+            consumed = trailEnd + 2;
+            bodyOut = body;
+            return true;
+        }
+        if (pos + chunkSize + 2 > in.size()) return false;
+        body.append(in.mid(pos, chunkSize));
+        pos += chunkSize;
+        if (in.mid(pos, 2) != "\r\n") return false;
+        pos += 2;
+    }
+    return false;
+}
+
 void MockServer::handleClientSocket(QTcpSocket* socket) {
     if (!socket) return;
     m_recvBuffers[socket].append(socket->readAll());
@@ -156,18 +182,37 @@ void MockServer::handleClientSocket(QTcpSocket* socket) {
     QStringList lines = headersPart.split("\r\n");
     if (lines.isEmpty()) return;
 
+    bool hasContentLength = false;
     int contentLength = 0;
+    bool isChunked = false;
     for (int i = 1; i < lines.size(); ++i) {
         int colon = lines[i].indexOf(':');
         if (colon == -1) continue;
-        if (lines[i].left(colon).trimmed().compare("Content-Length", Qt::CaseInsensitive) == 0) {
-            contentLength = lines[i].mid(colon + 1).trimmed().toInt();
+        const QString hName = lines[i].left(colon).trimmed();
+        const QString hVal = lines[i].mid(colon + 1).trimmed();
+        if (hName.compare("Content-Length", Qt::CaseInsensitive) == 0) {
+            hasContentLength = true;
+            contentLength = hVal.toInt();
+        } else if (hName.compare("Transfer-Encoding", Qt::CaseInsensitive) == 0
+                   && hVal.contains("chunked", Qt::CaseInsensitive)) {
+            isChunked = true;
         }
     }
-    if (bodyBytesSoFar.size() < contentLength) return;
 
-    QString bodyPart = QString::fromUtf8(bodyBytesSoFar.left(contentLength));
-    rawData.remove(0, headerEnd + 4 + contentLength);
+    QByteArray bodyBytes;
+    if (hasContentLength) {
+        if (contentLength < 0 || bodyBytesSoFar.size() < contentLength) return;
+        bodyBytes = bodyBytesSoFar.left(contentLength);
+        rawData.remove(0, headerEnd + 4 + contentLength);
+    } else if (isChunked) {
+        int consumed = 0;
+        if (!decodeChunkedBody(bodyBytesSoFar, bodyBytes, consumed)) return;
+        rawData.remove(0, headerEnd + 4 + consumed);
+    } else {
+        bodyBytes = bodyBytesSoFar;
+        rawData.remove(0, headerEnd + 4 + bodyBytesSoFar.size());
+    }
+    QString bodyPart = QString::fromUtf8(bodyBytes);
 
     QString requestLine = lines.first();
     auto reqParts = requestLine.split(' ');

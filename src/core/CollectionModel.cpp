@@ -45,6 +45,11 @@ CollectionModel::CollectionModel(QObject* parent) : QObject(parent) {
             reload();
         }
     });
+    m_suppressClearTimer.setSingleShot(true);
+    m_suppressClearTimer.setInterval(750);
+    connect(&m_suppressClearTimer, &QTimer::timeout, this, [this]() {
+        m_suppressWatchReload = false;
+    });
     connect(&m_fileWatcher, &QFileSystemWatcher::directoryChanged, this, [this](const QString& path) {
         emit directoryChangedOnDisk(path);
         scheduleReloadFromDisk();
@@ -146,6 +151,7 @@ CollectionItem* CollectionModel::addRequest(CollectionItem* parent, const QStrin
     CollectionItem* targetParent = parent ? parent : m_rootItem.get();
     if (!targetParent) return nullptr;
 
+    suppressDiskWatcher();
     QString parentDir = targetParent->path();
     QString filePath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(name), ".bru");
 
@@ -166,6 +172,7 @@ CollectionItem* CollectionModel::addFolder(CollectionItem* parent, const QString
     CollectionItem* targetParent = parent ? parent : m_rootItem.get();
     if (!targetParent) return nullptr;
 
+    suppressDiskWatcher();
     QString parentDir = targetParent->path();
     QString safeName = BruWriter::safeFileStem(name, QStringLiteral("folder"));
     QDir dir(parentDir);
@@ -185,20 +192,16 @@ bool CollectionModel::saveRequest(CollectionItem* item) {
     if (!item || item->type() != CollectionItemType::Request || !item->request()) {
         return false;
     }
-    m_suppressWatchReload = true;
-    const bool ok = BruWriter::writeToFile(item->path(), *item->request());
-    m_suppressWatchReload = false;
-    return ok;
+    suppressDiskWatcher();
+    return BruWriter::writeToFile(item->path(), *item->request());
 }
 
 bool CollectionModel::saveFolderVariables(CollectionItem* folder) {
     if (!folder || folder->type() == CollectionItemType::Request) {
         return false;
     }
-    m_suppressWatchReload = true;
-    const bool ok = BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables());
-    m_suppressWatchReload = false;
-    return ok;
+    suppressDiskWatcher();
+    return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables());
 }
 
 void CollectionModel::notifyItemTreeDeleted(CollectionItem* item) {
@@ -213,6 +216,7 @@ void CollectionModel::notifyItemTreeDeleted(CollectionItem* item) {
 bool CollectionModel::deleteItem(CollectionItem* item) {
     if (!item || item == m_rootItem.get()) return false;
 
+    suppressDiskWatcher();
     if (item->type() == CollectionItemType::Folder) {
         QDir dir(item->path());
         if (!dir.removeRecursively()) return false;
@@ -236,25 +240,46 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
     QFileInfo fi(item->path());
     QString parentDir = fi.dir().path();
     const QString oldPath = item->path();
+    suppressDiskWatcher();
 
     if (item->type() == CollectionItemType::Folder) {
         QString safeName = BruWriter::safeFileStem(newName, QStringLiteral("folder"));
         QString newPath = QDir(parentDir).filePath(safeName);
-        QDir dir;
-        if (!dir.rename(oldPath, newPath)) return false;
-        item->setName(safeName);
-        item->setPath(QFileInfo(newPath).canonicalFilePath());
-        rewriteDescendantPaths(item, oldPath, item->path());
-        if (m_fileWatcher.directories().contains(oldPath)) {
-            m_fileWatcher.removePath(oldPath);
+        const QString oldCanon = QFileInfo(oldPath).canonicalFilePath();
+        auto sameAsOld = [&](const QString& candidate) {
+            const QString c = QFileInfo(candidate).canonicalFilePath();
+            if (!c.isEmpty() && !oldCanon.isEmpty()) return c == oldCanon;
+            return QDir::cleanPath(candidate) == QDir::cleanPath(oldPath);
+        };
+        if (QFileInfo::exists(newPath) && !sameAsOld(newPath)) {
+            int n = 1;
+            QString candidate;
+            do {
+                candidate = QDir(parentDir).filePath(QStringLiteral("%1 (%2)").arg(safeName).arg(n++));
+            } while (QFileInfo::exists(candidate));
+            newPath = candidate;
         }
-        m_fileWatcher.addPath(item->path());
-    } else {
-        QString newPath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(newName), ".bru");
-        QFile file(oldPath);
-        if (!file.rename(newPath)) return false;
+        if (!sameAsOld(newPath)) {
+            QDir dir;
+            if (!dir.rename(oldPath, newPath)) return false;
+            item->setPath(QFileInfo(newPath).canonicalFilePath());
+            rewriteDescendantPaths(item, oldPath, item->path());
+            if (m_fileWatcher.directories().contains(oldPath)) {
+                m_fileWatcher.removePath(oldPath);
+            }
+            m_fileWatcher.addPath(item->path());
+        }
         item->setName(newName);
-        item->setPath(newPath);
+        BruWriter::writeFolderFile(item->path(), newName, item->variables());
+    } else {
+        QString newPath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(newName), ".bru", oldPath);
+        if (QDir::cleanPath(newPath) != QDir::cleanPath(oldPath)
+            && QFileInfo(newPath).canonicalFilePath() != QFileInfo(oldPath).canonicalFilePath()) {
+            QFile file(oldPath);
+            if (!file.rename(newPath)) return false;
+            item->setPath(newPath);
+        }
+        item->setName(newName);
         if (item->request()) {
             item->request()->name = newName;
             saveRequest(item);
@@ -280,14 +305,13 @@ bool CollectionModel::moveItem(CollectionItem* item, CollectionItem* newParent) 
     QString destPath = QDir(newParent->path()).filePath(fi.fileName());
     if (QFileInfo::exists(destPath)) return false;
 
-    m_suppressWatchReload = true;
+    suppressDiskWatcher();
     bool renamed = false;
     if (item->type() == CollectionItemType::Folder) {
         renamed = QDir().rename(oldPath, destPath);
     } else {
         renamed = QFile::rename(oldPath, destPath);
     }
-    m_suppressWatchReload = false;
     if (!renamed) return false;
 
     if (item->parent()) {
@@ -334,7 +358,10 @@ void CollectionModel::rewriteDescendantPaths(CollectionItem* item, const QString
     if (!item) return;
     for (auto* child : item->children()) {
         QString p = child->path();
-        if (p.startsWith(oldPrefix)) {
+        const bool bounded = (p == oldPrefix)
+            || p.startsWith(oldPrefix + QLatin1Char('/'))
+            || p.startsWith(oldPrefix + QLatin1Char('\\'));
+        if (bounded) {
             child->setPath(newPrefix + p.mid(oldPrefix.size()));
         }
         rewriteDescendantPaths(child, oldPrefix, newPrefix);
@@ -344,6 +371,12 @@ void CollectionModel::rewriteDescendantPaths(CollectionItem* item, const QString
 void CollectionModel::scheduleReloadFromDisk() {
     if (m_suppressWatchReload || m_rootPath.isEmpty()) return;
     m_reloadDebounce.start();
+}
+
+void CollectionModel::suppressDiskWatcher() {
+    m_suppressWatchReload = true;
+    m_reloadDebounce.stop();
+    m_suppressClearTimer.start();
 }
 
 static void collectAllRequestsRecursively(const CollectionItem* item, QList<RequestModel>& list) {
