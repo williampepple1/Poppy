@@ -82,6 +82,7 @@ private:
     void closeTab(int index);
     void updateTabTitle(int index);
     core::VariableResolver currentVariableResolver() const;
+    void updateTopEnvCombo();
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -127,6 +128,7 @@ private:
     ResponseInspector* m_responseInspector;
     class QCompleter* m_urlCompleter{nullptr};
     QPushButton* m_varQuickBtn{nullptr};
+    QComboBox* m_topEnvCombo{nullptr};
 };
 
 } // namespace poppy::gui

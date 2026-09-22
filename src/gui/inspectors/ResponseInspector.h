@@ -41,6 +41,9 @@ private slots:
     void resetFilter();
     void toggleChartView();
 
+signals:
+    void storeVariableRequested(const QString& selectedValue);
+
 private:
     void updateTelemetryBar(const core::ResponseModel& res);
     void updateHeadersTable(const core::ResponseModel& res);

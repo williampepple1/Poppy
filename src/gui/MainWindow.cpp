@@ -148,6 +148,18 @@ void MainWindow::setupUi() {
     connect(m_proxyBtn, &QPushButton::clicked, this, &MainWindow::onConfigureRequestProxy);
     reqInfoBar->addWidget(m_proxyBtn);
 
+    m_topEnvCombo = new QComboBox(this);
+    m_topEnvCombo->setFixedWidth(130);
+    m_topEnvCombo->setToolTip("Active Environment");
+    connect(m_topEnvCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
+        if (idx < 0 || !m_topEnvCombo) return;
+        QString env = m_topEnvCombo->itemData(idx).toString();
+        if (env != m_activeEnvName) {
+            onEnvironmentChanged(env);
+        }
+    });
+    reqInfoBar->addWidget(m_topEnvCombo);
+
     reqLayout->addLayout(reqInfoBar);
 
     // URL & Method & Send Bar
@@ -210,6 +222,29 @@ void MainWindow::setupUi() {
 
     // Response Inspector
     m_responseInspector = new ResponseInspector(this);
+    connect(m_responseInspector, &ResponseInspector::storeVariableRequested, this, [this](const QString& val) {
+        if (m_activeEnvName.isEmpty()) {
+            QMessageBox::information(this, "No Active Environment", "Please select or activate an environment first before storing variables.");
+            return;
+        }
+        bool ok = false;
+        QString varName = QInputDialog::getText(this, "Store Environment Variable",
+            QString("Store selection into active environment '%1':").arg(m_activeEnvName),
+            QLineEdit::Normal, QString(), &ok);
+        if (ok && !varName.trimmed().isEmpty()) {
+            for (auto& env : m_collectionModel.environments()) {
+                if (env.name() == m_activeEnvName) {
+                    env.addOrUpdateVariable(varName.trimmed(), val);
+                    if (!m_collectionModel.rootPath().isEmpty()) {
+                        env.saveToEnvFile(QDir(m_collectionModel.rootPath()).filePath("environments/" + env.name() + ".env"));
+                    }
+                    updateUrlVariableInspection();
+                    statusBar()->showMessage(QString("Stored variable {{%1}} = \"%2\"").arg(varName.trimmed(), val), 3500);
+                    break;
+                }
+            }
+        }
+    });
     contentSplitter->addWidget(m_responseInspector);
 
     contentSplitter->setSizes({380, 370});
@@ -245,6 +280,7 @@ void MainWindow::setupUi() {
     connect(m_varQuickBtn, &QPushButton::clicked, this, &MainWindow::onShowQuickVariables);
     sb->addPermanentWidget(m_varQuickBtn);
 
+    updateTopEnvCombo();
     onMethodChanged(0);
 }
 
@@ -590,6 +626,7 @@ void MainWindow::onOpenCollection() {
     if (!dir.isEmpty()) {
         if (m_collectionModel.openDirectory(dir)) {
             m_sidebar->refreshTree();
+            updateTopEnvCombo();
             updateUrlVariableInspection();
         } else {
             QMessageBox::warning(this, "Error", "Failed to open collection directory.");
@@ -628,6 +665,7 @@ void MainWindow::onCopyAsCurl() {
 
 void MainWindow::onEnvironmentChanged(const QString& envName) {
     m_activeEnvName = envName;
+    updateTopEnvCombo();
     updateUrlVariableInspection();
     statusBar()->showMessage(envName.isEmpty() ? "No environment active." : ("Active environment: " + envName), 3000);
 }
@@ -664,6 +702,8 @@ void MainWindow::onManageEnvironments() {
     EnvironmentDialog dlg(m_collectionModel.environments(), m_activeEnvName, m_collectionModel.rootPath(), this);
     if (dlg.exec() == QDialog::Accepted) {
         m_sidebar->updateEnvironmentsCombo();
+        updateTopEnvCombo();
+        updateUrlVariableInspection();
     }
 }
 
@@ -1083,6 +1123,23 @@ void MainWindow::updateUrlVariableInspection() {
     }
     tooltip += "</div>";
     m_urlEdit->setToolTip(tooltip);
+}
+
+void MainWindow::updateTopEnvCombo() {
+    if (!m_topEnvCombo) return;
+    m_topEnvCombo->blockSignals(true);
+    m_topEnvCombo->clear();
+    m_topEnvCombo->addItem("No Environment", QString());
+
+    int selectIdx = 0;
+    for (const auto& env : m_collectionModel.environments()) {
+        m_topEnvCombo->addItem(env.name(), env.name());
+        if (env.name() == m_activeEnvName) {
+            selectIdx = m_topEnvCombo->count() - 1;
+        }
+    }
+    m_topEnvCombo->setCurrentIndex(selectIdx);
+    m_topEnvCombo->blockSignals(false);
 }
 
 } // namespace poppy::gui

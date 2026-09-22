@@ -17,6 +17,8 @@
 #include <QJsonObject>
 #include <QJsonArray>
 #include <QJsonValue>
+#include <QMenu>
+#include <QAction>
 
 namespace poppy::gui {
 
@@ -177,6 +179,24 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     if (!codeFont.exactMatch()) codeFont = QFont("Courier New", 10);
     m_bodyViewer->setFont(codeFont);
     m_jsonHighlighter = new JsonSyntaxHighlighter(m_bodyViewer->document());
+
+    m_bodyViewer->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_bodyViewer, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        QMenu menu(this);
+        auto* copyAct = menu.addAction("Copy");
+        connect(copyAct, &QAction::triggered, m_bodyViewer, &QPlainTextEdit::copy);
+
+        QString selected = m_bodyViewer->textCursor().selectedText().trimmed();
+        if (!selected.isEmpty()) {
+            menu.addSeparator();
+            auto* storeAct = menu.addAction("Set Selection as Environment Variable...");
+            connect(storeAct, &QAction::triggered, this, [this, selected]() {
+                emit storeVariableRequested(selected);
+            });
+        }
+        menu.exec(m_bodyViewer->mapToGlobal(pos));
+    });
+
     bLayout->addWidget(m_bodyViewer);
 
     m_tabWidget->addTab(m_bodyTab, "Response Body");
