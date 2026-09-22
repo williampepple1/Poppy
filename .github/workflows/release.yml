@@ -80,6 +80,7 @@ jobs:
           windeployqt "$dist/poppy.exe" --no-translations --compiler-runtime
           Compress-Archive -Path "$dist/*" -DestinationPath "Poppy-windows-x64.zip" -Force
           & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer/poppy_setup.iss
+          Copy-Item release-installer/Poppy-windows-x64-setup.exe .
 
       - name: Upload Windows Package Artifact
         uses: actions/upload-artifact@v4
@@ -87,7 +88,7 @@ jobs:
           name: Poppy-windows-x64
           path: |
             Poppy-windows-x64.zip
-            release-installer/Poppy-windows-x64-setup.exe
+            Poppy-windows-x64-setup.exe
 
   build-linux:
     name: Build & Package (Linux)
@@ -212,6 +213,11 @@ jobs:
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64-setup.exe --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64.zip --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-linux-x64.tar.gz --yes || true
+
+      - name: Flatten and verify release assets
+        run: |
+          find release-assets -mindepth 2 -type f -exec mv -t release-assets/ {} + 2>/dev/null || true
+          ls -la release-assets/
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
