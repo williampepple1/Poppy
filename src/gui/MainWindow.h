@@ -99,6 +99,7 @@ private:
     void refreshEnvironmentUi();
     core::EnvironmentModel* mutableActiveEnvironment();
     void persistActiveEnvironment();
+    void flushDirtyTab(int index);
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;

@@ -14,6 +14,7 @@ public:
     explicit EnvironmentDialog(QList<core::EnvironmentModel>& envs, const QString& activeEnvName, const QString& rootPath, QWidget* parent = nullptr);
 
     QString activeEnvironmentName() const;
+    void reject() override;
 
 signals:
     void environmentsModified();

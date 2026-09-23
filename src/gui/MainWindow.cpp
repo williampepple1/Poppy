@@ -36,6 +36,7 @@
 #include <core/importers/CurlImporter.h>
 #include <QTabBar>
 #include <QDir>
+#include <QUuid>
 #include <QInputDialog>
 #include <QTextBrowser>
 #include <QDialog>
@@ -511,9 +512,10 @@ void MainWindow::onTabChanged(int index) {
     if (index < 0 || index >= m_openTabs.size()) return;
     if (index == m_currentTabIndex) return;
 
-    // Save active tab
+    // Save active tab, and flush a pending auto-save before leaving it.
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
+        flushDirtyTab(m_currentTabIndex);
     }
 
     m_currentTabIndex = index;
@@ -584,6 +586,8 @@ void MainWindow::rebindOpenTabs() {
             tab.itemPath = found->path();
             if (!tab.isDirty && found->request()) {
                 tab.request = *found->request();
+                tab.hasResponse = false;
+                tab.lastReport = {};
             }
         }
     }
@@ -823,6 +827,7 @@ void MainWindow::onSaveRequest() {
         }
     } else {
         if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+            m_openTabs[m_currentTabIndex].isDirty = false;
             updateTabTitle(m_currentTabIndex);
         }
         statusBar()->showMessage("Quick request updated.", 3000);
@@ -876,7 +881,8 @@ void MainWindow::onRunCollection() {
     runnerEngine.setTimeoutMs(m_networkEngine.timeoutMs());
     runnerEngine.setProxy(m_networkEngine.proxy());
     runnerEngine.setCookieJarEnabled(m_networkEngine.cookieJarEnabled());
-    runnerEngine.setCookieJarPath(m_networkEngine.cookieJarPath());
+    runnerEngine.setCookieJarPath(QDir::temp().filePath(
+        QStringLiteral("poppy_runner_%1.txt").arg(QUuid::createUuid().toString(QUuid::Id128))));
     runnerEngine.setClientCertPath(m_networkEngine.clientCertPath());
     runnerEngine.setClientCertType(m_networkEngine.clientCertType());
     runnerEngine.setClientKeyPath(m_networkEngine.clientKeyPath());
@@ -899,16 +905,16 @@ void MainWindow::onSendClicked() {
     core::EnvironmentModel scratch(m_activeEnvName);
     core::EnvironmentModel& activeEnv = liveEnv ? *liveEnv : scratch;
 
-    core::RequestModel toSend = m_currentRequest;
+    core::VariableResolver resolver = currentVariableResolver();
+    core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
     QString scriptErr;
-    if (!m_scriptRunner.runPreRequestScript(toSend.scripts.preRequestScript, toSend, activeEnv, &scriptErr)) {
+    if (!m_scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, activeEnv, &scriptErr)) {
         QMessageBox::warning(this, "Pre-request Script Error", scriptErr);
         return;
     }
     persistActiveEnvironment();
-
-    core::VariableResolver resolver = currentVariableResolver();
-    core::RequestModel resolvedReq = resolver.resolveRequest(toSend);
+    resolver = currentVariableResolver();
+    resolvedReq = resolver.resolveRequest(resolvedReq);
 
     m_networkEngine.cancelAll();
 
@@ -991,6 +997,9 @@ void MainWindow::onHistoryItemSelected(const core::HistoryItem& item) {
         m_openTabs[m_currentTabIndex].item = nullptr;
         m_openTabs[m_currentTabIndex].itemPath.clear();
         m_openTabs[m_currentTabIndex].isDirty = true;
+        m_openTabs[m_currentTabIndex].lastResponse = item.toResponseModel();
+        m_openTabs[m_currentTabIndex].lastReport = {};
+        m_openTabs[m_currentTabIndex].hasResponse = true;
         updateTabTitle(m_currentTabIndex);
     }
     core::ResponseModel res = item.toResponseModel();
@@ -1126,22 +1135,27 @@ void MainWindow::onTogglePinCurrentTab() {
     }
 }
 
+void MainWindow::flushDirtyTab(int index) {
+    if (index < 0 || index >= m_openTabs.size()) return;
+    auto& tab = m_openTabs[index];
+    if (!tab.isDirty || !tab.item) return;
+    if (tab.item->request()) {
+        *tab.item->request() = tab.request;
+    }
+    if (m_collectionModel.saveRequest(tab.item)) {
+        tab.isDirty = false;
+        updateTabTitle(index);
+        statusBar()->showMessage("Auto-saved changes.", 2000);
+    } else {
+        statusBar()->showMessage("Auto-save failed.", 3000);
+    }
+}
+
 void MainWindow::onAutoSaveTimerTimeout() {
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
-        if (m_openTabs[m_currentTabIndex].isDirty && m_openTabs[m_currentTabIndex].item) {
-            saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
-            if (m_openTabs[m_currentTabIndex].item->request()) {
-                *m_openTabs[m_currentTabIndex].item->request() = m_openTabs[m_currentTabIndex].request;
-            }
-            if (m_collectionModel.saveRequest(m_openTabs[m_currentTabIndex].item)) {
-                m_openTabs[m_currentTabIndex].isDirty = false;
-                updateTabTitle(m_currentTabIndex);
-                statusBar()->showMessage("Auto-saved changes.", 2000);
-            } else {
-                statusBar()->showMessage("Auto-save failed.", 3000);
-            }
-        }
+        saveUiIntoRequest(m_openTabs[m_currentTabIndex].request);
     }
+    flushDirtyTab(m_currentTabIndex);
 }
 
 void MainWindow::onConfigureRequestProxy() {
@@ -1583,6 +1597,8 @@ void MainWindow::onFindAndReplace() {
             if (tab.item && tab.item->request()) {
                 tab.request = *tab.item->request();
                 tab.isDirty = false;
+                tab.hasResponse = false;
+                tab.lastReport = {};
                 updateTabTitle(i);
             }
         }

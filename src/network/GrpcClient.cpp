@@ -322,6 +322,21 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
     if (m_generation.load() != generation) {
         curl_slist_free_all(headers);
         curl_easy_cleanup(curl);
+        GrpcResponse cancelled;
+        cancelled.success = false;
+        cancelled.statusCode = 1;
+        cancelled.statusName = statusToString(1);
+        cancelled.statusMessage = QStringLiteral("Call cancelled");
+        cancelled.errorMessage = cancelled.statusMessage;
+        cancelled.latencyMs = timer.elapsed();
+        QPointer<GrpcClient> self(this);
+        const uint64_t expected = generation;
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, expected, cancelled]() {
+            if (!self) return;
+            const uint64_t gen = self->m_generation.load();
+            if (gen != expected + 1) return;
+            emit self->callFinished(cancelled);
+        }, Qt::QueuedConnection);
         return;
     }
 

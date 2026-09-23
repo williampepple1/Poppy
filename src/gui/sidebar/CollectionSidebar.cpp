@@ -520,34 +520,36 @@ void CollectionSidebar::onHistoryContextMenu(const QPoint& pos) {
     if (!widgetItem || !m_historyManager) return;
 
     QString id = widgetItem->data(0, Qt::UserRole).toString();
-    const core::HistoryItem* found = nullptr;
+    core::HistoryItem found;
+    bool haveItem = false;
     for (const auto& it : m_historyManager->items()) {
         if (it.id == id) {
-            found = &it;
+            found = it;
+            haveItem = true;
             break;
         }
     }
-    if (!found) return;
+    if (!haveItem) return;
 
     QMenu menu(this);
     menu.addAction("Load into Editor", [this, found]() {
-        emit historyItemSelected(*found);
+        emit historyItemSelected(found);
     });
     menu.addAction("Copy URL", [found]() {
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(found->request.url);
+        cb->setText(found.request.url);
     });
     menu.addAction("Copy as cURL", [found]() {
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(found->request.toCurlCommand());
+        cb->setText(found.request.toCurlCommand());
     });
     menu.addAction("Copy as Fetch (JS)", [found]() {
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, found->request));
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, found.request));
     });
     menu.addAction("Copy as Python", [found]() {
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, found->request));
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, found.request));
     });
     menu.addSeparator();
     menu.addAction("Delete Entry", [this, id]() {

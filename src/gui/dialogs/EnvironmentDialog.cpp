@@ -10,6 +10,13 @@
 
 namespace poppy::gui {
 
+void EnvironmentDialog::reject() {
+    if (m_currentIdx >= 0) {
+        saveCurrentEnv();
+    }
+    QDialog::reject();
+}
+
 EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const QString& activeEnvName, const QString& rootPath, QWidget* parent)
     : QDialog(parent), m_envs(envs), m_activeEnvName(activeEnvName), m_rootPath(rootPath) {
     setWindowTitle("Manage Environments");

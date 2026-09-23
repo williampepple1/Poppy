@@ -166,6 +166,11 @@ QString FindReplaceDialog::performReplace(const QString& text, const QString& se
     return res;
 }
 
+core::CollectionItem* FindReplaceDialog::itemFor(const FindMatch& match) const {
+    if (!m_model || match.itemPath.isEmpty()) return nullptr;
+    return m_model->findItemByPath(match.itemPath);
+}
+
 void FindReplaceDialog::onFindAll() {
     QString search = m_findEdit->text();
     m_resultsTree->clear();
@@ -185,13 +190,13 @@ void FindReplaceDialog::onFindAll() {
 
         // 1. Name
         if (m_checkName->isChecked() && matches(req->name, search)) {
-            m_currentMatches.append(FindMatch{item, "Name", -1, "", req->name});
+            m_currentMatches.append(FindMatch{item->path(), "Name", -1, "", req->name});
             matchedItems.insert(item);
         }
 
         // 2. URL
         if (m_checkUrl->isChecked() && matches(req->url, search)) {
-            m_currentMatches.append(FindMatch{item, "URL", -1, "", req->url});
+            m_currentMatches.append(FindMatch{item->path(), "URL", -1, "", req->url});
             matchedItems.insert(item);
         }
 
@@ -199,11 +204,11 @@ void FindReplaceDialog::onFindAll() {
         if (m_checkParams->isChecked()) {
             for (int i = 0; i < req->queryParams.size(); ++i) {
                 if (matches(req->queryParams[i].key, search)) {
-                    m_currentMatches.append(FindMatch{item, "Param Key", i, "key", req->queryParams[i].key});
+                    m_currentMatches.append(FindMatch{item->path(), "Param Key", i, "key", req->queryParams[i].key});
                     matchedItems.insert(item);
                 }
                 if (matches(req->queryParams[i].value, search)) {
-                    m_currentMatches.append(FindMatch{item, "Param Value", i, "value", req->queryParams[i].value});
+                    m_currentMatches.append(FindMatch{item->path(), "Param Value", i, "value", req->queryParams[i].value});
                     matchedItems.insert(item);
                 }
             }
@@ -213,11 +218,11 @@ void FindReplaceDialog::onFindAll() {
         if (m_checkHeaders->isChecked()) {
             for (int i = 0; i < req->headers.size(); ++i) {
                 if (matches(req->headers[i].name, search)) {
-                    m_currentMatches.append(FindMatch{item, "Header Name", i, "name", req->headers[i].name});
+                    m_currentMatches.append(FindMatch{item->path(), "Header Name", i, "name", req->headers[i].name});
                     matchedItems.insert(item);
                 }
                 if (matches(req->headers[i].value, search)) {
-                    m_currentMatches.append(FindMatch{item, "Header Value", i, "value", req->headers[i].value});
+                    m_currentMatches.append(FindMatch{item->path(), "Header Value", i, "value", req->headers[i].value});
                     matchedItems.insert(item);
                 }
             }
@@ -228,12 +233,12 @@ void FindReplaceDialog::onFindAll() {
             if (matches(req->bodyContent, search)) {
                 // Short preview
                 QString preview = req->bodyContent.simplified().left(120);
-                m_currentMatches.append(FindMatch{item, "Body", -1, "", preview});
+                m_currentMatches.append(FindMatch{item->path(), "Body", -1, "", preview});
                 matchedItems.insert(item);
             }
             if (matches(req->graphqlQuery, search)) {
                 QString preview = req->graphqlQuery.simplified().left(120);
-                m_currentMatches.append(FindMatch{item, "GraphQL Query", -1, "", preview});
+                m_currentMatches.append(FindMatch{item->path(), "GraphQL Query", -1, "", preview});
                 matchedItems.insert(item);
             }
         }
@@ -241,15 +246,15 @@ void FindReplaceDialog::onFindAll() {
         // 6. Scripts
         if (m_checkScripts->isChecked()) {
             if (matches(req->scripts.preRequestScript, search)) {
-                m_currentMatches.append(FindMatch{item, "Pre-request Script", -1, "pre", req->scripts.preRequestScript.simplified().left(120)});
+                m_currentMatches.append(FindMatch{item->path(), "Pre-request Script", -1, "pre", req->scripts.preRequestScript.simplified().left(120)});
                 matchedItems.insert(item);
             }
             if (matches(req->scripts.postResponseScript, search)) {
-                m_currentMatches.append(FindMatch{item, "Post-response Script", -1, "post", req->scripts.postResponseScript.simplified().left(120)});
+                m_currentMatches.append(FindMatch{item->path(), "Post-response Script", -1, "post", req->scripts.postResponseScript.simplified().left(120)});
                 matchedItems.insert(item);
             }
             if (matches(req->scripts.tests, search)) {
-                m_currentMatches.append(FindMatch{item, "Tests Script", -1, "tests", req->scripts.tests.simplified().left(120)});
+                m_currentMatches.append(FindMatch{item->path(), "Tests Script", -1, "tests", req->scripts.tests.simplified().left(120)});
                 matchedItems.insert(item);
             }
         }
@@ -258,8 +263,9 @@ void FindReplaceDialog::onFindAll() {
     // Populate Tree
     for (int i = 0; i < m_currentMatches.size(); ++i) {
         const auto& m = m_currentMatches[i];
+        auto* live = itemFor(m);
         auto* treeItem = new QTreeWidgetItem(m_resultsTree);
-        treeItem->setText(0, m.item->name());
+        treeItem->setText(0, live ? live->name() : QString());
         treeItem->setText(1, m.field);
         treeItem->setText(2, m.originalSnippet);
         treeItem->setData(0, Qt::UserRole, i);
@@ -288,13 +294,14 @@ void FindReplaceDialog::onReplaceAll() {
     QSet<core::CollectionItem*> modifiedItems;
 
     for (const auto& m : m_currentMatches) {
-        if (!m.item || !m.item->request()) continue;
-        auto* req = m.item->request();
+        auto* liveItem = itemFor(m);
+        if (!liveItem || !liveItem->request()) continue;
+        auto* req = liveItem->request();
         bool changed = false;
 
         if (m.field == "Name") {
             req->name = performReplace(req->name, search, replacement);
-            m.item->setName(req->name);
+            liveItem->setName(req->name);
             changed = true;
         } else if (m.field == "URL") {
             req->url = performReplace(req->url, search, replacement);
@@ -330,7 +337,7 @@ void FindReplaceDialog::onReplaceAll() {
 
         if (changed) {
             count++;
-            modifiedItems.insert(m.item);
+            modifiedItems.insert(liveItem);
         }
     }
 
@@ -364,13 +371,14 @@ void FindReplaceDialog::onReplaceSelected() {
         if (idx < 0 || idx >= m_currentMatches.size()) continue;
 
         const auto& m = m_currentMatches[idx];
-        if (!m.item || !m.item->request()) continue;
-        auto* req = m.item->request();
+        auto* liveItem = itemFor(m);
+        if (!liveItem || !liveItem->request()) continue;
+        auto* req = liveItem->request();
         bool changed = false;
 
         if (m.field == "Name") {
             req->name = performReplace(req->name, search, replacement);
-            m.item->setName(req->name);
+            liveItem->setName(req->name);
             changed = true;
         } else if (m.field == "URL") {
             req->url = performReplace(req->url, search, replacement);
@@ -406,7 +414,7 @@ void FindReplaceDialog::onReplaceSelected() {
 
         if (changed) {
             count++;
-            modifiedItems.insert(m.item);
+            modifiedItems.insert(liveItem);
         }
     }
 
@@ -422,7 +430,7 @@ void FindReplaceDialog::onItemDoubleClicked(QTreeWidgetItem* item, int) {
     if (!item) return;
     int idx = item->data(0, Qt::UserRole).toInt();
     if (idx >= 0 && idx < m_currentMatches.size()) {
-        emit requestSelected(m_currentMatches[idx].item);
+        emit requestSelected(itemFor(m_currentMatches[idx]));
     }
 }
 

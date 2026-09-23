@@ -68,6 +68,37 @@ QJSValue evaluateWithTimeout(QJSEngine& engine, const QString& script, int timeo
     return result;
 }
 
+QJSValue callWithTimeout(QJSEngine& engine, const QJSValue& fn, int timeoutMs, QString* outError) {
+    std::atomic<bool> finished{false};
+    std::thread watchdog([&engine, &finished, timeoutMs]() {
+        const int sliceMs = 50;
+        int waited = 0;
+        while (waited < timeoutMs) {
+            if (finished.load()) return;
+            QThread::msleep(static_cast<unsigned long>(sliceMs));
+            waited += sliceMs;
+        }
+        if (!finished.load()) {
+            engine.setInterrupted(true);
+        }
+    });
+
+    QJSValue result = fn.call();
+    finished.store(true);
+    watchdog.join();
+    const bool timedOut = engine.isInterrupted()
+        || (result.isError() && result.toString().contains(QLatin1String("interrupted"), Qt::CaseInsensitive));
+    engine.setInterrupted(false);
+
+    if (timedOut) {
+        if (outError) {
+            *outError = QStringLiteral("Script timed out after %1 ms").arg(timeoutMs);
+        }
+        return QJSValue();
+    }
+    return result;
+}
+
 constexpr int kScriptTimeoutMs = 8000;
 
 } // namespace
@@ -302,8 +333,12 @@ TestReport ScriptRunner::runTests(const QString& testScript, const RequestModel&
         caseTimer.start();
 
         if (fn.isCallable()) {
-            QJSValue callRes = fn.call();
-            if (callRes.isError()) {
+            QString callErr;
+            QJSValue callRes = callWithTimeout(engine, fn, kScriptTimeoutMs, &callErr);
+            if (!callErr.isEmpty()) {
+                caseResult.passed = false;
+                caseResult.errorMessage = callErr;
+            } else if (callRes.isError()) {
                 caseResult.passed = false;
                 caseResult.errorMessage = callRes.toString();
             } else {

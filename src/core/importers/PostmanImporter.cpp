@@ -86,6 +86,21 @@ RequestModel PostmanImporter::parsePostmanItem(const QJsonObject& itemObj) {
             }
         }
         req.bodyContent = pairs.join('&');
+    } else if (mode == "formdata") {
+        req.bodyType = BodyType::MultipartForm;
+        for (const auto& f : bodyObj.value("formdata").toArray()) {
+            QJsonObject fObj = f.toObject();
+            FormDataParam param;
+            param.key = fObj.value("key").toString();
+            param.enabled = !fObj.value("disabled").toBool(false);
+            param.description = fObj.value("description").toString();
+            param.isFile = fObj.value("type").toString() == QLatin1String("file");
+            param.value = param.isFile ? fObj.value("src").toString() : fObj.value("value").toString();
+            if (param.isFile && param.value.isEmpty()) {
+                param.value = fObj.value("value").toString();
+            }
+            req.formDataParams.append(param);
+        }
     }
 
     // Auth

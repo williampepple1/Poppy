@@ -346,6 +346,9 @@ void CollectionRunnerDialog::executeNextRequest() {
     // Variable resolution
     core::VariableResolver resolver;
     resolver.setEnvironment(m_activeEnv);
+    if (m_model && m_model->rootItem()) {
+        resolver.setCollectionVariables(m_model->rootItem()->variables());
+    }
     resolver.setFolderVariables(queued.folderVars);
     core::RequestModel resolvedReq = resolver.resolveRequest(req);
 

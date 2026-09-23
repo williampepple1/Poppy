@@ -21,6 +21,11 @@ int main() {
     QString resolved = resolver.resolveString(rawUrl);
     assert(resolved == "https://api.test.com/users/99?auth=secret123");
 
+    env.addOrUpdateVariable("a", "{{b}}");
+    env.addOrUpdateVariable("b", "hello");
+    resolver.setEnvironment(env);
+    assert(resolver.resolveString("{{a}}") == "hello");
+
     // 2. Dynamic variable interpolation
     QString dynamicStr = "UUID: {{$guid}}, Time: {{$timestamp}}";
     QString dynamicRes = resolver.resolveString(dynamicStr);

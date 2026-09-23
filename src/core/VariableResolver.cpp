@@ -89,28 +89,29 @@ QString VariableResolver::resolveString(const QString& input) const {
 
     static const QRegularExpression regex(R"(\{\{([^{}]+)\}\})");
     QString result = input;
-    int offset = 0;
+    for (int pass = 0; pass < 8; ++pass) {
+        if (!result.contains(QLatin1String("{{"))) break;
+        QString next = result;
+        int offset = 0;
+        bool changed = false;
+        auto matchIterator = regex.globalMatch(result);
+        while (matchIterator.hasNext()) {
+            auto match = matchIterator.next();
+            QString varName = match.captured(1).trimmed();
 
-    auto matchIterator = regex.globalMatch(input);
-    while (matchIterator.hasNext()) {
-        auto match = matchIterator.next();
-        QString varName = match.captured(1).trimmed();
+            QString scoped;
+            QString value = lookupVariableWithScope(varName, &scoped);
+            if (scoped == "Unresolved") continue;
 
-        std::optional<QString> resolved;
-        QString scoped;
-        QString value = lookupVariableWithScope(varName, &scoped);
-        if (scoped != "Unresolved") {
-            resolved = value;
-        }
-
-        if (resolved) {
             int matchStart = match.capturedStart(0) + offset;
             int matchLength = match.capturedLength(0);
-            result.replace(matchStart, matchLength, *resolved);
-            offset += (resolved->length() - matchLength);
+            next.replace(matchStart, matchLength, value);
+            offset += (value.length() - matchLength);
+            changed = true;
         }
+        if (!changed || next == result) break;
+        result = next;
     }
-
     return result;
 }
 

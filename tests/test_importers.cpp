@@ -129,6 +129,25 @@ int main(int argc, char** argv) {
     assert(xmlRaw.bodyType == BodyType::Xml);
     assert(xmlRaw.bodyContent.contains("<note/>"));
 
+    RequestModel formRaw = PostmanImporter::parsePostmanItem(QJsonDocument::fromJson(QByteArray(R"({
+      "name": "Upload",
+      "request": {
+        "method": "POST",
+        "url": "https://api.sample.com/upload",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            { "key": "title", "value": "hello", "type": "text" },
+            { "key": "file", "type": "file", "src": "/tmp/a.txt" }
+          ]
+        }
+      }
+    })")).object());
+    assert(formRaw.bodyType == BodyType::MultipartForm);
+    assert(formRaw.formDataParams.size() == 2);
+    assert(formRaw.formDataParams[0].key == "title" && formRaw.formDataParams[0].value == "hello");
+    assert(formRaw.formDataParams[1].isFile && formRaw.formDataParams[1].value == "/tmp/a.txt");
+
     QDir(tempPostmanDir).removeRecursively();
 
     // 2b. Folders + requests with Windows-invalid names and empty `item` arrays

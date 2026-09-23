@@ -165,24 +165,28 @@ RequestModel requestFromJson(const QJsonObject& ro) {
         });
     }
 
+    auto storedSecret = [](const QString& value) {
+        return value == QLatin1String("***") ? QString() : value;
+    };
+
     QJsonObject auth = ro["auth"].toObject();
     req.auth.type = static_cast<AuthType>(auth["type"].toInt());
-    req.auth.bearerToken = auth["bearerToken"].toString();
+    req.auth.bearerToken = storedSecret(auth["bearerToken"].toString());
     req.auth.basicUsername = auth["basicUsername"].toString();
-    req.auth.basicPassword = auth["basicPassword"].toString();
+    req.auth.basicPassword = storedSecret(auth["basicPassword"].toString());
     req.auth.apiKeyName = auth["apiKeyName"].toString();
-    req.auth.apiKeyValue = auth["apiKeyValue"].toString();
+    req.auth.apiKeyValue = storedSecret(auth["apiKeyValue"].toString());
     req.auth.apiKeyPlacement = auth["apiKeyPlacement"].toString("header");
-    req.auth.oauth2AccessToken = auth["oauth2AccessToken"].toString();
+    req.auth.oauth2AccessToken = storedSecret(auth["oauth2AccessToken"].toString());
     req.auth.awsAccessKey = auth["awsAccessKey"].toString();
-    req.auth.awsSecretKey = auth["awsSecretKey"].toString();
-    req.auth.awsSessionToken = auth["awsSessionToken"].toString();
+    req.auth.awsSecretKey = storedSecret(auth["awsSecretKey"].toString());
+    req.auth.awsSessionToken = storedSecret(auth["awsSessionToken"].toString());
     req.auth.awsRegion = auth["awsRegion"].toString();
     req.auth.awsService = auth["awsService"].toString();
     req.auth.digestUsername = auth["digestUsername"].toString();
-    req.auth.digestPassword = auth["digestPassword"].toString();
+    req.auth.digestPassword = storedSecret(auth["digestPassword"].toString());
     req.auth.ntlmUsername = auth["ntlmUsername"].toString();
-    req.auth.ntlmPassword = auth["ntlmPassword"].toString();
+    req.auth.ntlmPassword = storedSecret(auth["ntlmPassword"].toString());
     req.auth.ntlmDomain = auth["ntlmDomain"].toString();
     req.auth.ntlmWorkstation = auth["ntlmWorkstation"].toString();
 

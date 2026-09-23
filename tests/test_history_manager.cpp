@@ -139,6 +139,12 @@ int main(int argc, char* argv[]) {
     assert(!saved.contains("hunter2"));
     assert(!saved.contains("aws-secret"));
     assert(saved.contains("***"));
+    HistoryManager reloaded;
+    reloaded.setAutoSave(false);
+    assert(reloaded.loadFromFile(secretFile));
+    assert(reloaded.items()[0].request.auth.bearerToken.isEmpty());
+    assert(reloaded.items()[0].request.auth.basicPassword.isEmpty());
+    assert(reloaded.items()[0].request.auth.awsSecretKey.isEmpty());
     QFile::remove(secretFile);
 
     std::cout << "test_history_manager PASSED!" << std::endl;

@@ -11,7 +11,7 @@
 namespace poppy::gui {
 
 struct FindMatch {
-    core::CollectionItem* item{nullptr};
+    QString itemPath;
     QString field; // "Name", "URL", "Header", "Param", "Body", "Script"
     int index{-1}; // Index within list if header/param, or -1
     QString subKey; // "name" or "value" or "key"
@@ -40,6 +40,7 @@ private:
     void setupUi();
     bool matches(const QString& text, const QString& search) const;
     QString performReplace(const QString& text, const QString& search, const QString& replacement) const;
+    core::CollectionItem* itemFor(const FindMatch& match) const;
 
     core::CollectionModel* m_model{nullptr};
 
