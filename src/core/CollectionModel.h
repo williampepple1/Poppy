@@ -48,6 +48,13 @@ public:
     void setVariables(const QMap<QString, QString>& vars) { m_variables = vars; }
     void setVariable(const QString& key, const QString& value) { m_variables[key] = value; }
 
+    const AuthModel& auth() const { return m_auth; }
+    void setAuth(const AuthModel& auth) { m_auth = auth; }
+    // Nearest folder or collection auth, skipping None and Inherit.
+    AuthModel effectiveAuth() const;
+    // Request copy with Inherit replaced by effectiveAuth().
+    RequestModel requestForExecution() const;
+
     // Aggregate variables from this folder and all ancestor folders
     QMap<QString, QString> effectiveVariables() const {
         QMap<QString, QString> result;
@@ -70,6 +77,7 @@ private:
     QList<CollectionItem*> m_children;
     std::unique_ptr<RequestModel> m_request;
     QMap<QString, QString> m_variables;
+    AuthModel m_auth;
     int m_seq{1};
 };
 

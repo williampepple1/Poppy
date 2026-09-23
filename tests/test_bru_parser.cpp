@@ -1,4 +1,7 @@
 #include <iostream>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <core/BruParser.h>
 #include <core/BruWriter.h>
@@ -139,6 +142,85 @@ tests {
     assert(coll.openDirectory(collDir.path()));
     assert(coll.rootItem());
     assert(coll.rootItem()->variables().value("baseUrl") == "https://api.example.com");
+
+    QTemporaryDir binDir;
+    assert(binDir.isValid());
+    const QString payloadPath = binDir.filePath("payload.bin");
+    QFile payload(payloadPath);
+    assert(payload.open(QIODevice::WriteOnly));
+    const QByteArray payloadBytes = QByteArray("abc\0def", 7);
+    assert(payload.write(payloadBytes) == payloadBytes.size());
+    payload.close();
+    const QString payloadForBru = QDir::fromNativeSeparators(payloadPath);
+    const QString binaryBru = QStringLiteral(
+        "meta {\n"
+        "  name: Upload\n"
+        "}\n\n"
+        "post {\n"
+        "  url: https://example.com/upload\n"
+        "  body: binary\n"
+        "  auth: none\n"
+        "}\n\n"
+        "body:binary {\n"
+        "  file: %1\n"
+        "}\n").arg(payloadForBru);
+    RequestModel binaryReq = BruParser::parse(binaryBru);
+    assert(binaryReq.bodyType == BodyType::Binary);
+    assert(QDir::fromNativeSeparators(binaryReq.bodyContent) == payloadForBru);
+    assert(binaryReq.effectiveBody() == payloadBytes);
+    RequestModel binaryRoundTrip = BruParser::parse(BruWriter::serialize(binaryReq));
+    assert(binaryRoundTrip.bodyType == BodyType::Binary);
+    assert(binaryRoundTrip.bodyContent == payloadForBru);
+
+    QTemporaryDir authDir;
+    assert(authDir.isValid());
+    QDir(authDir.path()).mkpath("folder");
+    QFile authCollection(authDir.filePath("collection.bru"));
+    assert(authCollection.open(QIODevice::WriteOnly | QIODevice::Text));
+    authCollection.write(
+        "meta {\n  name: Auth Collection\n}\n\n"
+        "auth {\n  mode: bearer\n}\n\n"
+        "auth:bearer {\n  token: collection-token\n}\n");
+    authCollection.close();
+    QFile folderBru(authDir.filePath("folder/folder.bru"));
+    assert(folderBru.open(QIODevice::WriteOnly | QIODevice::Text));
+    folderBru.write(
+        "meta {\n  name: folder\n  seq: 1\n}\n\n"
+        "auth {\n  mode: basic\n}\n\n"
+        "auth:basic {\n  username: ada\n  password: secret\n}\n");
+    folderBru.close();
+    QFile childBru(authDir.filePath("folder/call.bru"));
+    assert(childBru.open(QIODevice::WriteOnly | QIODevice::Text));
+    childBru.write(
+        "meta {\n  name: Call\n  seq: 1\n}\n\n"
+        "get {\n  url: https://example.com\n  body: none\n  auth: inherit\n}\n");
+    childBru.close();
+    QFile rootBru(authDir.filePath("root-call.bru"));
+    assert(rootBru.open(QIODevice::WriteOnly | QIODevice::Text));
+    rootBru.write(
+        "meta {\n  name: Root Call\n  seq: 2\n}\n\n"
+        "get {\n  url: https://example.com/root\n  body: none\n  auth: inherit\n}\n");
+    rootBru.close();
+
+    CollectionModel authModel;
+    assert(authModel.openDirectory(authDir.path()));
+    assert(authModel.rootItem()->auth().type == AuthType::Bearer);
+    assert(authModel.rootItem()->auth().bearerToken == "collection-token");
+    CollectionItem* child = nullptr;
+    CollectionItem* rootCall = nullptr;
+    for (auto* item : authModel.allRequestItems()) {
+        if (item->name() == "Call") child = item;
+        if (item->name() == "Root Call") rootCall = item;
+    }
+    assert(child && child->request() && child->request()->auth.type == AuthType::Inherit);
+    RequestModel childExec = child->requestForExecution();
+    assert(childExec.auth.type == AuthType::Basic);
+    assert(childExec.auth.basicUsername == "ada");
+    assert(childExec.auth.basicPassword == "secret");
+    assert(rootCall);
+    RequestModel rootExec = rootCall->requestForExecution();
+    assert(rootExec.auth.type == AuthType::Bearer);
+    assert(rootExec.auth.bearerToken == "collection-token");
 
     std::cout << "test_bru_parser PASSED!" << std::endl;
     return 0;

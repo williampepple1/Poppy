@@ -228,11 +228,12 @@ QString HistoryManager::defaultHistoryFilePath() {
     return path + "/poppy_history.json";
 }
 
-void HistoryManager::addEntry(const RequestModel& req, const ResponseModel& res) {
+void HistoryManager::addEntry(const RequestModel& req, const ResponseModel& res, const QString& sourcePath) {
     HistoryItem item;
     item.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     item.timestamp = QDateTime::currentDateTime();
     item.request = req;
+    item.sourcePath = sourcePath;
     item.statusCode = res.statusCode;
     item.statusText = res.statusText;
     item.responseTimeMs = res.latencyMs;
@@ -324,6 +325,7 @@ bool HistoryManager::loadFromFile(const QString& filePath) {
 
         item.responseHeaders = headersFromJson(obj["responseHeaders"].toArray());
         item.request = requestFromJson(obj["request"].toObject());
+        item.sourcePath = obj["sourcePath"].toString();
 
         m_items.append(item);
         if (m_items.size() >= m_maxEntries) break;
@@ -352,6 +354,9 @@ bool HistoryManager::saveToFile(const QString& filePath) const {
         obj["responseRawBody"] = QString::fromUtf8(item.responseRawBody.toBase64());
         obj["responseHeaders"] = headersToJson(item.responseHeaders);
         obj["request"] = requestToJson(item.request);
+        if (!item.sourcePath.isEmpty()) {
+            obj["sourcePath"] = item.sourcePath;
+        }
         arr.append(obj);
     }
 

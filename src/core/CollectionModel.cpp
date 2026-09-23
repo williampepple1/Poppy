@@ -61,6 +61,25 @@ void CollectionItem::setRequest(const RequestModel& req) {
     m_request = std::make_unique<RequestModel>(req);
 }
 
+AuthModel CollectionItem::effectiveAuth() const {
+    const CollectionItem* node = (m_type == CollectionItemType::Request) ? m_parent : this;
+    while (node) {
+        if (node->m_auth.type != AuthType::None && node->m_auth.type != AuthType::Inherit) {
+            return node->m_auth;
+        }
+        node = node->m_parent;
+    }
+    return {};
+}
+
+RequestModel CollectionItem::requestForExecution() const {
+    RequestModel req = m_request ? *m_request : RequestModel{};
+    if (req.auth.type == AuthType::Inherit) {
+        req.auth = effectiveAuth();
+    }
+    return req;
+}
+
 int CollectionItem::row() const {
     if (m_parent) {
         return m_parent->m_children.indexOf(const_cast<CollectionItem*>(this));
@@ -110,6 +129,10 @@ bool CollectionModel::openDirectory(const QString& dirPath) {
 
     scanDirectory(m_rootPath, m_rootItem.get());
     reloadEnvironments();
+    const QString envDir = QDir(m_rootPath).filePath(QStringLiteral("environments"));
+    if (QDir(envDir).exists()) {
+        m_fileWatcher.addPath(QFileInfo(envDir).canonicalFilePath());
+    }
 
     m_suppressWatchReload = false;
     emit collectionLoaded();
@@ -139,6 +162,7 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
                     const QString folderContent = QString::fromUtf8(fb.readAll());
                     folderItem->setVariables(BruParser::parseVars(folderContent));
                     folderItem->setSeq(BruParser::parseMetaSeq(folderContent, 1));
+                    folderItem->setAuth(BruParser::parse(folderContent).auth);
                 }
             }
             parentItem->appendChild(folderItem);
@@ -150,6 +174,7 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
             if (fileName.compare(QLatin1String("folder.bru"), Qt::CaseInsensitive) == 0) continue;
             if (fileName.compare(QLatin1String("collection.bru"), Qt::CaseInsensitive) == 0) {
                 parentItem->setVariables(BruParser::parseVarsFile(entry.canonicalFilePath()));
+                parentItem->setAuth(BruParser::parseFile(entry.canonicalFilePath()).auth);
                 continue;
             }
 
@@ -193,6 +218,10 @@ bool CollectionModel::saveEnvironment(const EnvironmentModel& env) {
     suppressDiskWatcher();
     QDir dir(m_rootPath);
     if (!dir.mkpath(QStringLiteral("environments"))) return false;
+    const QString envDir = QFileInfo(dir.filePath(QStringLiteral("environments"))).canonicalFilePath();
+    if (!envDir.isEmpty() && !m_fileWatcher.directories().contains(envDir)) {
+        m_fileWatcher.addPath(envDir);
+    }
     const QString envPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".env"));
     const QString secretPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".secret.env"));
     bool ok = env.saveToEnvFile(envPath);

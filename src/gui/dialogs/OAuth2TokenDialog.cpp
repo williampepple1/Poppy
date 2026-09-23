@@ -116,7 +116,10 @@ void OAuth2TokenDialog::fetchClientCredentialsToken() {
     QStringList bodyParts;
     bodyParts.append("grant_type=client_credentials");
     bodyParts.append("client_id=" + QUrl::toPercentEncoding(m_clientIdEdit->text().trimmed()));
-    bodyParts.append("client_secret=" + QUrl::toPercentEncoding(m_clientSecretEdit->text().trimmed()));
+    const QString clientCredentialsSecret = m_clientSecretEdit->text().trimmed();
+    if (!clientCredentialsSecret.isEmpty()) {
+        bodyParts.append("client_secret=" + QUrl::toPercentEncoding(clientCredentialsSecret));
+    }
     if (!m_scopeEdit->text().trimmed().isEmpty()) {
         bodyParts.append("scope=" + QUrl::toPercentEncoding(m_scopeEdit->text().trimmed()));
     }
@@ -261,7 +264,10 @@ void OAuth2TokenDialog::exchangeCodeForToken(const QString& code) {
     bodyParts.append("code=" + QUrl::toPercentEncoding(code));
     bodyParts.append("redirect_uri=" + QUrl::toPercentEncoding(QString("http://127.0.0.1:%1/callback").arg(port)));
     bodyParts.append("client_id=" + QUrl::toPercentEncoding(m_clientIdEdit->text().trimmed()));
-    bodyParts.append("client_secret=" + QUrl::toPercentEncoding(m_clientSecretEdit->text().trimmed()));
+    const QString clientSecret = m_clientSecretEdit->text().trimmed();
+    if (!clientSecret.isEmpty()) {
+        bodyParts.append("client_secret=" + QUrl::toPercentEncoding(clientSecret));
+    }
     if (!m_codeVerifier.isEmpty()) {
         bodyParts.append("code_verifier=" + QUrl::toPercentEncoding(m_codeVerifier));
     }

@@ -83,8 +83,8 @@ public:
     void run() override {
         if (!m_engine) return;
         core::ResponseModel res = m_engine->executeCurl(m_req, m_generation, nullptr);
-        if (!m_engine->isGenerationCurrent(m_generation)) {
-            return;
+        if (!m_engine->isGenerationCurrent(m_generation) && res.errorString.isEmpty()) {
+            res.errorString = QStringLiteral("Request cancelled");
         }
 
         QPointer<CurlNetworkEngine> safeEngine = m_engine;
@@ -315,6 +315,22 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
             }
         }
         curl_easy_setopt(curl, CURLOPT_MIMEPOST, mime);
+    } else if (methodHasBody && req.bodyType == core::BodyType::Binary) {
+        const QString path = req.bodyContent.trimmed();
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly)) {
+            response.errorString = QString("Binary body file could not be read: %1")
+                .arg(path.isEmpty() ? QStringLiteral("(empty path)") : path);
+            curl_easy_cleanup(curl);
+            return response;
+        }
+        bodyBytes = file.readAll();
+        if (!bodyBytes.isEmpty()) {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDS, bodyBytes.constData());
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(bodyBytes.size()));
+        } else if (req.method == core::HttpMethod::POST || req.method == core::HttpMethod::PUT || req.method == core::HttpMethod::PATCH) {
+            curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, 0L);
+        }
     } else if (methodHasBody) {
         bodyBytes = req.effectiveBody();
         if (!bodyBytes.isEmpty()) {

@@ -6,6 +6,7 @@
 #include <QStackedWidget>
 #include <QPushButton>
 #include <QLabel>
+#include <QLineEdit>
 #include <components/KeyValueTable.h>
 #include <components/JsonSyntaxHighlighter.h>
 #include <core/RequestModel.h>
@@ -53,6 +54,10 @@ private:
     QWidget* m_gqlWidget;
     QPlainTextEdit* m_gqlQueryEditor;
     QPlainTextEdit* m_gqlVarsEditor;
+
+    // View 5: Binary file
+    QWidget* m_binaryWidget;
+    QLineEdit* m_binaryPathEdit;
 };
 
 } // namespace poppy::gui

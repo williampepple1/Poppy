@@ -4,6 +4,7 @@
 #include <QLabel>
 #include <QJsonDocument>
 #include <QUrl>
+#include <QFileDialog>
 
 namespace poppy::gui {
 
@@ -23,6 +24,7 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
     m_typeCombo->addItem("XML", static_cast<int>(core::BodyType::Xml));
     m_typeCombo->addItem("Form URL-Encoded", static_cast<int>(core::BodyType::FormUrlEncoded));
     m_typeCombo->addItem("Multipart Form", static_cast<int>(core::BodyType::MultipartForm));
+    m_typeCombo->addItem("Binary File", static_cast<int>(core::BodyType::Binary));
     m_typeCombo->addItem("GraphQL", static_cast<int>(core::BodyType::GraphQL));
     topBar->addWidget(m_typeCombo);
 
@@ -99,6 +101,23 @@ BodyEditor::BodyEditor(QWidget* parent) : QWidget(parent) {
 
     m_stack->addWidget(m_gqlWidget);
 
+    m_binaryWidget = new QWidget(this);
+    auto* binaryLayout = new QHBoxLayout(m_binaryWidget);
+    binaryLayout->setContentsMargins(0, 0, 0, 0);
+    m_binaryPathEdit = new QLineEdit(m_binaryWidget);
+    m_binaryPathEdit->setPlaceholderText("Path to file to upload...");
+    connect(m_binaryPathEdit, &QLineEdit::textChanged, this, &BodyEditor::bodyChanged);
+    binaryLayout->addWidget(m_binaryPathEdit, 1);
+    auto* browseBtn = new QPushButton("Browse...", m_binaryWidget);
+    connect(browseBtn, &QPushButton::clicked, this, [this]() {
+        const QString path = QFileDialog::getOpenFileName(this, "Select binary body file", m_binaryPathEdit->text());
+        if (!path.isEmpty()) {
+            m_binaryPathEdit->setText(path);
+        }
+    });
+    binaryLayout->addWidget(browseBtn);
+    m_stack->addWidget(m_binaryWidget);
+
     mainLayout->addWidget(m_stack);
 
     connect(m_typeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &BodyEditor::onFormatChanged);
@@ -120,6 +139,8 @@ void BodyEditor::onFormatChanged(int index) {
         m_stack->setCurrentWidget(m_multipartTable);
     } else if (type == core::BodyType::GraphQL) {
         m_stack->setCurrentWidget(m_gqlWidget);
+    } else if (type == core::BodyType::Binary) {
+        m_stack->setCurrentWidget(m_binaryWidget);
     } else {
         m_stack->setCurrentWidget(m_codeEditor);
         if (isJson) validateJson();
@@ -199,6 +220,8 @@ void BodyEditor::loadFromRequest(const core::RequestModel& req) {
             });
         }
         m_formTable->setParams(params);
+    } else if (req.bodyType == core::BodyType::Binary) {
+        m_binaryPathEdit->setText(req.bodyContent);
     } else {
         m_codeEditor->setPlainText(req.bodyContent);
     }
@@ -229,6 +252,8 @@ void BodyEditor::saveToRequest(core::RequestModel& req) const {
             }
         }
         req.bodyContent = parts.join('&');
+    } else if (req.bodyType == core::BodyType::Binary) {
+        req.bodyContent = m_binaryPathEdit->text().trimmed();
     } else {
         req.bodyContent = m_codeEditor->toPlainText();
     }

@@ -41,7 +41,7 @@ static QString jsonValueToString(const QJsonValue& val) {
 void collectRequests(core::CollectionItem* item, QList<core::RequestModel>& list, QList<QMap<QString, QString>>& folderVars) {
     if (!item) return;
     if (item->type() == core::CollectionItemType::Request && item->request()) {
-        list.append(*item->request());
+        list.append(item->requestForExecution());
         folderVars.append(item->effectiveVariables());
     }
     for (auto* child : item->children()) {
@@ -72,15 +72,18 @@ SuiteResult executeCliRequest(
     int iter,
     int iterations
 ) {
-    core::VariableResolver resolver;
-    resolver.setEnvironment(env);
-    resolver.setCollectionVariables(collectionVars);
-    resolver.setFolderVariables(folderVars);
-    for (auto it = fixtureRow.constBegin(); it != fixtureRow.constEnd(); ++it) {
-        resolver.setRuntimeVariable(it.key(), it.value());
-    }
+    auto resolveNow = [&](const core::RequestModel& input) {
+        core::VariableResolver resolver;
+        resolver.setEnvironment(env);
+        resolver.setCollectionVariables(collectionVars);
+        resolver.setFolderVariables(folderVars);
+        for (auto it = fixtureRow.constBegin(); it != fixtureRow.constEnd(); ++it) {
+            resolver.setRuntimeVariable(it.key(), it.value());
+        }
+        return resolver.resolveRequest(input);
+    };
 
-    core::RequestModel resolvedReq = resolver.resolveRequest(req);
+    core::RequestModel resolvedReq = resolveNow(req);
 
     SuiteResult sr;
     QString reqTitle = resolvedReq.name.isEmpty() ? resolvedReq.effectiveUrl() : resolvedReq.name;
@@ -95,6 +98,7 @@ SuiteResult executeCliRequest(
         return sr;
     }
 
+    resolvedReq = resolveNow(resolvedReq);
     sr.url = resolvedReq.effectiveUrl();
     sr.method = core::methodToString(resolvedReq.method);
 
@@ -390,14 +394,14 @@ int main(int argc, char *argv[]) {
                     .arg(QCoreApplication::applicationPid())
                     .arg(QUuid::createUuid().toString(QUuid::Id128))));
             core::ScriptRunner localScripts;
+            core::EnvironmentModel workerEnv = activeEnv;
             while (true) {
                 const int job = nextJob.fetch_add(1);
                 if (job >= totalJobs) break;
                 const int iter = job / requestsToRun.size();
                 const int i = job % requestsToRun.size();
-                core::EnvironmentModel envCopy = activeEnv;
                 ordered[static_cast<size_t>(job)] = executeCliRequest(
-                    requestsToRun[i], envCopy, fixtureForIter(iter), folderVarsToRun.value(i), collectionVars,
+                    requestsToRun[i], workerEnv, fixtureForIter(iter), folderVarsToRun.value(i), collectionVars,
                     localEngine, localScripts, iter, iterations);
             }
         };

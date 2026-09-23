@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QFile>
 
 namespace poppy::core {
 
@@ -154,6 +155,11 @@ QByteArray RequestModel::effectiveBody() const {
     }
     if (bodyType == BodyType::MultipartForm) {
         return {};
+    }
+    if (bodyType == BodyType::Binary) {
+        QFile file(bodyContent.trimmed());
+        if (!file.open(QIODevice::ReadOnly)) return {};
+        return file.readAll();
     }
     return bodyContent.toUtf8();
 }

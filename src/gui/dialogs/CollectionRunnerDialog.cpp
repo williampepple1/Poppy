@@ -152,7 +152,7 @@ CollectionRunnerDialog::CollectionRunnerDialog(
 void CollectionRunnerDialog::collectRequests(core::CollectionItem* item, QList<QueuedRequest>& list) {
     if (!item) return;
     if (item->type() == core::CollectionItemType::Request && item->request()) {
-        list.append(QueuedRequest{*item->request(), item->effectiveVariables()});
+        list.append(QueuedRequest{item->requestForExecution(), item->effectiveVariables()});
     }
     for (auto* child : item->children()) {
         collectRequests(child, list);
@@ -223,6 +223,13 @@ void CollectionRunnerDialog::stopRun() {
     ++m_runGeneration;
     if (m_networkEngine) {
         m_networkEngine->cancelAll();
+    }
+    for (int row = 0; row < m_resultsTable->rowCount(); ++row) {
+        if (auto* status = m_resultsTable->item(row, 3)) {
+            if (status->text() == QStringLiteral("Running...")) {
+                status->setText(QStringLiteral("Cancelled"));
+            }
+        }
     }
     m_stopBtn->setEnabled(false);
     m_startBtn->setEnabled(true);
@@ -377,6 +384,13 @@ void CollectionRunnerDialog::executeNextRequest() {
         return;
     }
 
+    resolver.setEnvironment(m_activeEnv);
+    if (m_model && m_model->rootItem()) {
+        resolver.setCollectionVariables(m_model->rootItem()->variables());
+    }
+    resolver.setFolderVariables(queued.folderVars);
+    resolvedReq = resolver.resolveRequest(resolvedReq);
+
     // Populate initial row info
     m_resultsTable->setItem(row, 0, new QTableWidgetItem(QString::number(row + 1)));
     
@@ -393,7 +407,17 @@ void CollectionRunnerDialog::executeNextRequest() {
     const quint64 runGen = m_runGeneration;
     m_networkEngine->sendRequestAsync(resolvedReq, [this, row, resolvedReq, runGen](const core::ResponseModel& res) {
         QPointer<CollectionRunnerDialog> self(this);
-        if (!self || !m_isRunning || runGen != m_runGeneration) return;
+        if (!self) return;
+        if (!m_isRunning || runGen != m_runGeneration) {
+            if (row >= 0 && row < m_resultsTable->rowCount()) {
+                if (auto* status = m_resultsTable->item(row, 3)) {
+                    if (status->text() == QStringLiteral("Running...")) {
+                        status->setText(QStringLiteral("Cancelled"));
+                    }
+                }
+            }
+            return;
+        }
 
         m_totalDurationMs += res.latencyMs;
 

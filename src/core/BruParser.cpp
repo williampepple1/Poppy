@@ -35,7 +35,7 @@ RequestModel BruParser::parse(const QString& content) {
 
             // Check if this is a freeform / code block:
             // body:json, body:text, body:xml, script:pre-request, script:post-response, tests
-            bool isCodeBlock = (blockName.startsWith("body:") && blockName != "body:multipart-form") ||
+            bool isCodeBlock = (blockName.startsWith("body:") && blockName != "body:multipart-form" && blockName != "body:binary") ||
                                blockName.startsWith("script:") ||
                                blockName == "tests";
 
@@ -159,6 +159,15 @@ RequestModel BruParser::parse(const QString& content) {
                                     .value = val,
                                     .enabled = enabled
                                 });
+                            } else if (blockName == "body:binary") {
+                                req.bodyType = BodyType::Binary;
+                                if (key == "file" || key == "path") {
+                                    if ((val.startsWith('"') && val.endsWith('"') && val.size() >= 2)
+                                        || (val.startsWith('\'') && val.endsWith('\'') && val.size() >= 2)) {
+                                        val = val.mid(1, val.size() - 2);
+                                    }
+                                    req.bodyContent = val;
+                                }
                             } else if (blockName == "body:multipart-form") {
                                 req.bodyType = BodyType::MultipartForm;
                                 bool isFile = val.startsWith('@');
@@ -169,6 +178,8 @@ RequestModel BruParser::parse(const QString& content) {
                                     .isFile = isFile,
                                     .enabled = enabled
                                 });
+                            } else if (blockName == "auth") {
+                                if (key == "mode" || key == "type") req.auth.type = stringToAuthType(val);
                             } else if (blockName == "auth:bearer") {
                                 if (key == "token") req.auth.bearerToken = val;
                             } else if (blockName == "auth:basic") {

@@ -205,6 +205,10 @@ void MainWindow::setupUi() {
             auto imported = core::CurlImporter::importCurl(trimmed);
             if (!imported.url.isEmpty()) {
                 loadRequestIntoUi(imported);
+                if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+                    m_openTabs[m_currentTabIndex].request = m_currentRequest;
+                    m_openTabs[m_currentTabIndex].hasResponse = false;
+                }
                 markCurrentTabDirty();
                 statusBar()->showMessage("Detected and imported cURL command into request editor!", 3500);
             }
@@ -854,7 +858,7 @@ void MainWindow::onEnvironmentChanged(const QString& envName) {
 void MainWindow::onShowCodeSnippets() {
     saveUiIntoRequest(m_currentRequest);
     core::VariableResolver resolver = currentVariableResolver();
-    core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
+    core::RequestModel resolvedReq = resolver.resolveRequest(requestForExecution());
 
     CodeSnippetDialog dlg(resolvedReq, this);
     dlg.exec();
@@ -864,6 +868,12 @@ void MainWindow::onImport() {
     ImportDialog dlg(m_collectionModel.rootPath(), this);
     connect(&dlg, &ImportDialog::curlImported, this, [this](const core::RequestModel& req) {
         loadRequestIntoUi(req);
+        if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+            m_openTabs[m_currentTabIndex].request = m_currentRequest;
+            m_openTabs[m_currentTabIndex].hasResponse = false;
+            m_openTabs[m_currentTabIndex].lastReport = {};
+        }
+        markCurrentTabDirty();
         statusBar()->showMessage("cURL command imported successfully!", 3000);
     });
     connect(&dlg, &ImportDialog::collectionImported, this, [this](const QString& dirPath) {
@@ -906,7 +916,14 @@ void MainWindow::onSendClicked() {
     core::EnvironmentModel& activeEnv = liveEnv ? *liveEnv : scratch;
 
     core::VariableResolver resolver = currentVariableResolver();
-    core::RequestModel resolvedReq = resolver.resolveRequest(m_currentRequest);
+    const core::RequestModel historyTemplate = m_currentRequest;
+    QString historyPath;
+    if (m_activeItem) {
+        historyPath = m_activeItem->path();
+    } else if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        historyPath = m_openTabs[m_currentTabIndex].resolvePath;
+    }
+    core::RequestModel resolvedReq = resolver.resolveRequest(requestForExecution());
     QString scriptErr;
     if (!m_scriptRunner.runPreRequestScript(resolvedReq.scripts.preRequestScript, resolvedReq, activeEnv, &scriptErr)) {
         QMessageBox::warning(this, "Pre-request Script Error", scriptErr);
@@ -924,7 +941,7 @@ void MainWindow::onSendClicked() {
     const quint64 sendGen = ++m_sendGeneration;
     const quint64 sentTabId = (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size())
         ? m_openTabs[m_currentTabIndex].tabId : 0;
-    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, sendGen, sentTabId](const core::ResponseModel& res) mutable {
+    m_networkEngine.sendRequestAsync(resolvedReq, [this, resolvedReq, sendGen, sentTabId, historyTemplate, historyPath](const core::ResponseModel& res) mutable {
         QPointer<MainWindow> self(this);
         if (!self) return;
 
@@ -968,7 +985,7 @@ void MainWindow::onSendClicked() {
             m_responseInspector->setResponse(res, &report);
         }
 
-        m_historyManager.addEntry(resolvedReq, res);
+        m_historyManager.addEntry(historyTemplate, res, historyPath);
 
         m_sessionReqCount++;
         qint64 bytes = res.sizeBytes > 0 ? res.sizeBytes : res.rawBody.size();
@@ -996,6 +1013,7 @@ void MainWindow::onHistoryItemSelected(const core::HistoryItem& item) {
         m_openTabs[m_currentTabIndex].request = item.request;
         m_openTabs[m_currentTabIndex].item = nullptr;
         m_openTabs[m_currentTabIndex].itemPath.clear();
+        m_openTabs[m_currentTabIndex].resolvePath = item.sourcePath;
         m_openTabs[m_currentTabIndex].isDirty = true;
         m_openTabs[m_currentTabIndex].lastResponse = item.toResponseModel();
         m_openTabs[m_currentTabIndex].lastReport = {};
@@ -1227,10 +1245,33 @@ core::VariableResolver MainWindow::currentVariableResolver() const {
     if (m_collectionModel.rootItem()) {
         resolver.setCollectionVariables(m_collectionModel.rootItem()->variables());
     }
-    if (m_activeItem) {
-        resolver.setFolderVariables(m_activeItem->effectiveVariables());
+    if (core::CollectionItem* scope = scopeItem()) {
+        resolver.setFolderVariables(scope->effectiveVariables());
     }
     return resolver;
+}
+
+core::CollectionItem* MainWindow::scopeItem() const {
+    if (m_activeItem) return m_activeItem;
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        const QString& path = m_openTabs[m_currentTabIndex].resolvePath;
+        if (!path.isEmpty()) {
+            return m_collectionModel.findItemByPath(path);
+        }
+    }
+    return nullptr;
+}
+
+core::RequestModel MainWindow::requestForExecution() const {
+    core::RequestModel toSend = m_currentRequest;
+    if (toSend.auth.type == core::AuthType::Inherit) {
+        if (core::CollectionItem* scope = scopeItem()) {
+            toSend.auth = scope->effectiveAuth();
+        } else {
+            toSend.auth = {};
+        }
+    }
+    return toSend;
 }
 
 void MainWindow::refreshEnvironmentUi() {
@@ -1583,6 +1624,14 @@ void MainWindow::onExportMarkdown() {
 
 void MainWindow::onFindAndReplace() {
     saveUiIntoRequest(m_currentRequest);
+    if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        auto& tab = m_openTabs[m_currentTabIndex];
+        tab.request = m_currentRequest;
+        if (tab.item) tab.isDirty = true;
+    }
+    for (int i = 0; i < m_openTabs.size(); ++i) {
+        flushDirtyTab(i);
+    }
     FindReplaceDialog dlg(&m_collectionModel, this);
     connect(&dlg, &FindReplaceDialog::requestSelected, this, [this](core::CollectionItem* item) {
         onRequestSelected(item);

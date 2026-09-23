@@ -21,6 +21,8 @@ struct HistoryItem {
     QString errorString;
     QByteArray responseRawBody;
     QList<HttpHeader> responseHeaders;
+    // Collection item path captured at send time, so a replay can resolve folder vars.
+    QString sourcePath;
 
     ResponseModel toResponseModel() const {
         ResponseModel res;
@@ -52,7 +54,7 @@ public:
     const QList<HistoryItem>& items() const { return m_items; }
     int count() const { return m_items.size(); }
 
-    void addEntry(const RequestModel& req, const ResponseModel& res);
+    void addEntry(const RequestModel& req, const ResponseModel& res, const QString& sourcePath = QString());
     bool removeEntry(const QString& id);
     void clear();
 

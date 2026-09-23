@@ -93,6 +93,8 @@ private:
     void closeTab(int index);
     void updateTabTitle(int index);
     core::VariableResolver currentVariableResolver() const;
+    core::CollectionItem* scopeItem() const;
+    core::RequestModel requestForExecution() const;
     void updateTopEnvCombo();
     void rebindOpenTabs();
     void updateSessionTelemetryWidget();
@@ -112,6 +114,7 @@ private:
         quint64 tabId{0};
         core::CollectionItem* item{nullptr};
         QString itemPath;
+        QString resolvePath;
         core::RequestModel request;
         bool isDirty{false};
         bool isPinned{false};

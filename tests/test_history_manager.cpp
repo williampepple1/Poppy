@@ -1,4 +1,7 @@
 #include <iostream>
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
 #include <cassert>
 #include <QDir>
 #include <QFile>
@@ -127,7 +130,7 @@ int main(int argc, char* argv[]) {
     secretRes.statusCode = 200;
     HistoryManager secretMgr;
     secretMgr.setAutoSave(false);
-    secretMgr.addEntry(secretReq, secretRes);
+    secretMgr.addEntry(secretReq, secretRes, "folder/login.bru");
     QString secretFile = QDir::tempPath() + "/poppy_test_history_secrets.json";
     QFile::remove(secretFile);
     assert(secretMgr.saveToFile(secretFile));
@@ -145,6 +148,8 @@ int main(int argc, char* argv[]) {
     assert(reloaded.items()[0].request.auth.bearerToken.isEmpty());
     assert(reloaded.items()[0].request.auth.basicPassword.isEmpty());
     assert(reloaded.items()[0].request.auth.awsSecretKey.isEmpty());
+    assert(reloaded.items()[0].request.url == "https://api.example.com/login");
+    assert(reloaded.items()[0].sourcePath == "folder/login.bru");
     QFile::remove(secretFile);
 
     std::cout << "test_history_manager PASSED!" << std::endl;
