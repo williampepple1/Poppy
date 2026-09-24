@@ -53,6 +53,6 @@ target_link_libraries(poppy PRIVATE
 
 if(WIN32)
     set_target_properties(poppy PROPERTIES
-        WIN32_EXECUTABLE FALSE
+        WIN32_EXECUTABLE TRUE
     )
 endif()
