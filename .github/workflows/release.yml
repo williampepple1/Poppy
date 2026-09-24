@@ -149,8 +149,13 @@ jobs:
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
         with:
-          version: '6.7.2'
+          version: '6.8.2'
           cache: true
+
+      - name: Fix Xcode 16 AGL removal
+        run: |
+          find "$RUNNER_WORKSPACE/Qt" -name "*.cmake" -exec sed -i '' 's/-framework AGL//g' {} + 2>/dev/null || true
+          find "$RUNNER_WORKSPACE/Qt" -name "FindWrapOpenGL.cmake" -exec sed -i '' 's/AGL//g' {} + 2>/dev/null || true
 
       - name: Configure CMake
         run: |
