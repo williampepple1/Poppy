@@ -88,8 +88,9 @@ public:
         }
 
         QPointer<CurlNetworkEngine> safeEngine = m_engine;
+        if (!safeEngine) return;
         auto callback = m_onComplete;
-        QMetaObject::invokeMethod(m_engine, [safeEngine, res, callback]() {
+        QMetaObject::invokeMethod(safeEngine.data(), [safeEngine, res, callback]() {
             if (callback) {
                 callback(res);
             }
@@ -324,6 +325,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
         if (!file.open(QIODevice::ReadOnly)) {
             response.errorString = QString("Binary body file could not be read: %1")
                 .arg(path.isEmpty() ? QStringLiteral("(empty path)") : path);
+            if (headerList) curl_slist_free_all(headerList);
             curl_easy_cleanup(curl);
             return response;
         }

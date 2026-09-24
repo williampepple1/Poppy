@@ -828,11 +828,15 @@ void MainWindow::onSaveRequest() {
     if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
         m_openTabs[m_currentTabIndex].request = m_currentRequest;
     }
-    if (m_activeItem) {
-        if (m_activeItem->request()) {
-            *m_activeItem->request() = m_currentRequest;
+    core::CollectionItem* targetItem = m_activeItem;
+    if (!targetItem && m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
+        targetItem = m_openTabs[m_currentTabIndex].item;
+    }
+    if (targetItem) {
+        if (targetItem->request()) {
+            *targetItem->request() = m_currentRequest;
         }
-        if (m_collectionModel.saveRequest(m_activeItem)) {
+        if (m_collectionModel.saveRequest(targetItem)) {
             if (m_currentTabIndex >= 0 && m_currentTabIndex < m_openTabs.size()) {
                 m_openTabs[m_currentTabIndex].isDirty = false;
                 updateTabTitle(m_currentTabIndex);

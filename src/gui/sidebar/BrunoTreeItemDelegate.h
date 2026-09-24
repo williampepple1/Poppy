@@ -46,6 +46,7 @@ public:
             QColor mColor = Theme::methodColor(method);
             QString mStr = core::methodToString(method);
             if (mStr == "DELETE") mStr = "DEL";
+            else if (mStr == "OPTIONS") mStr = "OPT";
 
             // Draw compact pill badge
             const int badgeWidth = 36;
@@ -68,15 +69,19 @@ public:
             painter->drawText(badgeRect, Qt::AlignCenter, mStr);
 
             // Request Name Text
-            QRect textRect(badgeRect.right() + 8, option.rect.top(), option.rect.width() - badgeWidth - 16, option.rect.height());
-            QFont nameFont = option.font;
-            nameFont.setPixelSize(12);
-            nameFont.setBold(isSelected);
-            painter->setFont(nameFont);
-            painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
-                                       : (isDark ? QColor("#e5e7eb") : QColor("#1e293b")));
-            QString displayName = index.data(Qt::DisplayRole).toString();
-            painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(displayName, Qt::ElideRight, textRect.width()));
+            const int textLeft = badgeRect.right() + 8;
+            const int textWidth = option.rect.right() - textLeft - 4;
+            if (textWidth > 0) {
+                QRect textRect(textLeft, option.rect.top(), textWidth, option.rect.height());
+                QFont nameFont = option.font;
+                nameFont.setPixelSize(12);
+                nameFont.setBold(isSelected);
+                painter->setFont(nameFont);
+                painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
+                                           : (isDark ? QColor("#e5e7eb") : QColor("#1e293b")));
+                QString displayName = index.data(Qt::DisplayRole).toString();
+                painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(displayName, Qt::ElideRight, textRect.width()));
+            }
         } else if (itemType == 2) {
             // HISTORY ITEM
             int methodInt = index.data(Qt::UserRole + 1).toInt();
@@ -84,6 +89,7 @@ public:
             QColor mColor = Theme::methodColor(method);
             QString mStr = core::methodToString(method);
             if (mStr == "DELETE") mStr = "DEL";
+            else if (mStr == "OPTIONS") mStr = "OPT";
             int statusCode = index.data(Qt::UserRole + 3).toInt();
             qint64 latency = index.data(Qt::UserRole + 4).toLongLong();
             QString urlOrName = index.data(Qt::DisplayRole).toString();
@@ -111,33 +117,43 @@ public:
             painter->drawText(sBadge, Qt::AlignCenter, statusCode > 0 ? QString::number(statusCode) : "ERR");
 
             // Latency
-            QRect latRect(sBadge.right() + 6, option.rect.top() + 4, 60, 15);
-            QFont latFont = painter->font();
-            latFont.setPixelSize(9);
-            latFont.setBold(false);
-            painter->setFont(latFont);
-            painter->setPen(QColor(isDark ? "#9ca3af" : "#64748b"));
-            painter->drawText(latRect, Qt::AlignVCenter | Qt::AlignLeft, QString("%1 ms").arg(latency));
+            const int latLeft = sBadge.right() + 6;
+            const int latWidth = option.rect.right() - latLeft - 4;
+            if (latWidth > 0) {
+                QRect latRect(latLeft, option.rect.top() + 4, latWidth, 15);
+                QFont latFont = painter->font();
+                latFont.setPixelSize(9);
+                latFont.setBold(false);
+                painter->setFont(latFont);
+                painter->setPen(QColor(isDark ? "#9ca3af" : "#64748b"));
+                painter->drawText(latRect, Qt::AlignVCenter | Qt::AlignLeft, QString("%1 ms").arg(latency));
+            }
 
             // URL on second line
-            QRect urlRect(option.rect.left() + 6, option.rect.top() + 21, option.rect.width() - 12, 16);
-            QFont urlFont = option.font;
-            urlFont.setPixelSize(11);
-            painter->setFont(urlFont);
-            painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
-                                       : (isDark ? QColor("#d1d5db") : QColor("#334155")));
-            painter->drawText(urlRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(urlOrName, Qt::ElideMiddle, urlRect.width()));
+            const int urlWidth = option.rect.width() - 12;
+            if (urlWidth > 0) {
+                QRect urlRect(option.rect.left() + 6, option.rect.top() + 21, urlWidth, 16);
+                QFont urlFont = option.font;
+                urlFont.setPixelSize(11);
+                painter->setFont(urlFont);
+                painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
+                                           : (isDark ? QColor("#d1d5db") : QColor("#334155")));
+                painter->drawText(urlRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(urlOrName, Qt::ElideMiddle, urlRect.width()));
+            }
         } else {
             // FOLDER OR ROOT ITEM
-            QRect textRect(option.rect.left() + 4, option.rect.top(), option.rect.width() - 8, option.rect.height());
-            QFont fFont = option.font;
-            fFont.setPixelSize(12);
-            fFont.setBold(true);
-            painter->setFont(fFont);
-            painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
-                                       : (isDark ? QColor("#e5e7eb") : QColor("#1e293b")));
-            QString text = index.data(Qt::DisplayRole).toString();
-            painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(text, Qt::ElideRight, textRect.width()));
+            const int fWidth = option.rect.width() - 8;
+            if (fWidth > 0) {
+                QRect textRect(option.rect.left() + 4, option.rect.top(), fWidth, option.rect.height());
+                QFont fFont = option.font;
+                fFont.setPixelSize(12);
+                fFont.setBold(true);
+                painter->setFont(fFont);
+                painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
+                                           : (isDark ? QColor("#e5e7eb") : QColor("#1e293b")));
+                QString text = index.data(Qt::DisplayRole).toString();
+                painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(text, Qt::ElideRight, textRect.width()));
+            }
         }
 
         painter->restore();

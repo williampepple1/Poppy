@@ -277,12 +277,17 @@ void CollectionSidebar::onTreeItemDropped(QTreeWidgetItem* widget) {
         return;
     }
     QTreeWidgetItem* parentWidget = widget->parent();
-    core::CollectionItem* newParent = parentWidget ? itemFromWidget(parentWidget) : m_model->rootItem();
+    if (!parentWidget) {
+        // Can't have siblings to the collection root
+        refreshTree();
+        return;
+    }
+    core::CollectionItem* newParent = itemFromWidget(parentWidget);
     if (!newParent || newParent->type() == core::CollectionItemType::Request) {
         refreshTree();
         return;
     }
-    int insertIndex = parentWidget ? parentWidget->indexOfChild(widget) : m_tree->indexOfTopLevelItem(widget);
+    int insertIndex = parentWidget->indexOfChild(widget);
     if (!m_model->moveItem(item, newParent, insertIndex)) {
         refreshTree();
     }
@@ -617,6 +622,13 @@ void CollectionSidebar::onCollectionFilterChanged(const QString& query) {
             childVisible |= applyFilter(item->child(i));
         }
         bool selfMatch = q.isEmpty() || item->text(0).contains(q, Qt::CaseInsensitive);
+        if (!selfMatch && item->data(0, Qt::UserRole + 2).toInt() == 1) { // Request item
+            auto method = static_cast<core::HttpMethod>(item->data(0, Qt::UserRole + 1).toInt());
+            QString mStr = core::methodToString(method);
+            if (mStr.contains(q, Qt::CaseInsensitive)) {
+                selfMatch = true;
+            }
+        }
         bool visible = selfMatch || childVisible;
         item->setHidden(!visible);
         if (childVisible && !q.isEmpty()) item->setExpanded(true);
