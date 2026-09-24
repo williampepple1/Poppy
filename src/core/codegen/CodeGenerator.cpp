@@ -39,6 +39,8 @@ QString CodeGenerator::languageName(TargetLanguage lang) {
         case TargetLanguage::CSharpHttpClient: return "C# (HttpClient)";
         case TargetLanguage::JavaHttpClient: return "Java (java.net.http)";
         case TargetLanguage::Curl: return "cURL";
+        case TargetLanguage::PhpCurl: return "PHP (cURL)";
+        case TargetLanguage::PowerShell: return "PowerShell (Invoke-WebRequest)";
     }
     return "Python (requests)";
 }
@@ -54,6 +56,8 @@ QString CodeGenerator::generate(TargetLanguage lang, const RequestModel& req) {
         case TargetLanguage::CSharpHttpClient: return generateCSharp(req);
         case TargetLanguage::JavaHttpClient: return generateJava(req);
         case TargetLanguage::Curl: return req.toCurlCommand();
+        case TargetLanguage::PhpCurl: return generatePhp(req);
+        case TargetLanguage::PowerShell: return generatePowerShell(req);
     }
     return generatePython(req);
 }
@@ -400,6 +404,81 @@ QString CodeGenerator::generateJava(const RequestModel& req) {
     ts << "        System.out.println(response.body());\n";
     ts << "    }\n";
     ts << "}\n";
+
+    return out;
+}
+
+QString CodeGenerator::generatePhp(const RequestModel& req) {
+    QString out;
+    QTextStream ts(&out);
+
+    ts << "<?php\n\n";
+    ts << "$ch = curl_init();\n\n";
+    ts << "curl_setopt($ch, CURLOPT_URL, \"" << req.effectiveUrl() << "\");\n";
+    ts << "curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);\n";
+    ts << "curl_setopt($ch, CURLOPT_CUSTOMREQUEST, \"" << methodToString(req.method) << "\");\n\n";
+
+    auto headers = req.effectiveHeaders();
+    if (!headers.isEmpty()) {
+        ts << "$headers = [\n";
+        for (const auto& h : headers) {
+            if (h.enabled && !h.name.isEmpty()) {
+                ts << "    \"" << h.name << ": " << h.value << "\",\n";
+            }
+        }
+        ts << "];\n";
+        ts << "curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);\n\n";
+    }
+
+    if (snippetHasBody(req)) {
+        QString escaped = snippetBody(req);
+        escaped.replace("\"", "\\\"");
+        escaped.replace("\n", "\\n");
+        ts << "$body = \"" << escaped << "\";\n";
+        ts << "curl_setopt($ch, CURLOPT_POSTFIELDS, $body);\n\n";
+    }
+
+    ts << "$response = curl_exec($ch);\n";
+    ts << "$statusCode = curl_getinfo($ch, CURLINFO_HTTP_CODE);\n";
+    ts << "curl_close($ch);\n\n";
+    ts << "echo $statusCode . \"\\n\";\n";
+    ts << "echo $response . \"\\n\";\n";
+
+    return out;
+}
+
+QString CodeGenerator::generatePowerShell(const RequestModel& req) {
+    QString out;
+    QTextStream ts(&out);
+
+    ts << "$Uri = \"" << req.effectiveUrl() << "\"\n\n";
+
+    auto headers = req.effectiveHeaders();
+    if (!headers.isEmpty()) {
+        ts << "$Headers = @{\n";
+        for (const auto& h : headers) {
+            if (h.enabled && !h.name.isEmpty()) {
+                ts << "    \"" << h.name << "\" = \"" << h.value << "\"\n";
+            }
+        }
+        ts << "}\n\n";
+    }
+
+    bool hasBody = snippetHasBody(req);
+    if (hasBody) {
+        QString escaped = snippetBody(req);
+        escaped.replace("\"", "`\"");
+        escaped.replace("\n", "`n");
+        ts << "$Body = \"" << escaped << "\"\n\n";
+    }
+
+    ts << "$Response = Invoke-WebRequest -Uri $Uri `\n";
+    ts << "    -Method " << methodToString(req.method);
+    if (!headers.isEmpty()) ts << " `\n    -Headers $Headers";
+    if (hasBody) ts << " `\n    -Body $Body";
+    ts << "\n\n";
+    ts << "Write-Host $Response.StatusCode\n";
+    ts << "Write-Host $Response.Content\n";
 
     return out;
 }

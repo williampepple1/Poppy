@@ -8,6 +8,7 @@
 #include <QPushButton>
 #include <QLineEdit>
 #include <QTextBrowser>
+#include <QTreeWidget>
 #include <components/JsonSyntaxHighlighter.h>
 #include <core/ResponseModel.h>
 #include <core/ScriptRunner.h>
@@ -124,8 +125,16 @@ private:
     QWidget* m_cookiesTab{nullptr};
     QTableWidget* m_cookiesTable{nullptr};
 
+    // JSON Tree Tab
+    QWidget* m_jsonTreeTab{nullptr};
+    QLineEdit* m_jsonTreeSearch{nullptr};
+    QTreeWidget* m_jsonTreeWidget{nullptr};
+
     void updateVisualizeTab(const core::ResponseModel& res);
     void updateCookiesTab(const core::ResponseModel& res);
+    void updateJsonTreeTab(const core::ResponseModel& res);
+    static void populateJsonTree(QTreeWidgetItem* parent, const QJsonValue& val, const QString& key = {});
+    void filterJsonTree(QTreeWidgetItem* item, const QString& query);
     static QString httpStatusExplanation(int code);
 };
 

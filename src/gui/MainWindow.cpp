@@ -108,7 +108,8 @@ void MainWindow::setupUi() {
     mainSplitter->addWidget(m_sidebar);
 
     // Right Content Area (Vertical Splitter: Request Editor | Response Inspector)
-    auto* contentSplitter = new QSplitter(Qt::Vertical, this);
+    m_contentSplitter = new QSplitter(Qt::Vertical, this);
+    auto* contentSplitter = m_contentSplitter;
 
     // Request Editor Container
     auto* requestEditorWidget = new QWidget(this);
@@ -317,6 +318,17 @@ void MainWindow::setupUi() {
     auto* openShortcut = new QShortcut(QKeySequence::Open, this);
     connect(openShortcut, &QShortcut::activated, this, &MainWindow::onOpenCollection);
 
+    // Layout Split Toggle: Ctrl+Shift+L
+    auto* layoutToggleShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L), this);
+    connect(layoutToggleShortcut, &QShortcut::activated, this, [this]() {
+        if (!m_contentSplitter) return;
+        bool isVertical = (m_contentSplitter->orientation() == Qt::Vertical);
+        m_contentSplitter->setOrientation(isVertical ? Qt::Horizontal : Qt::Vertical);
+        QList<int> equal = {500, 500};
+        m_contentSplitter->setSizes(equal);
+        statusBar()->showMessage(isVertical ? "Layout: Side-by-side (Ctrl+Shift+L to toggle)" : "Layout: Stacked (Ctrl+Shift+L to toggle)", 2500);
+    });
+
     // Status Bar & Variable Quick-Look / Telemetry Widgets
     auto* sb = statusBar();
 
@@ -392,6 +404,12 @@ void MainWindow::setupMenus() {
 
     auto* viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction("Toggle &Dark/Light Theme", QKeySequence(Qt::CTRL | Qt::Key_T), this, &MainWindow::onToggleTheme);
+    viewMenu->addAction("Toggle &Layout Split (Side-by-side / Stacked)", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L), this, [this]() {
+        if (!m_contentSplitter) return;
+        bool isVertical = (m_contentSplitter->orientation() == Qt::Vertical);
+        m_contentSplitter->setOrientation(isVertical ? Qt::Horizontal : Qt::Vertical);
+        m_contentSplitter->setSizes({500, 500});
+    });
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Keyboard Shortcuts...", QKeySequence(Qt::CTRL | Qt::Key_Slash), this, &MainWindow::onShowShortcuts);

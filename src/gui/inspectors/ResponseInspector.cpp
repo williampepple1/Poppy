@@ -342,6 +342,64 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
     m_tabWidget->addTab(m_cookiesTab, "Cookies (0)");
 
+    // Tab 8: JSON Tree
+    m_jsonTreeTab = new QWidget(this);
+    auto* jtLayout = new QVBoxLayout(m_jsonTreeTab);
+    jtLayout->setContentsMargins(0, 4, 0, 0);
+    jtLayout->setSpacing(4);
+
+    m_jsonTreeSearch = new QLineEdit(m_jsonTreeTab);
+    m_jsonTreeSearch->setPlaceholderText("Search keys or values...");
+    m_jsonTreeSearch->setClearButtonEnabled(true);
+    jtLayout->addWidget(m_jsonTreeSearch);
+
+    m_jsonTreeWidget = new QTreeWidget(m_jsonTreeTab);
+    m_jsonTreeWidget->setHeaderLabels({"Key", "Value", "Type"});
+    m_jsonTreeWidget->header()->setSectionResizeMode(0, QHeaderView::Interactive);
+    m_jsonTreeWidget->header()->setSectionResizeMode(1, QHeaderView::Stretch);
+    m_jsonTreeWidget->header()->setSectionResizeMode(2, QHeaderView::Fixed);
+    m_jsonTreeWidget->setColumnWidth(0, 200);
+    m_jsonTreeWidget->setColumnWidth(2, 70);
+    m_jsonTreeWidget->setAlternatingRowColors(true);
+    m_jsonTreeWidget->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(m_jsonTreeWidget, &QWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        auto* item = m_jsonTreeWidget->itemAt(pos);
+        if (!item) return;
+        QMenu menu(this);
+        auto* copyKey = menu.addAction("Copy Key");
+        auto* copyVal = menu.addAction("Copy Value");
+        auto* copyPath = menu.addAction("Copy JSONPath");
+        connect(copyKey, &QAction::triggered, this, [item]() {
+            QGuiApplication::clipboard()->setText(item->text(0));
+        });
+        connect(copyVal, &QAction::triggered, this, [item]() {
+            QGuiApplication::clipboard()->setText(item->text(1));
+        });
+        connect(copyPath, &QAction::triggered, this, [this, item]() {
+            // Build JSONPath by walking up to root
+            QStringList parts;
+            const QTreeWidgetItem* cur = item;
+            while (cur && cur->parent()) {
+                QString key = cur->text(0);
+                bool isIndex = false;
+                key.toInt(&isIndex);
+                parts.prepend(isIndex ? QString("[%1]").arg(key) : QString(".%1").arg(key));
+                cur = cur->parent();
+            }
+            QGuiApplication::clipboard()->setText("$" + parts.join(""));
+        });
+        menu.exec(m_jsonTreeWidget->mapToGlobal(pos));
+    });
+    jtLayout->addWidget(m_jsonTreeWidget);
+
+    connect(m_jsonTreeSearch, &QLineEdit::textChanged, this, [this](const QString& q) {
+        for (int i = 0; i < m_jsonTreeWidget->topLevelItemCount(); ++i) {
+            filterJsonTree(m_jsonTreeWidget->topLevelItem(i), q);
+        }
+    });
+
+    m_tabWidget->addTab(m_jsonTreeTab, "JSON Tree");
+
     mainLayout->addWidget(m_tabWidget);
 }
 
@@ -376,6 +434,9 @@ void ResponseInspector::clear() {
     m_tabWidget->setTabText(4, "Tests (0)");
     m_tabWidget->setTabText(5, "SSL / TLS");
     m_tabWidget->setTabText(7, "Cookies (0)");
+    m_jsonTreeWidget->clear();
+    m_jsonTreeSearch->clear();
+    m_tabWidget->setTabText(8, "JSON Tree");
 }
 
 void ResponseInspector::setTheme(bool isDark) {
@@ -449,6 +510,9 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
 
     // Tab 7: Cookies
     updateCookiesTab(res);
+
+    // Tab 8: JSON Tree
+    updateJsonTreeTab(res);
 }
 
 void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
@@ -1063,6 +1127,140 @@ QString ResponseInspector::httpStatusExplanation(int code) {
             if (code >= 500 && code < 600) return QString("%1 Server Error").arg(code);
             return QString("HTTP %1").arg(code);
     }
+}
+
+void ResponseInspector::updateJsonTreeTab(const core::ResponseModel& res) {
+    m_jsonTreeWidget->clear();
+    m_jsonTreeSearch->clear();
+
+    if (!res.isJson()) {
+        m_tabWidget->setTabText(8, "JSON Tree");
+        auto* placeholder = new QTreeWidgetItem(m_jsonTreeWidget);
+        placeholder->setText(0, "(not JSON)");
+        placeholder->setForeground(0, QBrush(QColor("#71717a")));
+        return;
+    }
+
+    QJsonParseError err;
+    QJsonDocument doc = QJsonDocument::fromJson(res.rawBody, &err);
+    if (doc.isNull()) {
+        m_tabWidget->setTabText(8, "JSON Tree");
+        auto* placeholder = new QTreeWidgetItem(m_jsonTreeWidget);
+        placeholder->setText(0, "Parse error: " + err.errorString());
+        placeholder->setForeground(0, QBrush(QColor("#ef4444")));
+        return;
+    }
+
+    QJsonValue root;
+    if (doc.isObject()) root = doc.object();
+    else root = doc.array();
+
+    auto* rootItem = new QTreeWidgetItem(m_jsonTreeWidget);
+    rootItem->setText(0, doc.isObject() ? "{}" : "[]");
+    rootItem->setText(2, doc.isObject() ? "object" : "array");
+    rootItem->setForeground(2, QBrush(QColor("#f59e0b")));
+    populateJsonTree(rootItem, root);
+    m_jsonTreeWidget->expandToDepth(1);
+
+    int count = 0;
+    if (doc.isObject()) count = doc.object().size();
+    else count = doc.array().size();
+    m_tabWidget->setTabText(8, QString("JSON Tree (%1)").arg(count));
+}
+
+/*static*/ void ResponseInspector::populateJsonTree(QTreeWidgetItem* parent, const QJsonValue& val, const QString& key) {
+    if (val.isObject()) {
+        QJsonObject obj = val.toObject();
+        for (auto it = obj.constBegin(); it != obj.constEnd(); ++it) {
+            auto* child = new QTreeWidgetItem(parent);
+            child->setText(0, it.key());
+            if (it.value().isObject()) {
+                child->setText(1, QString("{%1 keys}").arg(it.value().toObject().size()));
+                child->setText(2, "object");
+                child->setForeground(2, QBrush(QColor("#f59e0b")));
+                populateJsonTree(child, it.value(), it.key());
+            } else if (it.value().isArray()) {
+                child->setText(1, QString("[%1 items]").arg(it.value().toArray().size()));
+                child->setText(2, "array");
+                child->setForeground(2, QBrush(QColor("#f59e0b")));
+                populateJsonTree(child, it.value(), it.key());
+            } else if (it.value().isString()) {
+                child->setText(1, it.value().toString());
+                child->setText(2, "string");
+                child->setForeground(2, QBrush(QColor("#4ade80")));
+            } else if (it.value().isDouble()) {
+                double d = it.value().toDouble();
+                child->setText(1, (d == static_cast<qint64>(d))
+                    ? QString::number(static_cast<qint64>(d))
+                    : QString::number(d, 'g', 15));
+                child->setText(2, "number");
+                child->setForeground(2, QBrush(QColor("#60a5fa")));
+            } else if (it.value().isBool()) {
+                child->setText(1, it.value().toBool() ? "true" : "false");
+                child->setText(2, "bool");
+                child->setForeground(2, QBrush(QColor("#c084fc")));
+            } else if (it.value().isNull()) {
+                child->setText(1, "null");
+                child->setText(2, "null");
+                child->setForeground(2, QBrush(QColor("#71717a")));
+            }
+        }
+    } else if (val.isArray()) {
+        QJsonArray arr = val.toArray();
+        for (int i = 0; i < arr.size(); ++i) {
+            auto* child = new QTreeWidgetItem(parent);
+            child->setText(0, QString::number(i));
+            const QJsonValue& elem = arr.at(i);
+            if (elem.isObject()) {
+                child->setText(1, QString("{%1 keys}").arg(elem.toObject().size()));
+                child->setText(2, "object");
+                child->setForeground(2, QBrush(QColor("#f59e0b")));
+                populateJsonTree(child, elem, QString::number(i));
+            } else if (elem.isArray()) {
+                child->setText(1, QString("[%1 items]").arg(elem.toArray().size()));
+                child->setText(2, "array");
+                child->setForeground(2, QBrush(QColor("#f59e0b")));
+                populateJsonTree(child, elem, QString::number(i));
+            } else if (elem.isString()) {
+                child->setText(1, elem.toString());
+                child->setText(2, "string");
+                child->setForeground(2, QBrush(QColor("#4ade80")));
+            } else if (elem.isDouble()) {
+                double d = elem.toDouble();
+                child->setText(1, (d == static_cast<qint64>(d))
+                    ? QString::number(static_cast<qint64>(d))
+                    : QString::number(d, 'g', 15));
+                child->setText(2, "number");
+                child->setForeground(2, QBrush(QColor("#60a5fa")));
+            } else if (elem.isBool()) {
+                child->setText(1, elem.toBool() ? "true" : "false");
+                child->setText(2, "bool");
+                child->setForeground(2, QBrush(QColor("#c084fc")));
+            } else if (elem.isNull()) {
+                child->setText(1, "null");
+                child->setText(2, "null");
+                child->setForeground(2, QBrush(QColor("#71717a")));
+            }
+        }
+    }
+    Q_UNUSED(key)
+}
+
+void ResponseInspector::filterJsonTree(QTreeWidgetItem* item, const QString& query) {
+    if (!item) return;
+    bool selfMatch = query.isEmpty()
+        || item->text(0).contains(query, Qt::CaseInsensitive)
+        || item->text(1).contains(query, Qt::CaseInsensitive);
+
+    bool childMatch = false;
+    for (int i = 0; i < item->childCount(); ++i) {
+        filterJsonTree(item->child(i), query);
+        if (!item->child(i)->isHidden()) childMatch = true;
+    }
+
+    bool visible = selfMatch || childMatch;
+    item->setHidden(!visible);
+    if (!query.isEmpty() && visible) item->setExpanded(true);
 }
 
 } // namespace poppy::gui

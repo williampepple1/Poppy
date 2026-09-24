@@ -14,7 +14,9 @@ enum class TargetLanguage {
     RustReqwest,
     CSharpHttpClient,
     JavaHttpClient,
-    Curl
+    Curl,
+    PhpCurl,
+    PowerShell
 };
 
 class CodeGenerator {
@@ -31,6 +33,8 @@ private:
     static QString generateRust(const RequestModel& req);
     static QString generateCSharp(const RequestModel& req);
     static QString generateJava(const RequestModel& req);
+    static QString generatePhp(const RequestModel& req);
+    static QString generatePowerShell(const RequestModel& req);
 };
 
 } // namespace poppy::core

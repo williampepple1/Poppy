@@ -28,6 +28,8 @@ CodeSnippetDialog::CodeSnippetDialog(const core::RequestModel& req, QWidget* par
     m_langCombo->addItem("C# (HttpClient)", static_cast<int>(core::TargetLanguage::CSharpHttpClient));
     m_langCombo->addItem("Java (java.net.http)", static_cast<int>(core::TargetLanguage::JavaHttpClient));
     m_langCombo->addItem("C++ (libcurl)", static_cast<int>(core::TargetLanguage::CppCurl));
+    m_langCombo->addItem("PHP (cURL)", static_cast<int>(core::TargetLanguage::PhpCurl));
+    m_langCombo->addItem("PowerShell (Invoke-WebRequest)", static_cast<int>(core::TargetLanguage::PowerShell));
     m_langCombo->addItem("cURL Command", static_cast<int>(core::TargetLanguage::Curl));
     topLayout->addWidget(m_langCombo, 1);
     topLayout->addStretch();

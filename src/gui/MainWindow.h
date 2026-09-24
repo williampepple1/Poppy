@@ -167,6 +167,7 @@ private:
     class QCompleter* m_urlCompleter{nullptr};
     QPushButton* m_varQuickBtn{nullptr};
     QComboBox* m_topEnvCombo{nullptr};
+    QSplitter* m_contentSplitter{nullptr};  // Request | Response splitter (toggled H/V)
 };
 
 } // namespace poppy::gui
