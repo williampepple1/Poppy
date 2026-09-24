@@ -61,6 +61,15 @@ int main(int argc, char* argv[]) {
     assert(env.variableValue("apiKey") == "rotated");
     assert(env.isSecretVariable("apiKey"));
 
+    env.addOrUpdateVariable("keep", "yes");
+    QString rollbackErr;
+    bool rolledBack = runner.runPreRequestScript(
+        QStringLiteral("poppy.setEnvVar(\"keep\", \"no\"); throw new Error(\"boom\");"),
+        req, env, &rollbackErr);
+    assert(!rolledBack);
+    assert(env.variableValue("keep") == "yes");
+    assert(rollbackErr.contains("boom"));
+
     // 4. Test assertions runner
     QString testScript = R"(
         test("Status is 200", function() {
@@ -90,6 +99,15 @@ int main(int argc, char* argv[]) {
     assert(report.results[2].passed == true);
     assert(report.results[3].passed == false);
     assert(!report.results[3].errorMessage.isEmpty());
+
+    QString strictScript = R"(
+        test("numeric status is not the string 200", function() {
+            expect(res.getStatus()).to.equal("200");
+        });
+    )";
+    TestReport strictReport = runner.runTests(strictScript, req, res, env);
+    assert(strictReport.totalCount() == 1);
+    assert(strictReport.failedCount() == 1);
 
     QString headerScript = R"(
         poppy.setEnvVar("ct", res.getHeader("Content-Type"));

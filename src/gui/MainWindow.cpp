@@ -122,11 +122,6 @@ void MainWindow::setupUi() {
     m_openRequestsTabBar->setMovable(true);
     m_openRequestsTabBar->setExpanding(false);
     m_openRequestsTabBar->setDrawBase(false);
-    m_openRequestsTabBar->setStyleSheet(
-        "QTabBar::tab { background: #18181b; color: #a1a1aa; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #27272a; font-size: 12px; }"
-        "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; font-weight: bold; border-color: #3f3f46; }"
-        "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
-    );
     m_openRequestsTabBar->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(m_openRequestsTabBar, &QTabBar::currentChanged, this, &MainWindow::onTabChanged);
     connect(m_openRequestsTabBar, &QTabBar::tabMoved, this, &MainWindow::onTabMoved);
@@ -143,7 +138,7 @@ void MainWindow::setupUi() {
     // Top Request Info Bar
     auto* reqInfoBar = new QHBoxLayout();
     m_requestNameLabel = new QLabel("Quick Request", this);
-    m_requestNameLabel->setStyleSheet("font-size: 15px; font-weight: bold; color: #f4f4f5;");
+    applyRequestChrome();
     reqInfoBar->addWidget(m_requestNameLabel);
     reqInfoBar->addStretch();
 
@@ -272,12 +267,15 @@ void MainWindow::setupUi() {
         if (ok && !varName.trimmed().isEmpty()) {
             for (auto& env : m_collectionModel.environments()) {
                 if (env.name() == m_activeEnvName) {
-                    env.addOrUpdateVariable(varName.trimmed(), val);
+                    env.addOrUpdateVariable(varName.trimmed(), val, true, true);
                     if (!m_collectionModel.rootPath().isEmpty()) {
-                        env.saveToEnvFile(QDir(m_collectionModel.rootPath()).filePath("environments/" + env.name() + ".env"));
+                        QDir envDir(m_collectionModel.rootPath());
+                        envDir.mkpath(QStringLiteral("environments"));
+                        env.saveToEnvFile(envDir.filePath("environments/" + env.name() + ".env"));
+                        env.saveSecretsToEnvFile(envDir.filePath("environments/" + env.name() + ".secret.env"));
                     }
                     updateUrlVariableInspection();
-                    statusBar()->showMessage(QString("Stored variable {{%1}} = \"%2\"").arg(varName.trimmed(), val), 3500);
+                    statusBar()->showMessage(QString("Stored secret {{%1}} in environment '%2'.").arg(varName.trimmed(), m_activeEnvName), 3500);
                     break;
                 }
             }
@@ -305,12 +303,6 @@ void MainWindow::setupUi() {
 
     auto* openShortcut = new QShortcut(QKeySequence::Open, this);
     connect(openShortcut, &QShortcut::activated, this, &MainWindow::onOpenCollection);
-
-    auto* themeShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_T), this);
-    connect(themeShortcut, &QShortcut::activated, this, &MainWindow::onToggleTheme);
-
-    auto* findReplaceShortcut = new QShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this);
-    connect(findReplaceShortcut, &QShortcut::activated, this, &MainWindow::onFindAndReplace);
 
     // Status Bar & Variable Quick-Look / Telemetry Widgets
     auto* sb = statusBar();
@@ -840,8 +832,9 @@ void MainWindow::onSaveRequest() {
 
 void MainWindow::onCopyAsCurl() {
     saveUiIntoRequest(m_currentRequest);
-    QClipboard* clipboard = QGuiApplication::clipboard();
-    clipboard->setText(m_currentRequest.toCurlCommand());
+    core::VariableResolver resolver = currentVariableResolver();
+    core::RequestModel resolvedReq = resolver.resolveRequest(requestForExecution());
+    QGuiApplication::clipboard()->setText(resolvedReq.toCurlCommand());
     statusBar()->showMessage("cURL command copied to clipboard!", 3000);
 }
 
@@ -1201,6 +1194,7 @@ void MainWindow::onOpenDiffViewer() {
 
 void MainWindow::onOpenWebSocket() {
     auto dlg = new WebSocketDialog(this);
+    dlg->setNetworkEngine(&m_networkEngine);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->show();
 }
@@ -1333,11 +1327,34 @@ void MainWindow::onGenerateDocumentation() {
     }
 }
 
+void MainWindow::applyRequestChrome() {
+    const bool dark = Theme::isDarkMode();
+    if (m_openRequestsTabBar) {
+        if (dark) {
+            m_openRequestsTabBar->setStyleSheet(
+                "QTabBar::tab { background: #18181b; color: #a1a1aa; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #27272a; font-size: 12px; }"
+                "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; font-weight: bold; border-color: #3f3f46; }"
+                "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
+            );
+        } else {
+            m_openRequestsTabBar->setStyleSheet(
+                "QTabBar::tab { background: #f4f4f5; color: #3f3f46; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #e4e4e7; font-size: 12px; }"
+                "QTabBar::tab:selected { background: #ffffff; color: #18181b; font-weight: bold; border-color: #d4d4d8; }"
+                "QTabBar::tab:hover { background: #e4e4e7; color: #18181b; }"
+            );
+        }
+    }
+    if (m_requestNameLabel) {
+        m_requestNameLabel->setStyleSheet(QString("font-size: 15px; font-weight: bold; color: %1;").arg(dark ? "#f4f4f5" : "#18181b"));
+    }
+}
+
 void MainWindow::onToggleTheme() {
     bool dark = Theme::toggleTheme();
     if (auto* app = qobject_cast<QApplication*>(QApplication::instance())) {
         app->setStyleSheet(dark ? Theme::darkStyleSheet() : Theme::lightStyleSheet());
     }
+    applyRequestChrome();
     m_responseInspector->setTheme(dark);
     statusBar()->showMessage(QString("Switched to %1 theme (Ctrl+T)").arg(dark ? "Dark" : "Light"), 3000);
 }

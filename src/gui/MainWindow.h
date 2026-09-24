@@ -88,6 +88,7 @@ private slots:
 private:
     void setupUi();
     void setupMenus();
+    void applyRequestChrome();
     void loadRequestIntoUi(const core::RequestModel& req);
     void saveUiIntoRequest(core::RequestModel& req);
     void closeTab(int index);
@@ -143,7 +144,7 @@ private:
 
     // UI elements
     CollectionSidebar* m_sidebar;
-    QLabel* m_requestNameLabel;
+    QLabel* m_requestNameLabel{nullptr};
     QComboBox* m_methodCombo;
     QLineEdit* m_urlEdit;
     QPushButton* m_sendBtn;

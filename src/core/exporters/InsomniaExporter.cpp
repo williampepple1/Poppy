@@ -110,7 +110,11 @@ QJsonObject InsomniaExporter::exportToJson(const QList<RequestModel>& requests,
             bObj["mimeType"] = "application/graphql";
             QJsonObject gqlObj;
             gqlObj["query"] = req.graphqlQuery;
-            gqlObj["variables"] = req.graphqlVariables;
+            const QJsonDocument varsDoc = QJsonDocument::fromJson(req.graphqlVariables.toUtf8());
+            if (varsDoc.isObject()) gqlObj["variables"] = varsDoc.object();
+            else if (varsDoc.isArray()) gqlObj["variables"] = varsDoc.array();
+            else if (req.graphqlVariables.trimmed().isEmpty()) gqlObj["variables"] = QJsonObject();
+            else gqlObj["variables"] = req.graphqlVariables;
             bObj["text"] = QString::fromUtf8(QJsonDocument(gqlObj).toJson(QJsonDocument::Compact));
         }
         rObj["body"] = bObj;

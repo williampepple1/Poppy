@@ -405,7 +405,11 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
     // Body viewer & HTML Preview
     m_isPretty = true;
     m_prettyRawToggleBtn->setText("Raw");
-    if (res.isJson()) {
+    if (!res.errorString.isEmpty() && res.statusCode == 0) {
+        const QString errorText = QStringLiteral("Network Error:\n") + res.errorString;
+        m_bodyViewer->setPlainText(errorText);
+        m_previewBrowser->setHtml("<pre style=\"font-family: Consolas, monospace; color: #f4f4f5; background-color: #18181b;\">" + errorText.toHtmlEscaped() + "</pre>");
+    } else if (res.isJson()) {
         m_bodyViewer->setPlainText(res.formattedJson());
         m_previewBrowser->setHtml("<pre style=\"font-family: Consolas, monospace; color: #f4f4f5; background-color: #18181b;\">" + res.formattedJson().toHtmlEscaped() + "</pre>");
     } else {
@@ -446,7 +450,7 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
     if (!res.errorString.isEmpty() && res.statusCode == 0) {
         m_statusBadge->setStyleSheet("background-color: #ef4444; color: #ffffff; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
         m_statusBadge->setText("ERROR");
-        m_bodyViewer->setPlainText("Network Error:\n" + res.errorString);
+        m_statusBadge->setToolTip(res.errorString);
     } else {
         QColor sc = Theme::statusColor(res.statusCode);
         m_statusBadge->setStyleSheet(QString("background-color: %1; color: #ffffff; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;").arg(sc.name()));

@@ -54,6 +54,7 @@ void WebSocketClient::open(const QUrl& url, const QMap<QString, QString>& custom
     connect(m_socket, &QAbstractSocket::errorOccurred, this, &WebSocketClient::onSocketError);
 
     if (isSecure) {
+        m_socket->setPeerVerifyMode(m_verifyPeer ? QSslSocket::AutoVerifyPeer : QSslSocket::VerifyNone);
         connect(m_socket, &QSslSocket::encrypted, this, &WebSocketClient::onSocketEncrypted);
         m_socket->connectToHostEncrypted(url.host(), static_cast<quint16>(port));
     } else {

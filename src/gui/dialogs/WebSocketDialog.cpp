@@ -1,4 +1,5 @@
 #include "WebSocketDialog.h"
+#include <network/CurlNetworkEngine.h>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -193,6 +194,7 @@ void WebSocketDialog::onConnectClicked() {
         }
     }
 
+    m_client->setVerifyPeer(m_engine ? m_engine->sslVerifyPeer() : true);
     updateStatusBadge("CONNECTING...", "#f59e0b");
     m_connectBtn->setText("Disconnect");
     m_connectBtn->setStyleSheet("background-color: #ef4444; color: white; font-weight: bold; padding: 6px 14px; border-radius: 4px;");

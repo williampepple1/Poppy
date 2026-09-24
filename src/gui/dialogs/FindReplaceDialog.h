@@ -39,7 +39,7 @@ private slots:
 private:
     void setupUi();
     bool matches(const QString& text, const QString& search) const;
-    QString performReplace(const QString& text, const QString& search, const QString& replacement) const;
+    QString performReplace(const QString& text, const QString& search, const QString& replacement, bool firstOnly = false) const;
     core::CollectionItem* itemFor(const FindMatch& match) const;
 
     core::CollectionModel* m_model{nullptr};

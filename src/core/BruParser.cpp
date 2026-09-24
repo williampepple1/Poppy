@@ -5,6 +5,51 @@
 
 namespace poppy::core {
 
+namespace {
+
+struct CodeBlockScan {
+    bool inBlockComment{false};
+    bool inString{false};
+    QChar quote;
+};
+
+void scanCodeLine(const QString& line, CodeBlockScan& state, int& braceDepth) {
+    const int n = line.size();
+    for (int i = 0; i < n; ++i) {
+        const QChar ch = line[i];
+        if (state.inBlockComment) {
+            if (ch == '*' && i + 1 < n && line[i + 1] == '/') {
+                state.inBlockComment = false;
+                ++i;
+            }
+            continue;
+        }
+        if (state.inString) {
+            if (ch == '\\' && i + 1 < n) {
+                ++i;
+                continue;
+            }
+            if (ch == state.quote) state.inString = false;
+            continue;
+        }
+        if (ch == '/' && i + 1 < n && line[i + 1] == '/') break;
+        if (ch == '/' && i + 1 < n && line[i + 1] == '*') {
+            state.inBlockComment = true;
+            ++i;
+            continue;
+        }
+        if (ch == '"' || ch == '\'' || ch == '`') {
+            state.inString = true;
+            state.quote = ch;
+            continue;
+        }
+        if (ch == '{') ++braceDepth;
+        else if (ch == '}') --braceDepth;
+    }
+}
+
+} // namespace
+
 RequestModel BruParser::parseFile(const QString& filePath) {
     QFile file(filePath);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -42,15 +87,10 @@ RequestModel BruParser::parse(const QString& content) {
             if (isCodeBlock) {
                 QString blockContent;
                 int braceDepth = 1;
+                CodeBlockScan scan;
                 while (i < lines.size() && braceDepth > 0) {
                     QString curLine = lines[i];
-                    QString trimmedCur = curLine.trimmed();
-
-                    // Check brace depth adjustments
-                    for (QChar ch : trimmedCur) {
-                        if (ch == '{') ++braceDepth;
-                        else if (ch == '}') --braceDepth;
-                    }
+                    scanCodeLine(curLine, scan, braceDepth);
 
                     if (braceDepth > 0) {
                         if (!blockContent.isEmpty()) blockContent.append('\n');
@@ -141,6 +181,16 @@ RequestModel BruParser::parse(const QString& content) {
                                 if (key == "url") req.url = val;
                                 else if (key == "body") req.bodyType = stringToBodyType(val);
                                 else if (key == "auth") req.auth.type = stringToAuthType(val);
+                            } else if (key == "@description") {
+                                if (blockName == "headers" && !req.headers.isEmpty()) {
+                                    req.headers.last().description = val;
+                                } else if (blockName == "params:query" && !req.queryParams.isEmpty()) {
+                                    req.queryParams.last().description = val;
+                                } else if (blockName == "params:path" && !req.pathParams.isEmpty()) {
+                                    req.pathParams.last().description = val;
+                                } else if (blockName == "body:multipart-form" && !req.formDataParams.isEmpty()) {
+                                    req.formDataParams.last().description = val;
+                                }
                             } else if (blockName == "headers") {
                                 req.headers.append(HttpHeader{
                                     .name = key,

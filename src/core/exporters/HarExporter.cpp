@@ -43,7 +43,7 @@ QJsonObject HarExporter::exportToJson(const QList<RequestModel>& requests) {
         // Query string
         QJsonArray qsArr;
         for (const auto& qp : req.queryParams) {
-            if (qp.key.isEmpty()) continue;
+            if (!qp.enabled || qp.key.isEmpty()) continue;
             QJsonObject qObj;
             qObj["name"] = qp.key;
             qObj["value"] = qp.value;

@@ -82,6 +82,18 @@ int main() {
     assert(encodedBody.contains("a%26b"));
     assert(!encodedBody.contains("hello%2520"));
 
+    resolver.setEnvironment(env);
+    resolver.setCollectionVariables({{"baseUrl", "https://from-collection"}});
+    resolver.setFolderVariables({{"baseUrl", "https://from-folder"}});
+    assert(resolver.resolveString("{{baseUrl}}") == "https://from-folder");
+    QString folderScope;
+    assert(resolver.lookupVariableWithScope("baseUrl", &folderScope) == "https://from-folder");
+    assert(folderScope == "Folder");
+    resolver.setFolderVariables({});
+    assert(resolver.resolveString("{{baseUrl}}") == "https://from-collection");
+    resolver.setCollectionVariables({});
+    assert(resolver.resolveString("{{baseUrl}}") == "https://api.test.com");
+
     QString tsOk = resolver.resolveString("{{$timestamp}}");
     assert(!tsOk.contains("{{$timestamp}}"));
     assert(resolver.resolveString("{{$timestampMillis}}") == "{{$timestampMillis}}");

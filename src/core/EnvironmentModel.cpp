@@ -2,8 +2,48 @@
 #include <QFile>
 #include <QTextStream>
 #include <QFileInfo>
+#include <QRegularExpression>
 
 namespace poppy::core {
+
+namespace {
+
+bool parseEnvAssignment(const QString& rawLine, QString* key, QString* value, bool* enabled) {
+    QString line = rawLine.trimmed();
+    if (line.isEmpty()) return false;
+
+    bool isEnabled = true;
+    if (line.startsWith(QLatin1String("#@disabled"))) {
+        isEnabled = false;
+        line = line.mid(QStringLiteral("#@disabled").size()).trimmed();
+    } else if (line.startsWith('#')) {
+        // Previously disabled variables were saved as "# name=value".
+        const QString rest = line.mid(1).trimmed();
+        const int eq = rest.indexOf('=');
+        if (eq <= 0) return false;
+        const QString candidate = rest.left(eq).trimmed();
+        static const QRegularExpression ident(QStringLiteral("^[A-Za-z_][A-Za-z0-9_.-]*$"));
+        if (!ident.match(candidate).hasMatch()) return false;
+        isEnabled = false;
+        line = rest;
+    }
+
+    const int eqIdx = line.indexOf('=');
+    if (eqIdx <= 0) return false;
+    QString parsedKey = line.left(eqIdx).trimmed();
+    QString parsedVal = line.mid(eqIdx + 1).trimmed();
+    if (parsedKey.isEmpty()) return false;
+    if ((parsedVal.startsWith('"') && parsedVal.endsWith('"') && parsedVal.size() >= 2)
+        || (parsedVal.startsWith('\'') && parsedVal.endsWith('\'') && parsedVal.size() >= 2)) {
+        parsedVal = parsedVal.mid(1, parsedVal.size() - 2);
+    }
+    *key = parsedKey;
+    *value = parsedVal;
+    *enabled = isEnabled;
+    return true;
+}
+
+} // namespace
 
 void EnvironmentModel::addOrUpdateVariable(const QString& name, const QString& value, bool isSecret, bool enabled) {
     for (auto& v : m_variables) {
@@ -86,18 +126,11 @@ EnvironmentModel EnvironmentModel::loadFromEnvFile(const QString& filePath, cons
 
     QTextStream in(&file);
     while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
-        if (line.isEmpty() || line.startsWith('#')) continue;
-
-        int eqIdx = line.indexOf('=');
-        if (eqIdx > 0) {
-            QString key = line.left(eqIdx).trimmed();
-            QString val = line.mid(eqIdx + 1).trimmed();
-            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
-                val = val.mid(1, val.length() - 2);
-            }
-            model.addOrUpdateVariable(key, val, false, true);
-        }
+        QString key;
+        QString val;
+        bool enabled = true;
+        if (!parseEnvAssignment(in.readLine(), &key, &val, &enabled)) continue;
+        model.addOrUpdateVariable(key, val, false, enabled);
     }
 
     return model;
@@ -113,7 +146,7 @@ bool EnvironmentModel::saveToEnvFile(const QString& filePath) const {
     out << "# Poppy Environment: " << m_name << "\n";
     for (const auto& v : m_variables) {
         if (v.isSecret) continue; // secrets are saved separately
-        if (!v.enabled) out << "# ";
+        if (!v.enabled) out << "#@disabled ";
         out << v.name << "=" << v.value << "\n";
     }
     return true;
@@ -127,18 +160,11 @@ void EnvironmentModel::loadSecretsFromEnvFile(const QString& filePath) {
 
     QTextStream in(&file);
     while (!in.atEnd()) {
-        QString line = in.readLine().trimmed();
-        if (line.isEmpty() || line.startsWith('#')) continue;
-
-        int eqIdx = line.indexOf('=');
-        if (eqIdx > 0) {
-            QString key = line.left(eqIdx).trimmed();
-            QString val = line.mid(eqIdx + 1).trimmed();
-            if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith('\'') && val.endsWith('\''))) {
-                val = val.mid(1, val.length() - 2);
-            }
-            addOrUpdateVariable(key, val, true, true);
-        }
+        QString key;
+        QString val;
+        bool enabled = true;
+        if (!parseEnvAssignment(in.readLine(), &key, &val, &enabled)) continue;
+        addOrUpdateVariable(key, val, true, enabled);
     }
 }
 
@@ -152,7 +178,7 @@ bool EnvironmentModel::saveSecretsToEnvFile(const QString& filePath) const {
     out << "# Poppy Secrets: " << m_name << "\n";
     for (const auto& v : m_variables) {
         if (!v.isSecret) continue;
-        if (!v.enabled) out << "# ";
+        if (!v.enabled) out << "#@disabled ";
         out << v.name << "=" << v.value << "\n";
     }
     return true;

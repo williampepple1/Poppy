@@ -2,10 +2,13 @@
 #include <cassert>
 #include <QJsonObject>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <core/RequestModel.h>
 #include <core/exporters/PostmanExporter.h>
 #include <core/exporters/InsomniaExporter.h>
 #include <core/exporters/HarExporter.h>
+#include <core/importers/InsomniaImporter.h>
+#include <core/CsvParser.h>
 
 using namespace poppy::core;
 
@@ -81,6 +84,57 @@ int main() {
         QJsonObject r = firstEntry.value("request").toObject();
         assert(r.value("method").toString() == "GET");
         assert(r.value("url").toString() == "https://api.example.com/items?limit=10");
+
+        RequestModel filtered;
+        filtered.method = HttpMethod::GET;
+        filtered.url = "https://api.example.com/items";
+        filtered.queryParams.append(HttpParam{.key = "shown", .value = "2", .enabled = true});
+        filtered.queryParams.append(HttpParam{.key = "hidden", .value = "1", .enabled = false});
+        QJsonObject filteredHar = HarExporter::exportToJson({filtered});
+        QJsonObject filteredReq = filteredHar.value("log").toObject().value("entries").toArray().first().toObject().value("request").toObject();
+        assert(filteredReq.value("url").toString().contains("shown=2"));
+        assert(!filteredReq.value("url").toString().contains("hidden"));
+        bool sawHidden = false;
+        bool sawShown = false;
+        for (const auto& qv : filteredReq.value("queryString").toArray()) {
+            const QString name = qv.toObject().value("name").toString();
+            if (name == "hidden") sawHidden = true;
+            if (name == "shown") sawShown = true;
+        }
+        assert(sawShown);
+        assert(!sawHidden);
+    }
+
+    {
+        RequestModel gql;
+        gql.name = "Ping";
+        gql.method = HttpMethod::POST;
+        gql.url = "https://api.example.com/graphql";
+        gql.bodyType = BodyType::GraphQL;
+        gql.graphqlQuery = "query { ping }";
+        gql.graphqlVariables = "{\"id\":1}";
+        QJsonObject insomnia = InsomniaExporter::exportToJson({gql}, "Gql");
+        QString bodyText;
+        for (const auto& resource : insomnia.value("resources").toArray()) {
+            QJsonObject obj = resource.toObject();
+            if (obj.value("name").toString() == "Ping") {
+                bodyText = obj.value("body").toObject().value("text").toString();
+            }
+        }
+        QJsonObject gqlBody = QJsonDocument::fromJson(bodyText.toUtf8()).object();
+        assert(gqlBody.value("variables").isObject());
+        assert(gqlBody.value("variables").toObject().value("id").toInt() == 1);
+        RequestModel imported = InsomniaImporter::parseInsomniaRequest(QJsonObject{
+            {"body", QJsonObject{{"mimeType", "application/graphql"}, {"text", bodyText}}}
+        });
+        assert(imported.graphqlVariables.contains("\"id\""));
+    }
+
+    {
+        const auto rows = parseCsvTable("name,email\n\"Alice\",\"bob@test.com, Inc\"\n");
+        assert(rows.size() == 1);
+        assert(rows[0].value("name") == "Alice");
+        assert(rows[0].value("email") == "bob@test.com, Inc");
     }
 
     std::cout << "test_exporters passed successfully!" << std::endl;

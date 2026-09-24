@@ -281,6 +281,9 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
     } else if (req.method == core::HttpMethod::HEAD) {
         curl_easy_setopt(curl, CURLOPT_NOBODY, 1L);
     } else {
+        if (req.method == core::HttpMethod::PUT || req.method == core::HttpMethod::PATCH) {
+            curl_easy_setopt(curl, CURLOPT_POST, 1L);
+        }
         curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, methodBytes.constData());
     }
 
@@ -353,6 +356,7 @@ core::ResponseModel CurlNetworkEngine::executeCurl(const core::RequestModel& req
 
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 10L);
+    curl_easy_setopt(curl, CURLOPT_POSTREDIR, CURL_REDIR_POST_ALL);
     curl_easy_setopt(curl, CURLOPT_CERTINFO, 1L);
 
     if (settings.sslVerifyPeer) {

@@ -54,11 +54,11 @@ bool DeclarativeAssertionEvaluator::compare(const QString& actual, const QString
 
     if (o == "eq") {
         if (actualIsNum && expIsNum) return actualNum == expNum;
-        return actual.compare(expected, Qt::CaseInsensitive) == 0;
+        return actual == expected;
     }
     if (o == "neq") {
         if (actualIsNum && expIsNum) return actualNum != expNum;
-        return actual.compare(expected, Qt::CaseInsensitive) != 0;
+        return actual != expected;
     }
     if (o == "gt") {
         return actualIsNum && expIsNum && (actualNum > expNum);

@@ -11,6 +11,7 @@
 #include <QMap>
 #include <iostream>
 #include <core/CollectionModel.h>
+#include <core/CsvParser.h>
 #include <core/BruParser.h>
 #include <core/VariableResolver.h>
 #include <core/ScriptRunner.h>
@@ -22,6 +23,7 @@
 #include <atomic>
 #include <vector>
 #include <algorithm>
+#include <mutex>
 
 using namespace poppy;
 
@@ -209,19 +211,7 @@ int main(int argc, char *argv[]) {
                     }
                 }
             } else if (dataFile.endsWith(".csv", Qt::CaseInsensitive)) {
-                QString text = QString::fromUtf8(content);
-                QStringList lines = text.split('\n', Qt::SkipEmptyParts);
-                if (!lines.isEmpty()) {
-                    QStringList headers = lines[0].trimmed().split(',');
-                    for (int r = 1; r < lines.size(); ++r) {
-                        QStringList vals = lines[r].trimmed().split(',');
-                        QMap<QString, QString> row;
-                        for (int c = 0; c < headers.size() && c < vals.size(); ++c) {
-                            row[headers[c].trimmed()] = vals[c].trimmed();
-                        }
-                        fixtureRows.append(row);
-                    }
-                }
+                fixtureRows = core::parseCsvTable(QString::fromUtf8(content));
             }
             if (!fixtureRows.isEmpty() && !parser.isSet(iterationsOption)) {
                 iterations = fixtureRows.size();
@@ -387,6 +377,7 @@ int main(int argc, char *argv[]) {
         const int totalJobs = requestsToRun.size() * iterations;
         std::vector<SuiteResult> ordered(static_cast<size_t>(totalJobs));
         std::atomic<int> nextJob{0};
+        std::mutex startGate;
         auto worker = [&]() {
             network::CurlNetworkEngine localEngine;
             localEngine.setCookieJarPath(QDir::temp().filePath(
@@ -394,14 +385,18 @@ int main(int argc, char *argv[]) {
                     .arg(QCoreApplication::applicationPid())
                     .arg(QUuid::createUuid().toString(QUuid::Id128))));
             core::ScriptRunner localScripts;
-            core::EnvironmentModel workerEnv = activeEnv;
             while (true) {
                 const int job = nextJob.fetch_add(1);
                 if (job >= totalJobs) break;
+                if (delayMs > 0 && job > 0) {
+                    std::lock_guard<std::mutex> gate(startGate);
+                    QThread::msleep(static_cast<unsigned long>(delayMs));
+                }
                 const int iter = job / requestsToRun.size();
                 const int i = job % requestsToRun.size();
+                core::EnvironmentModel jobEnv = activeEnv;
                 ordered[static_cast<size_t>(job)] = executeCliRequest(
-                    requestsToRun[i], workerEnv, fixtureForIter(iter), folderVarsToRun.value(i), collectionVars,
+                    requestsToRun[i], jobEnv, fixtureForIter(iter), folderVarsToRun.value(i), collectionVars,
                     localEngine, localScripts, iter, iterations);
             }
         };

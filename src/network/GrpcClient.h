@@ -6,6 +6,7 @@
 #include <QList>
 #include <QByteArray>
 #include <QThread>
+#include <QList>
 #include <atomic>
 
 namespace poppy::network {
@@ -42,6 +43,8 @@ struct GrpcResponse {
     QMap<QString, QString> responseTrailers;
     bool success{true};
     QString errorMessage;
+    bool grpcStatusSeen{false};
+    uint64_t generation{0};
 };
 
 class GrpcClient : public QObject {
@@ -61,6 +64,7 @@ public:
                      bool useTls,
                      int timeoutMs = 10000);
     void cancel();
+    uint64_t generation() const { return m_generation.load(); }
 
 signals:
     void callStarted();
@@ -76,7 +80,7 @@ private:
                          uint64_t generation);
 
     std::atomic<uint64_t> m_generation{0};
-    QThread* m_worker{nullptr};
+    QList<QThread*> m_workers;
 };
 
 } // namespace poppy::network

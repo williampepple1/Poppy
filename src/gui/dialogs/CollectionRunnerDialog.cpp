@@ -13,6 +13,8 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QPointer>
+#include <QCloseEvent>
+#include <core/CsvParser.h>
 #include <core/VariableResolver.h>
 #include <core/assertions/DeclarativeAssertion.h>
 #include <Theme.h>
@@ -144,7 +146,7 @@ CollectionRunnerDialog::CollectionRunnerDialog(
     auto* bottomLayout = new QHBoxLayout();
     bottomLayout->addStretch();
     m_closeBtn = new QPushButton("Close", this);
-    connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+    connect(m_closeBtn, &QPushButton::clicked, this, &CollectionRunnerDialog::accept);
     bottomLayout->addWidget(m_closeBtn);
     mainLayout->addLayout(bottomLayout);
 }
@@ -198,6 +200,8 @@ void CollectionRunnerDialog::startRun() {
             break;
         }
     }
+    m_baseEnv = m_activeEnv;
+    m_appliedIter = -1;
 
     m_currentIndex = 0;
     m_passedRequests = 0;
@@ -282,27 +286,7 @@ void CollectionRunnerDialog::loadDataFile(const QString& filePath) {
             }
         }
     } else {
-        // Fallback: Parse CSV
-        QString text = QString::fromUtf8(content);
-        QStringList lines = text.split(QRegularExpression("[\r\n]+"), Qt::SkipEmptyParts);
-        if (!lines.isEmpty()) {
-            QStringList headers = lines.first().split(',');
-            for (auto& h : headers) h = h.trimmed().remove('\"');
-
-            for (int i = 1; i < lines.size(); ++i) {
-                QString line = lines[i].trimmed();
-                if (line.isEmpty()) continue;
-                QStringList cols = line.split(',');
-                QMap<QString, QString> row;
-                for (int c = 0; c < headers.size() && c < cols.size(); ++c) {
-                    QString val = cols[c].trimmed().remove('\"');
-                    row[headers[c]] = val;
-                }
-                if (!row.isEmpty()) {
-                    m_dataRows.append(row);
-                }
-            }
-        }
+        m_dataRows = core::parseCsvTable(QString::fromUtf8(content));
     }
 
     if (!m_dataRows.isEmpty()) {
@@ -343,10 +327,14 @@ void CollectionRunnerDialog::executeNextRequest() {
     int iters = m_iterationsSpin->value();
     int requestsPerIter = (iters > 0) ? (m_queue.size() / iters) : m_queue.size();
     int currentIter = (requestsPerIter > 0) ? (m_currentIndex / requestsPerIter) : 0;
-    if (!m_dataRows.isEmpty() && currentIter < m_dataRows.size()) {
-        const auto& rowData = m_dataRows[currentIter];
-        for (auto it = rowData.begin(); it != rowData.end(); ++it) {
-            m_activeEnv.setVariableValue(it.key(), it.value());
+    if (currentIter != m_appliedIter) {
+        m_activeEnv = m_baseEnv;
+        m_appliedIter = currentIter;
+        if (!m_dataRows.isEmpty() && currentIter < m_dataRows.size()) {
+            const auto& rowData = m_dataRows[currentIter];
+            for (auto it = rowData.begin(); it != rowData.end(); ++it) {
+                m_activeEnv.setVariableValue(it.key(), it.value());
+            }
         }
     }
 
@@ -405,9 +393,11 @@ void CollectionRunnerDialog::executeNextRequest() {
     m_resultsTable->scrollToBottom();
 
     const quint64 runGen = m_runGeneration;
-    m_networkEngine->sendRequestAsync(resolvedReq, [this, row, resolvedReq, runGen](const core::ResponseModel& res) {
-        QPointer<CollectionRunnerDialog> self(this);
-        if (!self) return;
+    QPointer<CollectionRunnerDialog> alive(this);
+    m_requestInFlight = true;
+    m_networkEngine->sendRequestAsync(resolvedReq, [alive, this, row, resolvedReq, runGen](const core::ResponseModel& res) {
+        if (!alive) return;
+        m_requestInFlight = false;
         if (!m_isRunning || runGen != m_runGeneration) {
             if (row >= 0 && row < m_resultsTable->rowCount()) {
                 if (auto* status = m_resultsTable->item(row, 3)) {
@@ -416,6 +406,7 @@ void CollectionRunnerDialog::executeNextRequest() {
                     }
                 }
             }
+            maybeCloseAfterStop();
             return;
         }
 
@@ -470,6 +461,13 @@ void CollectionRunnerDialog::executeNextRequest() {
         if (!success && m_stopOnFailureChk->isChecked()) {
             stopRun();
             m_summaryLabel->setText(QString("Run stopped on failure at request #%1 (%2)").arg(row + 1).arg(resolvedReq.name));
+            maybeCloseAfterStop();
+            return;
+        }
+
+        if (m_closeAfterStop) {
+            m_isRunning = false;
+            maybeCloseAfterStop();
             return;
         }
 
@@ -480,6 +478,40 @@ void CollectionRunnerDialog::executeNextRequest() {
             QTimer::singleShot(0, this, &CollectionRunnerDialog::executeNextRequest);
         }
     });
+}
+
+bool CollectionRunnerDialog::requestClose() {
+    if (m_isRunning || m_requestInFlight) {
+        m_closeAfterStop = true;
+        if (m_isRunning) stopRun();
+        return false;
+    }
+    return true;
+}
+
+void CollectionRunnerDialog::maybeCloseAfterStop() {
+    if (m_closeAfterStop && !m_isRunning && !m_requestInFlight) {
+        m_closeAfterStop = false;
+        QDialog::reject();
+    }
+}
+
+void CollectionRunnerDialog::accept() {
+    if (!requestClose()) return;
+    QDialog::accept();
+}
+
+void CollectionRunnerDialog::reject() {
+    if (!requestClose()) return;
+    QDialog::reject();
+}
+
+void CollectionRunnerDialog::closeEvent(QCloseEvent* event) {
+    if (!requestClose()) {
+        event->ignore();
+        return;
+    }
+    QDialog::closeEvent(event);
 }
 
 } // namespace poppy::gui

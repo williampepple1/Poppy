@@ -306,16 +306,16 @@ void CollectionSidebar::onContextMenu(const QPoint& pos) {
         menu.addAction("Rename", this, &CollectionSidebar::onRenameItem);
         menu.addAction("Duplicate", this, &CollectionSidebar::onDuplicateRequest);
         menu.addAction("Copy as cURL", this, &CollectionSidebar::onCopyAsCurl);
-        menu.addAction("Copy as Fetch (JS)", [modelItem]() {
+        menu.addAction("Copy as Fetch (JS)", [this, modelItem]() {
             if (modelItem && modelItem->request()) {
                 QClipboard* cb = QGuiApplication::clipboard();
-                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, *modelItem->request()));
+                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, requestForExport(*modelItem->request(), modelItem)));
             }
         });
-        menu.addAction("Copy as Python", [modelItem]() {
+        menu.addAction("Copy as Python", [this, modelItem]() {
             if (modelItem && modelItem->request()) {
                 QClipboard* cb = QGuiApplication::clipboard();
-                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, *modelItem->request()));
+                cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, requestForExport(*modelItem->request(), modelItem)));
             }
         });
         menu.addSeparator();
@@ -456,12 +456,37 @@ void CollectionSidebar::onDuplicateRequest() {
     }
 }
 
+core::RequestModel CollectionSidebar::requestForExport(core::RequestModel raw, core::CollectionItem* scope) const {
+    if (raw.auth.type == core::AuthType::Inherit) {
+        raw.auth = scope ? scope->effectiveAuth() : core::AuthModel{};
+    }
+    core::VariableResolver resolver;
+    const QString envName = currentEnvironmentName();
+    core::EnvironmentModel activeEnv(envName);
+    if (m_model) {
+        for (const auto& env : m_model->environments()) {
+            if (env.name() == envName) {
+                activeEnv = env;
+                break;
+            }
+        }
+        if (m_model->rootItem()) {
+            resolver.setCollectionVariables(m_model->rootItem()->variables());
+        }
+    }
+    resolver.setEnvironment(activeEnv);
+    if (scope) {
+        resolver.setFolderVariables(scope->effectiveVariables());
+    }
+    return resolver.resolveRequest(raw);
+}
+
 void CollectionSidebar::onCopyAsCurl() {
     auto* currentWidget = m_tree->currentItem();
     auto* item = itemFromWidget(currentWidget);
     if (item && item->request()) {
         QClipboard* clipboard = QGuiApplication::clipboard();
-        clipboard->setText(item->request()->toCurlCommand());
+        clipboard->setText(requestForExport(*item->request(), item).toCurlCommand());
     }
 }
 
@@ -539,17 +564,20 @@ void CollectionSidebar::onHistoryContextMenu(const QPoint& pos) {
         QClipboard* cb = QGuiApplication::clipboard();
         cb->setText(found.request.url);
     });
-    menu.addAction("Copy as cURL", [found]() {
+    menu.addAction("Copy as cURL", [this, found]() {
+        core::CollectionItem* scope = (m_model && !found.sourcePath.isEmpty()) ? m_model->findItemByPath(found.sourcePath) : nullptr;
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(found.request.toCurlCommand());
+        cb->setText(requestForExport(found.request, scope).toCurlCommand());
     });
-    menu.addAction("Copy as Fetch (JS)", [found]() {
+    menu.addAction("Copy as Fetch (JS)", [this, found]() {
+        core::CollectionItem* scope = (m_model && !found.sourcePath.isEmpty()) ? m_model->findItemByPath(found.sourcePath) : nullptr;
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, found.request));
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::JavaScriptFetch, requestForExport(found.request, scope)));
     });
-    menu.addAction("Copy as Python", [found]() {
+    menu.addAction("Copy as Python", [this, found]() {
+        core::CollectionItem* scope = (m_model && !found.sourcePath.isEmpty()) ? m_model->findItemByPath(found.sourcePath) : nullptr;
         QClipboard* cb = QGuiApplication::clipboard();
-        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, found.request));
+        cb->setText(core::CodeGenerator::generate(core::TargetLanguage::PythonRequests, requestForExport(found.request, scope)));
     });
     menu.addSeparator();
     menu.addAction("Delete Entry", [this, id]() {

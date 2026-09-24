@@ -11,6 +11,7 @@
 #include <QLineEdit>
 #include <QTimer>
 #include <QMap>
+#include <QCloseEvent>
 #include <core/CollectionModel.h>
 #include <core/ScriptRunner.h>
 #include <network/CurlNetworkEngine.h>
@@ -27,6 +28,12 @@ public:
         const QString& activeEnvName,
         QWidget* parent = nullptr
     );
+
+    void accept() override;
+    void reject() override;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private slots:
     void startRun();
@@ -63,6 +70,8 @@ private:
     QLabel* m_summaryLabel;
 
     void loadDataFile(const QString& filePath);
+    bool requestClose();
+    void maybeCloseAfterStop();
 
     // State during execution
     QList<QMap<QString, QString>> m_dataRows;
@@ -73,8 +82,12 @@ private:
     int m_passedTests{0};
     qint64 m_totalDurationMs{0};
     bool m_isRunning{false};
+    bool m_requestInFlight{false};
+    bool m_closeAfterStop{false};
     quint64 m_runGeneration{0};
+    int m_appliedIter{-1};
     core::EnvironmentModel m_activeEnv;
+    core::EnvironmentModel m_baseEnv;
 };
 
 } // namespace poppy::gui

@@ -8,6 +8,7 @@
 #include <QTabWidget>
 #include <core/CollectionModel.h>
 #include <core/HistoryManager.h>
+#include <core/VariableResolver.h>
 
 namespace poppy::gui {
 
@@ -54,6 +55,7 @@ private:
     void populateChildren(QTreeWidgetItem* parentWidget, core::CollectionItem* parentModel);
     core::CollectionItem* itemFromWidget(QTreeWidgetItem* widget) const;
     void onTreeItemDropped(QTreeWidgetItem* widget);
+    core::RequestModel requestForExport(core::RequestModel raw, core::CollectionItem* scope) const;
 
     core::CollectionModel* m_model;
     core::HistoryManager* m_historyManager;

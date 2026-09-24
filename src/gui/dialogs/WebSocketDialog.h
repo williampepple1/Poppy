@@ -11,6 +11,10 @@
 #include <network/WebSocketClient.h>
 #include <components/KeyValueTable.h>
 
+namespace poppy::network {
+class CurlNetworkEngine;
+}
+
 namespace poppy::gui {
 
 class WebSocketDialog : public QDialog {
@@ -18,6 +22,8 @@ class WebSocketDialog : public QDialog {
 public:
     explicit WebSocketDialog(QWidget* parent = nullptr);
     ~WebSocketDialog() override;
+
+    void setNetworkEngine(network::CurlNetworkEngine* engine) { m_engine = engine; }
 
 private slots:
     void onConnectClicked();
@@ -40,6 +46,7 @@ private:
     void updateStatusBadge(const QString& status, const QString& color);
 
     network::WebSocketClient* m_client{nullptr};
+    network::CurlNetworkEngine* m_engine{nullptr};
 
     QLineEdit* m_urlEdit{nullptr};
     QPushButton* m_connectBtn{nullptr};

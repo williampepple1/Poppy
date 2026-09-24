@@ -34,6 +34,7 @@ private:
     void applyTableToEnv(int envIdx);
 
     QList<core::EnvironmentModel>& m_envs;
+    QList<core::EnvironmentModel> m_committedEnvs;
     QString m_activeEnvName;
     QString m_rootPath;
     int m_currentIdx{-1};

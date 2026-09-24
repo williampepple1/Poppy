@@ -19,10 +19,12 @@ GrpcClient::GrpcClient(QObject* parent)
 
 GrpcClient::~GrpcClient() {
     cancel();
-    if (m_worker) {
-        m_worker->wait(16000);
-        delete m_worker;
-        m_worker = nullptr;
+    const auto workers = m_workers;
+    m_workers.clear();
+    for (QThread* worker : workers) {
+        if (!worker) continue;
+        if (worker->isRunning()) worker->wait(2000);
+        delete worker;
     }
 }
 
@@ -182,6 +184,7 @@ static size_t grpcHeaderCallback(void* ptr, size_t size, size_t nmemb, void* use
             }
 
             if (k == "grpc-status") {
+                response->grpcStatusSeen = true;
                 response->statusCode = v.toInt();
                 response->statusName = GrpcClient::statusToString(response->statusCode);
             } else if (k == "grpc-message") {
@@ -202,16 +205,11 @@ void GrpcClient::invokeUnary(const QString& endpoint,
     emit callStarted();
     const uint64_t generation = ++m_generation;
 
-    if (m_worker) {
-        m_worker->wait(16000);
-        delete m_worker;
-        m_worker = nullptr;
-    }
-
-    m_worker = QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation]() {
+    QThread* worker = QThread::create([this, endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation]() {
         executeHttp2Call(endpoint, fullMethodPath, jsonPayload, metadata, useTls, timeoutMs, generation);
     });
-    m_worker->start();
+    m_workers.append(worker);
+    worker->start();
 }
 
 void GrpcClient::executeHttp2Call(const QString& endpoint,
@@ -223,14 +221,15 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
                                  uint64_t generation)
 {
     GrpcResponse res;
+    res.generation = generation;
     QElapsedTimer timer;
     timer.start();
 
-    auto finish = [this, generation, &res]() {
+    auto finish = [this, &res]() {
         QPointer<GrpcClient> self(this);
         const GrpcResponse copy = res;
-        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, generation, copy]() {
-            if (!self || self->m_generation.load() != generation) return;
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, copy]() {
+            if (!self) return;
             emit self->callFinished(copy);
         }, Qt::QueuedConnection);
     };
@@ -329,12 +328,10 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
         cancelled.statusMessage = QStringLiteral("Call cancelled");
         cancelled.errorMessage = cancelled.statusMessage;
         cancelled.latencyMs = timer.elapsed();
+        cancelled.generation = generation;
         QPointer<GrpcClient> self(this);
-        const uint64_t expected = generation;
-        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, expected, cancelled]() {
+        QMetaObject::invokeMethod(QCoreApplication::instance(), [self, cancelled]() {
             if (!self) return;
-            const uint64_t gen = self->m_generation.load();
-            if (gen != expected + 1) return;
             emit self->callFinished(cancelled);
         }, Qt::QueuedConnection);
         return;
@@ -343,12 +340,13 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
     if (code != CURLE_OK) {
         res.success = false;
         res.errorMessage = QString("cURL error (%1): %2").arg(code).arg(curl_easy_strerror(code));
-        if (res.statusCode == 0) {
+        if (!res.grpcStatusSeen) {
             res.statusCode = 14; // UNAVAILABLE
             res.statusName = statusToString(14);
         }
     } else {
-        res.success = (res.statusCode == 0);
+        long httpCode = 0;
+        curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
         res.rawResponseBody = responseBuffer;
 
         if (responseBuffer.size() >= 5) {
@@ -372,6 +370,16 @@ void GrpcClient::executeHttp2Call(const QString& endpoint,
         auto doc = QJsonDocument::fromJson(res.responseBody.toUtf8(), &parseErr);
         if (parseErr.error == QJsonParseError::NoError && (doc.isObject() || doc.isArray())) {
             res.responseBody = QString::fromUtf8(doc.toJson(QJsonDocument::Indented));
+        }
+
+        if (!res.grpcStatusSeen) {
+            res.success = false;
+            res.statusCode = 2; // UNKNOWN
+            res.statusName = statusToString(2);
+            res.statusMessage = QString("HTTP %1 response did not include a grpc-status trailer").arg(httpCode);
+            res.errorMessage = res.statusMessage;
+        } else {
+            res.success = (res.statusCode == 0);
         }
     }
 

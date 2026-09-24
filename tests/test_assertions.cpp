@@ -75,6 +75,10 @@ int main() {
     assert(rArr.passed == true);
 
     // 5. Negative / Failing assertion
+    AssertionRule caseRule{"res.body.user.name", "eq", "alice", true};
+    auto caseResult = DeclarativeAssertionEvaluator::evaluate(caseRule, res);
+    assert(caseResult.passed == false);
+
     AssertionRule ruleFail{"res.status", "eq", "500", true};
     auto rFail = DeclarativeAssertionEvaluator::evaluate(ruleFail, res);
     assert(rFail.passed == false);

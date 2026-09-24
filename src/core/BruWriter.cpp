@@ -6,6 +6,18 @@
 
 namespace poppy::core {
 
+namespace {
+
+void writeDescribedLine(QTextStream& ts, bool enabled, const QString& key, const QString& value, const QString& description) {
+    ts << "  " << (enabled ? QString() : QStringLiteral("~")) << key << ": " << value << "\n";
+    const QString desc = QString(description).replace('\n', ' ').trimmed();
+    if (!desc.isEmpty()) {
+        ts << "  @description: " << desc << "\n";
+    }
+}
+
+} // namespace
+
 QString BruWriter::serialize(const RequestModel& req) {
     QString out;
     QTextStream ts(&out);
@@ -30,7 +42,7 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "params:query {\n";
         for (const auto& p : req.queryParams) {
             if (!p.key.isEmpty()) {
-                ts << "  " << (p.enabled ? "" : "~") << p.key << ": " << p.value << "\n";
+                writeDescribedLine(ts, p.enabled, p.key, p.value, p.description);
             }
         }
         ts << "}\n\n";
@@ -41,7 +53,7 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "params:path {\n";
         for (const auto& p : req.pathParams) {
             if (!p.key.isEmpty()) {
-                ts << "  " << (p.enabled ? "" : "~") << p.key << ": " << p.value << "\n";
+                writeDescribedLine(ts, p.enabled, p.key, p.value, p.description);
             }
         }
         ts << "}\n\n";
@@ -52,7 +64,7 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "headers {\n";
         for (const auto& h : req.headers) {
             if (!h.name.isEmpty()) {
-                ts << "  " << (h.enabled ? "" : "~") << h.name << ": " << h.value << "\n";
+                writeDescribedLine(ts, h.enabled, h.name, h.value, h.description);
             }
         }
         ts << "}\n\n";
@@ -120,7 +132,7 @@ QString BruWriter::serialize(const RequestModel& req) {
         ts << "body:multipart-form {\n";
         for (const auto& p : req.formDataParams) {
             if (p.key.isEmpty()) continue;
-            ts << "  " << (p.enabled ? "" : "~") << p.key << ": " << (p.isFile ? "@" : "") << p.value << "\n";
+            writeDescribedLine(ts, p.enabled, p.key, (p.isFile ? "@" : "") + p.value, p.description);
         }
         ts << "}\n\n";
     } else if (req.bodyType != BodyType::None && !req.bodyContent.trimmed().isEmpty()) {

@@ -30,31 +30,27 @@ QString VariableResolver::lookupVariableWithScope(const QString& name, QString* 
         return QString::number(QRandomGenerator::global()->bounded(1000));
     }
 
-    // 2. Script runtime variables
+    // Nearest scope wins: runtime, then folder, collection, environment, global.
     if (m_runtimeVars.contains(name)) {
         if (outScope) *outScope = "Runtime";
         return m_runtimeVars.value(name);
     }
 
-    // 3. Environment variables
-    if (m_envVars.contains(name)) {
-        if (outScope) *outScope = "Environment";
-        return m_envVars.value(name);
-    }
-
-    // 3b. Folder-level variables (scoped to folder hierarchy)
     if (m_folderVars.contains(name)) {
         if (outScope) *outScope = "Folder";
         return m_folderVars.value(name);
     }
 
-    // 4. Collection variables
     if (m_collectionVars.contains(name)) {
         if (outScope) *outScope = "Collection";
         return m_collectionVars.value(name);
     }
 
-    // 5. Global variables
+    if (m_envVars.contains(name)) {
+        if (outScope) *outScope = "Environment";
+        return m_envVars.value(name);
+    }
+
     if (m_globals.contains(name)) {
         if (outScope) *outScope = "Global";
         return m_globals.value(name);
@@ -69,14 +65,14 @@ QMap<QString, QPair<QString, QString>> VariableResolver::allAvailableVariables()
     for (auto it = m_globals.cbegin(); it != m_globals.cend(); ++it) {
         result[it.key()] = {it.value(), "Global"};
     }
+    for (auto it = m_envVars.cbegin(); it != m_envVars.cend(); ++it) {
+        result[it.key()] = {it.value(), "Environment"};
+    }
     for (auto it = m_collectionVars.cbegin(); it != m_collectionVars.cend(); ++it) {
         result[it.key()] = {it.value(), "Collection"};
     }
     for (auto it = m_folderVars.cbegin(); it != m_folderVars.cend(); ++it) {
         result[it.key()] = {it.value(), "Folder"};
-    }
-    for (auto it = m_envVars.cbegin(); it != m_envVars.cend(); ++it) {
-        result[it.key()] = {it.value(), "Environment"};
     }
     for (auto it = m_runtimeVars.cbegin(); it != m_runtimeVars.cend(); ++it) {
         result[it.key()] = {it.value(), "Runtime"};

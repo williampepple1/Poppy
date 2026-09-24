@@ -9,6 +9,7 @@
 #include <QPlainTextEdit>
 #include <QTableWidget>
 #include <QSplitter>
+#include <QCloseEvent>
 #include <network/GrpcClient.h>
 #include <components/KeyValueTable.h>
 
@@ -19,6 +20,9 @@ class GrpcDialog : public QDialog {
 public:
     explicit GrpcDialog(QWidget* parent = nullptr);
     ~GrpcDialog() override = default;
+
+protected:
+    void closeEvent(QCloseEvent* event) override;
 
 private slots:
     void onLoadProtoClicked();
@@ -35,6 +39,9 @@ private:
     void updateStatusBadge(int code, const QString& name);
 
     network::GrpcClient* m_client{nullptr};
+    uint64_t m_activeGeneration{0};
+    bool m_callActive{false};
+    bool m_closeWhenFinished{false};
     network::GrpcProtoDefinition m_protoDef;
 
     QLineEdit* m_endpointEdit{nullptr};

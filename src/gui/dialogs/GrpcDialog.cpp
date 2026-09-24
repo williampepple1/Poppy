@@ -6,6 +6,7 @@
 #include <QMessageBox>
 #include <QHeaderView>
 #include <QTabWidget>
+#include <QCloseEvent>
 
 namespace poppy::gui {
 
@@ -263,6 +264,18 @@ void GrpcDialog::onInvokeClicked() {
     bool useTls = m_tlsCheck->isChecked();
 
     m_client->invokeUnary(endpoint, fullMethodPath, payload, metadata, useTls);
+    m_activeGeneration = m_client->generation();
+    m_callActive = true;
+}
+
+void GrpcDialog::closeEvent(QCloseEvent* event) {
+    if (m_callActive) {
+        m_closeWhenFinished = true;
+        m_client->cancel();
+        event->ignore();
+        return;
+    }
+    QDialog::closeEvent(event);
 }
 
 void GrpcDialog::onCallStarted() {
@@ -274,6 +287,8 @@ void GrpcDialog::onCallStarted() {
 }
 
 void GrpcDialog::onCallFinished(const network::GrpcResponse& res) {
+    if (res.generation != m_activeGeneration) return;
+    m_callActive = false;
     m_invokeBtn->setEnabled(true);
     m_invokeBtn->setText("Invoke RPC");
 
@@ -292,6 +307,11 @@ void GrpcDialog::onCallFinished(const network::GrpcResponse& res) {
         m_responseHeadersTable->insertRow(r);
         m_responseHeadersTable->setItem(r, 0, new QTableWidgetItem(it.key()));
         m_responseHeadersTable->setItem(r, 1, new QTableWidgetItem(it.value()));
+    }
+
+    if (m_closeWhenFinished) {
+        m_closeWhenFinished = false;
+        QDialog::close();
     }
 }
 

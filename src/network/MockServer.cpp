@@ -106,24 +106,81 @@ void MockServer::importFromRequests(const QList<core::RequestModel>& requests) {
     }
 }
 
+namespace {
+
+QString trimTrailingSlash(const QString& path) {
+    if (path.endsWith('/') && path.size() > 1) return path.chopped(1);
+    return path;
+}
+
+bool mockPathMatches(const QString& pattern, const QString& path) {
+    if (pattern == "*" || pattern == path) return true;
+    const QString rPath = trimTrailingSlash(pattern);
+    const QString reqPath = trimTrailingSlash(path);
+    if (rPath == reqPath || rPath == "*") return true;
+
+    if (rPath.endsWith('*')) {
+        const QString prefix = rPath.left(rPath.size() - 1);
+        if (prefix.endsWith('/')) {
+            const QString base = prefix.chopped(1);
+            return reqPath == base || reqPath.startsWith(prefix);
+        }
+        return reqPath.startsWith(prefix);
+    }
+
+    const QStringList patParts = rPath.split('/', Qt::SkipEmptyParts);
+    const QStringList reqParts = reqPath.split('/', Qt::SkipEmptyParts);
+    if (patParts.size() != reqParts.size() || patParts.isEmpty()) return false;
+    for (int i = 0; i < patParts.size(); ++i) {
+        const QString& part = patParts[i];
+        if (part == "*") continue;
+        if (part.startsWith(':') && part.size() > 1) continue;
+        if (part != reqParts[i]) return false;
+    }
+    return true;
+}
+
+QString httpReasonPhrase(int status) {
+    switch (status) {
+    case 200: return QStringLiteral("OK");
+    case 201: return QStringLiteral("Created");
+    case 202: return QStringLiteral("Accepted");
+    case 204: return QStringLiteral("No Content");
+    case 301: return QStringLiteral("Moved Permanently");
+    case 302: return QStringLiteral("Found");
+    case 304: return QStringLiteral("Not Modified");
+    case 400: return QStringLiteral("Bad Request");
+    case 401: return QStringLiteral("Unauthorized");
+    case 403: return QStringLiteral("Forbidden");
+    case 404: return QStringLiteral("Not Found");
+    case 405: return QStringLiteral("Method Not Allowed");
+    case 409: return QStringLiteral("Conflict");
+    case 415: return QStringLiteral("Unsupported Media Type");
+    case 422: return QStringLiteral("Unprocessable Entity");
+    case 429: return QStringLiteral("Too Many Requests");
+    case 500: return QStringLiteral("Internal Server Error");
+    case 501: return QStringLiteral("Not Implemented");
+    case 502: return QStringLiteral("Bad Gateway");
+    case 503: return QStringLiteral("Service Unavailable");
+    case 504: return QStringLiteral("Gateway Timeout");
+    default:
+        if (status >= 200 && status < 300) return QStringLiteral("OK");
+        if (status >= 300 && status < 400) return QStringLiteral("Redirect");
+        if (status >= 400 && status < 500) return QStringLiteral("Bad Request");
+        if (status >= 500) return QStringLiteral("Internal Server Error");
+        return QStringLiteral("OK");
+    }
+}
+
+} // namespace
+
 const MockRoute* MockServer::matchRoute(const QString& method, const QString& path) const {
     for (const auto& r : m_routes) {
         if (!r.enabled) continue;
 
         bool methodMatch = (r.method == "*" || r.method.compare(method, Qt::CaseInsensitive) == 0);
         if (!methodMatch) continue;
-
-        // Path match: exact or wildcard prefix or param matching
-        if (r.path == path || r.path == "*") {
-            return &r;
-        }
-
-        // Compare ignoring trailing slash
-        QString rPath = r.path.endsWith('/') && r.path.size() > 1 ? r.path.chopped(1) : r.path;
-        QString reqPath = path.endsWith('/') && path.size() > 1 ? path.chopped(1) : path;
-        if (rPath == reqPath) {
-            return &r;
-        }
+        if (mockPathMatches(r.path, path)) return &r;
     }
     return nullptr;
 }
@@ -280,7 +337,7 @@ void MockServer::handleClientSocket(QTcpSocket* socket) {
 
         QByteArray bodyBytes = respBody.toUtf8();
         QByteArray resp;
-        resp.append(QString("HTTP/1.1 %1 %2\r\n").arg(status).arg(status == 200 ? "OK" : (status == 201 ? "Created" : "Not Found")).toUtf8());
+        resp.append(QString("HTTP/1.1 %1 %2\r\n").arg(status).arg(httpReasonPhrase(status)).toUtf8());
         resp.append(QString("Content-Type: %1\r\n").arg(contentType).toUtf8());
         resp.append("Access-Control-Allow-Origin: *\r\n");
         resp.append("Connection: close\r\n");

@@ -181,13 +181,13 @@ void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const 
             return {
                 to: {
                     equal: function(expected) {
-                        if (actual != expected) {
+                        if (actual !== expected) {
                             throw new Error("Expected " + JSON.stringify(actual) + " to equal " + JSON.stringify(expected));
                         }
                     },
                     not: {
                         equal: function(expected) {
-                            if (actual == expected) {
+                            if (actual === expected) {
                                 throw new Error("Expected " + JSON.stringify(actual) + " not to equal " + JSON.stringify(expected));
                             }
                         }
@@ -246,9 +246,24 @@ void ScriptRunner::applyJsRequestMutations(QJSEngine& engine, RequestModel& req)
     }
 }
 
+namespace {
+
+struct EnvRollback {
+    EnvironmentModel& env;
+    QList<EnvironmentVariable> snapshot;
+    bool rollback{true};
+    ~EnvRollback() {
+        if (rollback) env.variables() = snapshot;
+    }
+    void keep() { rollback = false; }
+};
+
+} // namespace
+
 bool ScriptRunner::runPreRequestScript(const QString& script, RequestModel& req, EnvironmentModel& env, QString* outError) {
     if (script.trimmed().isEmpty()) return true;
 
+    EnvRollback guard{env, env.variables()};
     QJSEngine engine;
     setupSandbox(engine, env, req, nullptr);
 
@@ -263,12 +278,14 @@ bool ScriptRunner::runPreRequestScript(const QString& script, RequestModel& req,
         return false;
     }
     applyJsRequestMutations(engine, req);
+    guard.keep();
     return true;
 }
 
 bool ScriptRunner::runPostResponseScript(const QString& script, const RequestModel& req, const ResponseModel& res, EnvironmentModel& env, QString* outError) {
     if (script.trimmed().isEmpty()) return true;
 
+    EnvRollback guard{env, env.variables()};
     QJSEngine engine;
     setupSandbox(engine, env, req, &res);
 
@@ -282,6 +299,7 @@ bool ScriptRunner::runPostResponseScript(const QString& script, const RequestMod
         }
         return false;
     }
+    guard.keep();
     return true;
 }
 
@@ -289,6 +307,7 @@ TestReport ScriptRunner::runTests(const QString& testScript, const RequestModel&
     TestReport report;
     if (testScript.trimmed().isEmpty()) return report;
 
+    EnvRollback guard{env, env.variables()};
     QJSEngine engine;
     setupSandbox(engine, env, req, &res);
 
@@ -332,8 +351,8 @@ TestReport ScriptRunner::runTests(const QString& testScript, const RequestModel&
         QElapsedTimer caseTimer;
         caseTimer.start();
 
+        QString callErr;
         if (fn.isCallable()) {
-            QString callErr;
             QJSValue callRes = callWithTimeout(engine, fn, kScriptTimeoutMs, &callErr);
             if (!callErr.isEmpty()) {
                 caseResult.passed = false;
@@ -351,7 +370,12 @@ TestReport ScriptRunner::runTests(const QString& testScript, const RequestModel&
 
         caseResult.durationMs = caseTimer.elapsed();
         report.results.append(caseResult);
+        if (!callErr.isEmpty() && callErr.contains(QLatin1String("timed out"))) {
+            report.totalDurationMs = totalTimer.elapsed();
+            return report;
+        }
     }
+    guard.keep();
 
     report.totalDurationMs = totalTimer.elapsed();
     return report;

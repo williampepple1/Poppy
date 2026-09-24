@@ -24,6 +24,7 @@ public:
     ~WebSocketClient() override;
 
     void open(const QUrl& url, const QMap<QString, QString>& customHeaders = {});
+    void setVerifyPeer(bool verify) { m_verifyPeer = verify; }
     void close(quint16 code = 1000, const QString& reason = {});
     bool isConnected() const;
     State state() const { return m_state; }
@@ -57,6 +58,7 @@ private:
     void sendFrame(quint8 opcode, const QByteArray& payload);
 
     QSslSocket* m_socket{nullptr};
+    bool m_verifyPeer{true};
     QUrl m_url;
     QMap<QString, QString> m_headers;
     State m_state{State::Disconnected};

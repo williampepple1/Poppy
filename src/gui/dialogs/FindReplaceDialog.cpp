@@ -150,19 +150,34 @@ bool FindReplaceDialog::matches(const QString& text, const QString& search) cons
     return text.contains(search, m_matchCaseCheck->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive);
 }
 
-QString FindReplaceDialog::performReplace(const QString& text, const QString& search, const QString& replacement) const {
+QString FindReplaceDialog::performReplace(const QString& text, const QString& search, const QString& replacement, bool firstOnly) const {
     if (text.isEmpty() || search.isEmpty()) return text;
+    const auto caseMode = m_matchCaseCheck->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive;
     if (m_wholeWordCheck->isChecked()) {
         QRegularExpression::PatternOptions opts = m_matchCaseCheck->isChecked()
             ? QRegularExpression::NoPatternOption
             : QRegularExpression::CaseInsensitiveOption;
         QRegularExpression re(QString("\\b%1\\b").arg(QRegularExpression::escape(search)), opts);
+        if (firstOnly) {
+            const auto match = re.match(text);
+            if (!match.hasMatch()) return text;
+            QString res = text;
+            res.replace(match.capturedStart(), match.capturedLength(), replacement);
+            return res;
+        }
         QString res = text;
         res.replace(re, replacement);
         return res;
     }
+    if (firstOnly) {
+        const int idx = text.indexOf(search, 0, caseMode);
+        if (idx < 0) return text;
+        QString res = text;
+        res.replace(idx, search.size(), replacement);
+        return res;
+    }
     QString res = text;
-    res.replace(search, replacement, m_matchCaseCheck->isChecked() ? Qt::CaseSensitive : Qt::CaseInsensitive);
+    res.replace(search, replacement, caseMode);
     return res;
 }
 
@@ -377,38 +392,38 @@ void FindReplaceDialog::onReplaceSelected() {
         bool changed = false;
 
         if (m.field == "Name") {
-            req->name = performReplace(req->name, search, replacement);
+            req->name = performReplace(req->name, search, replacement, true);
             liveItem->setName(req->name);
             changed = true;
         } else if (m.field == "URL") {
-            req->url = performReplace(req->url, search, replacement);
+            req->url = performReplace(req->url, search, replacement, true);
             changed = true;
         } else if (m.field == "Param Key" && m.index >= 0 && m.index < req->queryParams.size()) {
-            req->queryParams[m.index].key = performReplace(req->queryParams[m.index].key, search, replacement);
+            req->queryParams[m.index].key = performReplace(req->queryParams[m.index].key, search, replacement, true);
             changed = true;
         } else if (m.field == "Param Value" && m.index >= 0 && m.index < req->queryParams.size()) {
-            req->queryParams[m.index].value = performReplace(req->queryParams[m.index].value, search, replacement);
+            req->queryParams[m.index].value = performReplace(req->queryParams[m.index].value, search, replacement, true);
             changed = true;
         } else if (m.field == "Header Name" && m.index >= 0 && m.index < req->headers.size()) {
-            req->headers[m.index].name = performReplace(req->headers[m.index].name, search, replacement);
+            req->headers[m.index].name = performReplace(req->headers[m.index].name, search, replacement, true);
             changed = true;
         } else if (m.field == "Header Value" && m.index >= 0 && m.index < req->headers.size()) {
-            req->headers[m.index].value = performReplace(req->headers[m.index].value, search, replacement);
+            req->headers[m.index].value = performReplace(req->headers[m.index].value, search, replacement, true);
             changed = true;
         } else if (m.field == "Body") {
-            req->bodyContent = performReplace(req->bodyContent, search, replacement);
+            req->bodyContent = performReplace(req->bodyContent, search, replacement, true);
             changed = true;
         } else if (m.field == "GraphQL Query") {
-            req->graphqlQuery = performReplace(req->graphqlQuery, search, replacement);
+            req->graphqlQuery = performReplace(req->graphqlQuery, search, replacement, true);
             changed = true;
         } else if (m.field == "Pre-request Script") {
-            req->scripts.preRequestScript = performReplace(req->scripts.preRequestScript, search, replacement);
+            req->scripts.preRequestScript = performReplace(req->scripts.preRequestScript, search, replacement, true);
             changed = true;
         } else if (m.field == "Post-response Script") {
-            req->scripts.postResponseScript = performReplace(req->scripts.postResponseScript, search, replacement);
+            req->scripts.postResponseScript = performReplace(req->scripts.postResponseScript, search, replacement, true);
             changed = true;
         } else if (m.field == "Tests Script") {
-            req->scripts.tests = performReplace(req->scripts.tests, search, replacement);
+            req->scripts.tests = performReplace(req->scripts.tests, search, replacement, true);
             changed = true;
         }
 

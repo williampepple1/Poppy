@@ -10,13 +10,6 @@
 
 namespace poppy::gui {
 
-void EnvironmentDialog::reject() {
-    if (m_currentIdx >= 0) {
-        saveCurrentEnv();
-    }
-    QDialog::reject();
-}
-
 EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const QString& activeEnvName, const QString& rootPath, QWidget* parent)
     : QDialog(parent), m_envs(envs), m_activeEnvName(activeEnvName), m_rootPath(rootPath) {
     setWindowTitle("Manage Environments");
@@ -114,6 +107,12 @@ EnvironmentDialog::EnvironmentDialog(QList<core::EnvironmentModel>& envs, const 
     mainLayout->addLayout(rightLayout, 3);
 
     populateEnvList();
+    m_committedEnvs = m_envs;
+}
+
+void EnvironmentDialog::reject() {
+    m_envs = m_committedEnvs;
+    QDialog::reject();
 }
 
 QString EnvironmentDialog::activeEnvironmentName() const {
@@ -203,6 +202,7 @@ void EnvironmentDialog::addEnvironment() {
             m_envs.last().saveToEnvFile(dir.filePath("environments/" + name + ".env"));
         }
         emit environmentsModified();
+        m_committedEnvs = m_envs;
     }
 }
 
@@ -220,6 +220,7 @@ void EnvironmentDialog::deleteEnvironment() {
         m_currentIdx = -1;
         populateEnvList();
         emit environmentsModified();
+        m_committedEnvs = m_envs;
     }
 }
 
@@ -314,6 +315,7 @@ void EnvironmentDialog::saveCurrentEnv() {
     }
 
     emit environmentsModified();
+    m_committedEnvs = m_envs;
 }
 
 } // namespace poppy::gui

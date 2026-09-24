@@ -6,6 +6,7 @@
 #include <core/BruParser.h>
 #include <core/BruWriter.h>
 #include <core/CollectionModel.h>
+#include <core/EnvironmentModel.h>
 #include <QDir>
 #include <QFile>
 #include <QTemporaryDir>
@@ -221,6 +222,78 @@ tests {
     RequestModel rootExec = rootCall->requestForExecution();
     assert(rootExec.auth.type == AuthType::Bearer);
     assert(rootExec.auth.bearerToken == "collection-token");
+
+    QString braceSample = R"(meta {
+  name: Brace
+  seq: 1
+}
+
+post {
+  url: https://example.com
+  body: json
+  auth: none
+}
+
+body:json {
+{
+  "note": "}"
+}
+}
+
+tests {
+  test("msg", function() {
+    const s = "}";
+    expect(s).to.equal("}");
+  });
+}
+)";
+    RequestModel braceReq = BruParser::parse(braceSample);
+    assert(braceReq.bodyContent.contains("\"note\""));
+    assert(braceReq.bodyContent.contains("\"}\""));
+    assert(braceReq.scripts.tests.contains("to.equal(\"}\")"));
+    assert(braceReq.scripts.tests.contains("function()"));
+
+    RequestModel described;
+    described.name = "Described";
+    described.method = HttpMethod::GET;
+    described.url = "https://example.com/items";
+    described.queryParams.append(HttpParam{.key = "q", .value = "pet", .enabled = true, .description = "Search term"});
+    described.headers.append(HttpHeader{.name = "X-Note", .value = "a", .enabled = true, .description = "A note"});
+    QString describedBru = BruWriter::serialize(described);
+    RequestModel describedRound = BruParser::parse(describedBru);
+    assert(describedRound.queryParams.size() == 1);
+    assert(describedRound.queryParams[0].description == "Search term");
+    assert(describedRound.headers.size() == 1);
+    assert(describedRound.headers[0].description == "A note");
+
+    EnvironmentModel disabledEnv("dev");
+    disabledEnv.addOrUpdateVariable("visible", "yes", false, true);
+    disabledEnv.addOrUpdateVariable("hidden", "no", false, false);
+    QTemporaryDir envDir;
+    assert(envDir.isValid());
+    QString envPath = envDir.filePath("dev.env");
+    assert(disabledEnv.saveToEnvFile(envPath));
+    EnvironmentModel loadedEnv = EnvironmentModel::loadFromEnvFile(envPath, "dev");
+    assert(loadedEnv.hasVariable("visible"));
+    assert(loadedEnv.hasVariable("hidden"));
+    bool hiddenEnabled = true;
+    for (const auto& v : loadedEnv.variables()) {
+        if (v.name == "hidden") hiddenEnabled = v.enabled;
+    }
+    assert(hiddenEnabled == false);
+
+    QFile legacyEnv(envDir.filePath("legacy.env"));
+    assert(legacyEnv.open(QIODevice::WriteOnly | QIODevice::Text));
+    legacyEnv.write("# Poppy Environment: legacy\n# API_KEY=xyz\nHOST=example\n");
+    legacyEnv.close();
+    EnvironmentModel legacy = EnvironmentModel::loadFromEnvFile(legacyEnv.fileName(), "legacy");
+    assert(legacy.variableValue("HOST") == "example");
+    assert(legacy.hasVariable("API_KEY"));
+    bool legacyEnabled = true;
+    for (const auto& v : legacy.variables()) {
+        if (v.name == "API_KEY") legacyEnabled = v.enabled;
+    }
+    assert(legacyEnabled == false);
 
     std::cout << "test_bru_parser PASSED!" << std::endl;
     return 0;

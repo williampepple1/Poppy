@@ -363,7 +363,7 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
             m_fileWatcher.addPath(item->path());
         }
         item->setName(newName);
-        BruWriter::writeFolderFile(item->path(), newName, item->variables());
+        BruWriter::writeFolderFile(item->path(), newName, item->variables(), item->seq());
     } else {
         QString newPath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(newName), ".bru", oldPath);
         if (QDir::cleanPath(newPath) != QDir::cleanPath(oldPath)
