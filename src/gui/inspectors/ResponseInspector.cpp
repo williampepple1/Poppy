@@ -55,20 +55,20 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
     // 1. Top Telemetry Bar
     auto* topBar = new QHBoxLayout();
-    topBar->setSpacing(10);
+    topBar->setSpacing(8);
 
     m_statusBadge = new QLabel(this);
-    m_statusBadge->setStyleSheet("background-color: #27272a; color: #a1a1aa; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+    m_statusBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_statusBadge->setText("STATUS: ---");
     topBar->addWidget(m_statusBadge);
 
     m_latencyBadge = new QLabel(this);
-    m_latencyBadge->setStyleSheet("background-color: #27272a; color: #a1a1aa; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+    m_latencyBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_latencyBadge->setText("TIME: ---");
     topBar->addWidget(m_latencyBadge);
 
     m_sizeBadge = new QLabel(this);
-    m_sizeBadge->setStyleSheet("background-color: #27272a; color: #a1a1aa; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+    m_sizeBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_sizeBadge->setText("SIZE: ---");
     topBar->addWidget(m_sizeBadge);
 
@@ -79,6 +79,7 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     topBar->addStretch();
 
     m_prettyRawToggleBtn = new QPushButton("Raw", this);
+    m_prettyRawToggleBtn->setToolTip("Toggle formatted JSON vs Raw body");
     connect(m_prettyRawToggleBtn, &QPushButton::clicked, this, &ResponseInspector::togglePrettyRaw);
     topBar->addWidget(m_prettyRawToggleBtn);
 
@@ -88,15 +89,17 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     connect(m_wordWrapBtn, &QPushButton::clicked, this, &ResponseInspector::toggleWordWrap);
     topBar->addWidget(m_wordWrapBtn);
 
-    m_copyBtn = new QPushButton("Copy Body", this);
+    m_copyBtn = new QPushButton("📋 Copy", this);
+    m_copyBtn->setToolTip("Copy response body to clipboard");
     connect(m_copyBtn, &QPushButton::clicked, this, &ResponseInspector::copyBodyToClipboard);
     topBar->addWidget(m_copyBtn);
 
-    m_saveToFileBtn = new QPushButton("Save...", this);
+    m_saveToFileBtn = new QPushButton("💾 Save...", this);
+    m_saveToFileBtn->setToolTip("Save response body to disk");
     connect(m_saveToFileBtn, &QPushButton::clicked, this, &ResponseInspector::saveBodyToFile);
     topBar->addWidget(m_saveToFileBtn);
 
-    m_diffBtn = new QPushButton("Compare...", this);
+    m_diffBtn = new QPushButton("🔄 Compare...", this);
     m_diffBtn->setToolTip("Compare this response with another response or file");
     connect(m_diffBtn, &QPushButton::clicked, this, &ResponseInspector::onCompareDiffClicked);
     topBar->addWidget(m_diffBtn);
@@ -344,9 +347,11 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
 
 void ResponseInspector::clear() {
     m_currentResponse = core::ResponseModel{};
-    m_statusBadge->setStyleSheet("background-color: #27272a; color: #a1a1aa; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+    m_statusBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_statusBadge->setText("STATUS: ---");
+    m_latencyBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_latencyBadge->setText("TIME: ---");
+    m_sizeBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_sizeBadge->setText("SIZE: ---");
     m_timingDetails->clear();
     m_bodyViewer->clear();
@@ -447,18 +452,28 @@ void ResponseInspector::setResponse(const core::ResponseModel& res, const core::
 }
 
 void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
+    const bool dark = Theme::isDarkMode();
     if (!res.errorString.isEmpty() && res.statusCode == 0) {
-        m_statusBadge->setStyleSheet("background-color: #ef4444; color: #ffffff; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+        m_statusBadge->setStyleSheet(
+            "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 11px;"
+        );
         m_statusBadge->setText("ERROR");
         m_statusBadge->setToolTip(res.errorString);
     } else {
         QColor sc = Theme::statusColor(res.statusCode);
-        m_statusBadge->setStyleSheet(QString("background-color: %1; color: #ffffff; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;").arg(sc.name()));
+        QString bgRgba = QString("rgba(%1, %2, %3, 0.15)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
+        QString borderRgba = QString("rgba(%1, %2, %3, 0.35)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
+        m_statusBadge->setStyleSheet(QString(
+            "background-color: %1; color: %2; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 11px;"
+        ).arg(bgRgba, sc.name(), borderRgba));
         m_statusBadge->setText(QString("%1 %2").arg(res.statusCode).arg(res.statusText));
         m_statusBadge->setToolTip(httpStatusExplanation(res.statusCode));
     }
 
-    m_latencyBadge->setText(QString("%1 ms").arg(res.latencyMs));
+    m_latencyBadge->setStyleSheet(dark
+        ? "background-color: #1e1f24; color: #d1d5db; border: 1px solid #2e2f35; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
+        : "background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
+    m_latencyBadge->setText(QString("⏱ %1 ms").arg(res.latencyMs));
 
     // Size formatting
     QString sizeStr;
@@ -469,7 +484,10 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
     } else {
         sizeStr = QString("%1 MB").arg(res.sizeBytes / (1024.0 * 1024.0), 0, 'f', 2);
     }
-    m_sizeBadge->setText(sizeStr);
+    m_sizeBadge->setStyleSheet(dark
+        ? "background-color: #1e1f24; color: #d1d5db; border: 1px solid #2e2f35; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
+        : "background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
+    m_sizeBadge->setText(QString("📦 %1").arg(sizeStr));
 
     // Timing breakdown
     if (res.dnsTimeMs > 0 || res.connectTimeMs > 0 || res.sslHandshakeTimeMs > 0) {

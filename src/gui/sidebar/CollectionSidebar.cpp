@@ -1,4 +1,5 @@
 #include "CollectionSidebar.h"
+#include "BrunoTreeItemDelegate.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMenu>
@@ -56,10 +57,10 @@ CollectionSidebar::CollectionSidebar(core::CollectionModel* model, core::History
 
     m_tabs = new QTabWidget(this);
     m_tabs->setStyleSheet(
-        "QTabWidget::pane { border: 1px solid #27272a; background: #121215; border-radius: 4px; }"
-        "QTabBar::tab { background: #18181b; color: #a1a1aa; padding: 6px 14px; font-weight: bold; border: 1px solid #27272a; border-bottom: none; border-top-left-radius: 4px; border-top-right-radius: 4px; font-size: 12px; }"
-        "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; border-color: #3f3f46; }"
-        "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
+        "QTabWidget::pane { border: none; border-top: 1px solid #232429; background: transparent; }"
+        "QTabBar::tab { background: transparent; color: #9ca3af; padding: 7px 14px; font-weight: 600; border: none; border-bottom: 2px solid transparent; font-size: 12px; }"
+        "QTabBar::tab:selected { color: #f59e0b; border-bottom: 2px solid #f59e0b; }"
+        "QTabBar::tab:hover:!selected { color: #ffffff; background: rgba(255, 255, 255, 0.03); border-top-left-radius: 4px; border-top-right-radius: 4px; }"
     );
 
     // Tab 1: Collections
@@ -100,15 +101,19 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
 
     // 1. Top action buttons
     auto* topBtnLayout = new QHBoxLayout();
-    m_openBtn = new QPushButton("Open Collection", container);
+    topBtnLayout->setSpacing(4);
+    m_openBtn = new QPushButton("📂 Open", container);
+    m_openBtn->setToolTip("Open Bruno or Poppy collection folder");
     connect(m_openBtn, &QPushButton::clicked, this, &CollectionSidebar::openCollectionRequested);
     topBtnLayout->addWidget(m_openBtn);
 
-    m_addReqBtn = new QPushButton("+ Req", container);
+    m_addReqBtn = new QPushButton("+ Request", container);
+    m_addReqBtn->setToolTip("Create a new request");
     connect(m_addReqBtn, &QPushButton::clicked, this, &CollectionSidebar::onAddRequest);
     topBtnLayout->addWidget(m_addReqBtn);
 
     m_addFolderBtn = new QPushButton("+ Folder", container);
+    m_addFolderBtn->setToolTip("Create a new subfolder");
     connect(m_addFolderBtn, &QPushButton::clicked, this, &CollectionSidebar::onAddFolder);
     topBtnLayout->addWidget(m_addFolderBtn);
 
@@ -123,6 +128,7 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
 
     // 2. Environment Selector Bar
     auto* envLayout = new QHBoxLayout();
+    envLayout->setSpacing(4);
     m_envCombo = new QComboBox(container);
     m_envCombo->addItem("No Environment", "");
     connect(m_envCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
@@ -130,7 +136,8 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     });
     envLayout->addWidget(m_envCombo, 1);
 
-    m_manageEnvBtn = new QPushButton("Envs", container);
+    m_manageEnvBtn = new QPushButton("⚙️ Envs", container);
+    m_manageEnvBtn->setToolTip("Manage collection environments");
     connect(m_manageEnvBtn, &QPushButton::clicked, this, &CollectionSidebar::manageEnvironmentsRequested);
     envLayout->addWidget(m_manageEnvBtn);
 
@@ -145,6 +152,7 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     m_tree->setDragEnabled(true);
     m_tree->setAcceptDrops(true);
     m_tree->setDropIndicatorShown(true);
+    m_tree->setItemDelegate(new BrunoTreeItemDelegate(m_tree));
     tree->afterDrop = [this](QTreeWidgetItem* dragged) {
         onTreeItemDropped(dragged);
     };
@@ -176,6 +184,7 @@ void CollectionSidebar::setupHistoryTab(QWidget* container) {
     m_historyTree = new QTreeWidget(container);
     m_historyTree->setHeaderHidden(true);
     m_historyTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_historyTree->setItemDelegate(new BrunoTreeItemDelegate(m_historyTree));
     connect(m_historyTree, &QTreeWidget::itemClicked, this, &CollectionSidebar::onHistoryItemClicked);
     connect(m_historyTree, &QTreeWidget::customContextMenuRequested, this, &CollectionSidebar::onHistoryContextMenu);
     layout->addWidget(m_historyTree, 1);
@@ -219,6 +228,7 @@ void CollectionSidebar::refreshTree() {
     auto* rootWidget = new QTreeWidgetItem(m_tree);
     rootWidget->setText(0, "📁 " + root->name());
     rootWidget->setData(0, Qt::UserRole, QVariant::fromValue(static_cast<void*>(root)));
+    rootWidget->setData(0, Qt::UserRole + 2, 0); // Folder / root
     rootWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDropEnabled);
     rootWidget->setExpanded(true);
 
@@ -236,19 +246,19 @@ void CollectionSidebar::populateChildren(QTreeWidgetItem* parentWidget, core::Co
 
         if (child->type() == core::CollectionItemType::Folder) {
             childWidget->setText(0, "📁 " + child->name());
+            childWidget->setData(0, Qt::UserRole + 2, 0); // Folder
             childWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled | Qt::ItemIsDropEnabled);
             populateChildren(childWidget, child);
             childWidget->setExpanded(true);
         } else {
             childWidget->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+            childWidget->setText(0, child->name());
+            childWidget->setData(0, Qt::UserRole + 2, 1); // Request
             auto* req = child->request();
             if (req) {
-                QString methodStr = core::methodToString(req->method);
-                childWidget->setText(0, QString("%1  %2").arg(methodStr, child->name()));
-                QColor col = Theme::methodColor(req->method);
-                childWidget->setForeground(0, QBrush(col));
+                childWidget->setData(0, Qt::UserRole + 1, static_cast<int>(req->method));
             } else {
-                childWidget->setText(0, child->name());
+                childWidget->setData(0, Qt::UserRole + 1, static_cast<int>(core::HttpMethod::GET));
             }
         }
     }
@@ -508,22 +518,19 @@ void CollectionSidebar::onHistoryFilterChanged(const QString& query) {
     for (const auto& item : items) {
         auto* treeItem = new QTreeWidgetItem(m_historyTree);
         treeItem->setData(0, Qt::UserRole, item.id);
+        treeItem->setData(0, Qt::UserRole + 1, static_cast<int>(item.request.method));
+        treeItem->setData(0, Qt::UserRole + 2, 2); // History item
+        treeItem->setData(0, Qt::UserRole + 3, item.statusCode);
+        treeItem->setData(0, Qt::UserRole + 4, static_cast<qint64>(item.responseTimeMs));
+        treeItem->setData(0, Qt::UserRole + 5, item.timestamp.toString("HH:mm:ss"));
 
-        QString methodStr = core::methodToString(item.request.method);
-        QString statusBadge = (item.statusCode > 0) ? QString::number(item.statusCode) : "ERR";
-        QString timeStr = item.timestamp.toString("HH:mm:ss");
         QString urlOrName = item.request.url.isEmpty() ? item.request.name : item.request.url;
-
-        treeItem->setText(0, QString("[%1] %2 • %3ms\n%4").arg(methodStr, statusBadge).arg(item.responseTimeMs).arg(urlOrName));
+        treeItem->setText(0, urlOrName);
         treeItem->setToolTip(0, QString("%1 %2\nStatus: %3 %4\nLatency: %5 ms\nTime: %6")
-            .arg(methodStr, item.request.url)
+            .arg(core::methodToString(item.request.method), item.request.url)
             .arg(item.statusCode).arg(item.statusText)
             .arg(item.responseTimeMs)
             .arg(item.timestamp.toString("yyyy-MM-dd HH:mm:ss")));
-
-        // Colors
-        QColor col = Theme::methodColor(item.request.method);
-        treeItem->setForeground(0, QBrush(col));
 
         m_historyTree->addTopLevelItem(treeItem);
     }

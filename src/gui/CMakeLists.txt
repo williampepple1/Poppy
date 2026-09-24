@@ -18,6 +18,7 @@ add_executable(poppy
     editors/ScriptEditor.h editors/ScriptEditor.cpp
     editors/AssertionsEditor.h editors/AssertionsEditor.cpp
     inspectors/ResponseInspector.h inspectors/ResponseInspector.cpp
+    sidebar/BrunoTreeItemDelegate.h
     sidebar/CollectionSidebar.h sidebar/CollectionSidebar.cpp
     dialogs/EnvironmentDialog.h dialogs/EnvironmentDialog.cpp
     dialogs/CodeSnippetDialog.h dialogs/CodeSnippetDialog.cpp

@@ -142,25 +142,28 @@ void MainWindow::setupUi() {
     reqInfoBar->addWidget(m_requestNameLabel);
     reqInfoBar->addStretch();
 
-    m_curlBtn = new QPushButton("Copy as cURL", this);
+    m_curlBtn = new QPushButton("📋 cURL", this);
+    m_curlBtn->setToolTip("Copy resolved request as cURL command");
     connect(m_curlBtn, &QPushButton::clicked, this, &MainWindow::onCopyAsCurl);
     reqInfoBar->addWidget(m_curlBtn);
 
-    m_snippetBtn = new QPushButton("Generate Code", this);
+    m_snippetBtn = new QPushButton("⚡ Code", this);
+    m_snippetBtn->setToolTip("Generate code snippets in Python, JS, Go, etc.");
     connect(m_snippetBtn, &QPushButton::clicked, this, &MainWindow::onShowCodeSnippets);
     reqInfoBar->addWidget(m_snippetBtn);
 
-    m_saveBtn = new QPushButton("Save", this);
+    m_saveBtn = new QPushButton("💾 Save", this);
+    m_saveBtn->setToolTip("Save request changes (Ctrl+S)");
     connect(m_saveBtn, &QPushButton::clicked, this, &MainWindow::onSaveRequest);
     reqInfoBar->addWidget(m_saveBtn);
 
-    m_proxyBtn = new QPushButton("Proxy", this);
+    m_proxyBtn = new QPushButton("🛡️ Proxy", this);
     m_proxyBtn->setToolTip("Configure per-request proxy override");
     connect(m_proxyBtn, &QPushButton::clicked, this, &MainWindow::onConfigureRequestProxy);
     reqInfoBar->addWidget(m_proxyBtn);
 
     m_topEnvCombo = new QComboBox(this);
-    m_topEnvCombo->setFixedWidth(130);
+    m_topEnvCombo->setFixedWidth(140);
     m_topEnvCombo->setToolTip("Active Environment");
     connect(m_topEnvCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int idx) {
         if (idx < 0 || !m_topEnvCombo) return;
@@ -173,11 +176,15 @@ void MainWindow::setupUi() {
 
     reqLayout->addLayout(reqInfoBar);
 
-    // URL & Method & Send Bar
-    auto* urlBarLayout = new QHBoxLayout();
-    urlBarLayout->setSpacing(8);
+    // Integrated Bruno Method & URL Bar Container
+    auto* urlBarFrame = new QFrame(this);
+    urlBarFrame->setObjectName("urlBarContainer");
+    auto* urlBarLayout = new QHBoxLayout(urlBarFrame);
+    urlBarLayout->setContentsMargins(4, 3, 4, 3);
+    urlBarLayout->setSpacing(6);
 
-    m_methodCombo = new QComboBox(this);
+    m_methodCombo = new QComboBox(urlBarFrame);
+    m_methodCombo->setObjectName("methodCombo");
     m_methodCombo->addItem("GET", static_cast<int>(core::HttpMethod::GET));
     m_methodCombo->addItem("POST", static_cast<int>(core::HttpMethod::POST));
     m_methodCombo->addItem("PUT", static_cast<int>(core::HttpMethod::PUT));
@@ -185,13 +192,19 @@ void MainWindow::setupUi() {
     m_methodCombo->addItem("PATCH", static_cast<int>(core::HttpMethod::PATCH));
     m_methodCombo->addItem("HEAD", static_cast<int>(core::HttpMethod::HEAD));
     m_methodCombo->addItem("OPTIONS", static_cast<int>(core::HttpMethod::OPTIONS));
-    m_methodCombo->setFixedWidth(100);
+    m_methodCombo->setFixedWidth(95);
     connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onMethodChanged);
     connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { markCurrentTabDirty(); });
     urlBarLayout->addWidget(m_methodCombo);
 
-    m_urlEdit = new QLineEdit(this);
-    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Press Enter to send)");
+    auto* urlDivider = new QFrame(urlBarFrame);
+    urlDivider->setObjectName("urlBarDivider");
+    urlDivider->setFrameShape(QFrame::VLine);
+    urlBarLayout->addWidget(urlDivider);
+
+    m_urlEdit = new QLineEdit(urlBarFrame);
+    m_urlEdit->setObjectName("urlEdit");
+    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Enter to send)");
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::updateUrlVariableInspection);
     connect(m_urlEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
@@ -218,13 +231,13 @@ void MainWindow::setupUi() {
 
     urlBarLayout->addWidget(m_urlEdit, 1);
 
-    m_sendBtn = new QPushButton("Send", this);
+    m_sendBtn = new QPushButton("Send", urlBarFrame);
     m_sendBtn->setObjectName("primaryBtn");
     m_sendBtn->setFixedWidth(90);
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
     urlBarLayout->addWidget(m_sendBtn);
 
-    reqLayout->addLayout(urlBarLayout);
+    reqLayout->addWidget(urlBarFrame);
 
     // Request Tabs
     m_requestTabs = new QTabWidget(this);
@@ -394,7 +407,11 @@ void MainWindow::setupMenus() {
 void MainWindow::onMethodChanged(int index) {
     auto method = static_cast<core::HttpMethod>(m_methodCombo->itemData(index).toInt());
     QColor c = Theme::methodColor(method);
-    m_methodCombo->setStyleSheet(QString("QComboBox { color: %1; font-weight: bold; }").arg(c.name()));
+    m_methodCombo->setStyleSheet(QString(
+        "QComboBox#methodCombo { color: %1; font-weight: 800; font-size: 13px; background: transparent; border: none; padding-left: 6px; }"
+        "QComboBox#methodCombo:hover { background-color: rgba(255, 255, 255, 0.05); border-radius: 4px; }"
+        "QComboBox#methodCombo::drop-down { border: none; width: 16px; }"
+    ).arg(c.name()));
 }
 
 void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
@@ -403,7 +420,10 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
     m_requestNameLabel->setText(req.name.isEmpty() ? "Untitled Request" : req.name);
 
     int idx = m_methodCombo->findData(static_cast<int>(req.method));
-    if (idx >= 0) m_methodCombo->setCurrentIndex(idx);
+    if (idx >= 0) {
+        m_methodCombo->setCurrentIndex(idx);
+        onMethodChanged(idx);
+    }
 
     m_urlEdit->setText(req.url);
     m_paramsEditor->loadFromRequest(req);
@@ -1332,20 +1352,22 @@ void MainWindow::applyRequestChrome() {
     if (m_openRequestsTabBar) {
         if (dark) {
             m_openRequestsTabBar->setStyleSheet(
-                "QTabBar::tab { background: #18181b; color: #a1a1aa; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #27272a; font-size: 12px; }"
-                "QTabBar::tab:selected { background: #27272a; color: #f4f4f5; font-weight: bold; border-color: #3f3f46; }"
-                "QTabBar::tab:hover { background: #222226; color: #f4f4f5; }"
+                "QTabBar { background: #131416; border-bottom: 1px solid #232429; }"
+                "QTabBar::tab { background: #18191d; color: #9ca3af; padding: 7px 16px; margin-right: 3px; border-top-left-radius: 6px; border-top-right-radius: 6px; border: 1px solid #232429; border-bottom: none; font-size: 12px; font-weight: 500; min-width: 90px; }"
+                "QTabBar::tab:selected { background: #1f2026; color: #ffffff; font-weight: 600; border-color: #2e3038; border-bottom: 2px solid #f59e0b; }"
+                "QTabBar::tab:hover:!selected { background: #1c1d22; color: #e5e7eb; }"
             );
         } else {
             m_openRequestsTabBar->setStyleSheet(
-                "QTabBar::tab { background: #f4f4f5; color: #3f3f46; padding: 5px 12px; margin-right: 4px; border-top-left-radius: 4px; border-top-right-radius: 4px; border: 1px solid #e4e4e7; font-size: 12px; }"
-                "QTabBar::tab:selected { background: #ffffff; color: #18181b; font-weight: bold; border-color: #d4d4d8; }"
-                "QTabBar::tab:hover { background: #e4e4e7; color: #18181b; }"
+                "QTabBar { background: #f8fafc; border-bottom: 1px solid #e2e8f0; }"
+                "QTabBar::tab { background: #f1f5f9; color: #64748b; padding: 7px 16px; margin-right: 3px; border-top-left-radius: 6px; border-top-right-radius: 6px; border: 1px solid #e2e8f0; border-bottom: none; font-size: 12px; font-weight: 500; min-width: 90px; }"
+                "QTabBar::tab:selected { background: #ffffff; color: #0f172a; font-weight: 600; border-color: #cbd5e1; border-bottom: 2px solid #d97706; }"
+                "QTabBar::tab:hover:!selected { background: #e2e8f0; color: #1e293b; }"
             );
         }
     }
     if (m_requestNameLabel) {
-        m_requestNameLabel->setStyleSheet(QString("font-size: 15px; font-weight: bold; color: %1;").arg(dark ? "#f4f4f5" : "#18181b"));
+        m_requestNameLabel->setStyleSheet(QString("font-size: 16px; font-weight: 700; color: %1; padding-left: 2px;").arg(dark ? "#f9fafb" : "#0f172a"));
     }
 }
 
