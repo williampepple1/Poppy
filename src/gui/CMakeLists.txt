@@ -56,4 +56,13 @@ if(WIN32)
     set_target_properties(poppy PROPERTIES
         WIN32_EXECUTABLE TRUE
     )
+elseif(APPLE)
+    set_target_properties(poppy PROPERTIES
+        OUTPUT_NAME "Poppy"
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "Poppy"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.poppy.app"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.4.3"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.4.3"
+    )
 endif()

@@ -135,10 +135,66 @@ jobs:
           name: Poppy-linux-x64
           path: Poppy-linux-x64.tar.gz
 
+  build-macos:
+    name: Build & Package (macOS)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Ninja
+        run: brew install ninja
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: '6.7.2'
+          cache: true
+
+      - name: Configure CMake
+        run: |
+          cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: |
+          cmake --build build --config Release
+
+      - name: Run CTest
+        run: |
+          ctest --test-dir build --output-on-failure -C Release
+
+      - name: Package macOS Release (macdeployqt, DMG & Zip)
+        run: |
+          # Deploy Qt frameworks into the .app bundle
+          macdeployqt build/bin/Poppy.app -always-overwrite || true
+
+          # Create DMG with Applications symlink for drag-and-drop install
+          mkdir -p dist/dmg
+          cp -R build/bin/Poppy.app dist/dmg/
+          ln -s /Applications dist/dmg/Applications
+          hdiutil create -volname Poppy -srcfolder dist/dmg -ov -format UDZO Poppy-macos.dmg
+
+          # Create portable Zip archive with app bundle and CLI
+          mkdir -p dist/zip
+          cp -R build/bin/Poppy.app dist/zip/
+          cp build/bin/poppy-cli dist/zip/
+          cp README.md dist/zip/
+          cp LICENSE dist/zip/
+          ditto -c -k --sequesterRsrc dist/zip Poppy-macos.zip
+
+      - name: Upload macOS Package Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Poppy-macos
+          path: |
+            Poppy-macos.dmg
+            Poppy-macos.zip
+
   publish-release:
     name: Publish GitHub Release
-    if: github.event_name != 'pull_request'
-    needs: [build-windows, build-linux]
+    if: github.event_name != 'pull_request' && (github.ref_type == 'tag' || github.event_name == 'workflow_dispatch')
+    needs: [build-windows, build-linux, build-macos]
     runs-on: ubuntu-latest
 
     steps:
@@ -202,6 +258,12 @@ jobs:
           name: Poppy-linux-x64
           path: release-assets
 
+      - name: Download macOS Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Poppy-macos
+          path: release-assets
+
       - name: Replace existing release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -213,6 +275,8 @@ jobs:
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64-setup.exe --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-windows-x64.zip --yes || true
           gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-linux-x64.tar.gz --yes || true
+          gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-macos.dmg --yes || true
+          gh release delete-asset "${{ env.RELEASE_TAG }}" Poppy-macos.zip --yes || true
 
       - name: Flatten and verify release assets
         run: |
@@ -234,3 +298,5 @@ jobs:
             release-assets/Poppy-windows-x64-setup.exe
             release-assets/Poppy-windows-x64.zip
             release-assets/Poppy-linux-x64.tar.gz
+            release-assets/Poppy-macos.dmg
+            release-assets/Poppy-macos.zip
