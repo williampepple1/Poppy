@@ -118,6 +118,21 @@ int main(int argc, char* argv[]) {
     assert(env.variableValue("ct") == "application/json");
     assert(env.variableValue("missing").isEmpty());
 
+    // 5. Test Bruno 'bru' and Postman 'pm' compatibility
+    QString bruScript = R"(
+        var data = res.getBody();
+        if (data && data.user) {
+            bru.setEnvVar("bruUser", data.user);
+            bru.setEnvVar("bruId", data.id);
+        }
+        pm.environment.set("pmUser", data.user);
+    )";
+    bool bruOk = runner.runPostResponseScript(bruScript, req, res, env);
+    assert(bruOk);
+    assert(env.variableValue("bruUser") == "admin");
+    assert(env.variableValue("bruId") == "1234");
+    assert(env.variableValue("pmUser") == "admin");
+
     std::cout << "test_script_runner PASSED!" << std::endl;
     return 0;
 }

@@ -16,21 +16,75 @@ namespace poppy::core {
 class ScriptBridge : public QObject {
     Q_OBJECT
 public:
-    explicit ScriptBridge(EnvironmentModel* env, QObject* parent = nullptr)
-        : QObject(parent), m_env(env) {}
+    explicit ScriptBridge(EnvironmentModel* env, QJSEngine* engine, QObject* parent = nullptr)
+        : QObject(parent), m_env(env), m_engine(engine) {}
 
     Q_INVOKABLE QString getEnvVar(const QString& name) const {
         return m_env ? m_env->variableValue(name) : QString{};
     }
 
-    Q_INVOKABLE void setEnvVar(const QString& name, const QString& value) {
+    Q_INVOKABLE void setEnvVar(const QString& name, const QJSValue& value) {
+        if (!m_env) return;
+        m_env->setVariableValue(name, jsValueToString(value));
+    }
+
+    Q_INVOKABLE QString getVar(const QString& name) const {
+        if (m_vars.contains(name)) return m_vars.value(name);
+        return m_env ? m_env->variableValue(name) : QString{};
+    }
+
+    Q_INVOKABLE void setVar(const QString& name, const QJSValue& value) {
+        QString s = jsValueToString(value);
+        m_vars.insert(name, s);
         if (m_env) {
-            m_env->setVariableValue(name, value);
+            m_env->setVariableValue(name, s);
+        }
+    }
+
+    Q_INVOKABLE QString getCollectionVar(const QString& name) const {
+        return getVar(name);
+    }
+
+    Q_INVOKABLE void setCollectionVar(const QString& name, const QJSValue& value) {
+        setVar(name, value);
+    }
+
+    Q_INVOKABLE void setNextRequest(const QString& requestName) {
+        m_nextRequest = requestName;
+    }
+
+    Q_INVOKABLE QString getNextRequest() const {
+        return m_nextRequest;
+    }
+
+    Q_INVOKABLE void sleep(int ms) const {
+        if (ms > 0 && ms <= 10000) {
+            QThread::msleep(static_cast<unsigned long>(ms));
         }
     }
 
 private:
+    QString jsValueToString(const QJSValue& value) const {
+        if (value.isString()) return value.toString();
+        if (value.isBool()) return value.toBool() ? QStringLiteral("true") : QStringLiteral("false");
+        if (value.isNumber()) return QString::number(value.toNumber());
+        if (value.isNull() || value.isUndefined()) return QString();
+        if (value.isObject() || value.isArray()) {
+            if (m_engine) {
+                QJSValue json = m_engine->globalObject().property("JSON");
+                QJSValue stringify = json.property("stringify");
+                if (stringify.isCallable()) {
+                    return stringify.call({value}).toString();
+                }
+            }
+        }
+        return value.toString();
+    }
+
     EnvironmentModel* m_env;
+    QJSEngine* m_engine{nullptr};
+    QMap<QString, QString> m_vars;
+    QString m_nextRequest;
 };
 
 ScriptRunner::ScriptRunner(QObject* parent) : QObject(parent) {}
@@ -104,10 +158,32 @@ constexpr int kScriptTimeoutMs = 8000;
 } // namespace
 
 void ScriptRunner::setupSandbox(QJSEngine& engine, EnvironmentModel& env, const RequestModel& req, const ResponseModel* res) {
-    // 1. ScriptBridge for poppy object
-    auto* bridge = new ScriptBridge(&env, &engine);
+    // 1. ScriptBridge for poppy and bru objects
+    auto* bridge = new ScriptBridge(&env, &engine, &engine);
     QJSValue bridgeVal = engine.newQObject(bridge);
     engine.globalObject().setProperty("poppy", bridgeVal);
+    engine.globalObject().setProperty("bru", bridgeVal);
+
+    // 1b. Postman pm compatibility shim
+    QString pmShim = R"(
+        (function(b) {
+            globalThis.pm = {
+                environment: {
+                    set: function(k, v) { b.setEnvVar(k, v); },
+                    get: function(k) { return b.getEnvVar(k); }
+                },
+                variables: {
+                    set: function(k, v) { b.setVar(k, v); },
+                    get: function(k) { return b.getVar(k); }
+                },
+                collectionVariables: {
+                    set: function(k, v) { b.setCollectionVar(k, v); },
+                    get: function(k) { return b.getCollectionVar(k); }
+                }
+            };
+        })(bru);
+    )";
+    engine.evaluate(pmShim);
 
     // 2. Request object
     QJSValue reqObj = engine.newObject();
