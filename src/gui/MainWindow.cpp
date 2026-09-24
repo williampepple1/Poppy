@@ -810,14 +810,29 @@ void MainWindow::onExportHar() {
     }
 }
 
+bool MainWindow::openPath(const QString& path) {
+    if (path.isEmpty()) return false;
+    QFileInfo fi(path);
+    QString dirPath = fi.isDir() ? path : fi.dir().path();
+    if (m_collectionModel.openDirectory(dirPath)) {
+        m_sidebar->refreshTree();
+        updateTopEnvCombo();
+        updateUrlVariableInspection();
+        if (fi.isFile()) {
+            auto* item = m_collectionModel.findItemByPath(fi.canonicalFilePath());
+            if (item) {
+                onRequestSelected(item);
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
 void MainWindow::onOpenCollection() {
     QString dir = QFileDialog::getExistingDirectory(this, "Open Collection Directory", QString());
     if (!dir.isEmpty()) {
-        if (m_collectionModel.openDirectory(dir)) {
-            m_sidebar->refreshTree();
-            updateTopEnvCombo();
-            updateUrlVariableInspection();
-        } else {
+        if (!openPath(dir)) {
             QMessageBox::warning(this, "Error", "Failed to open collection directory.");
         }
     }

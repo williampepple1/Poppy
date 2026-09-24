@@ -1,6 +1,8 @@
 #include "CollectionModel.h"
 #include "BruParser.h"
 #include "BruWriter.h"
+#include "OpenCollectionParser.h"
+#include "OpenCollectionWriter.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -118,7 +120,21 @@ bool CollectionModel::openDirectory(const QString& dirPath) {
     emit collectionAboutToReload();
 
     m_rootPath = dir.canonicalPath();
-    m_rootItem = std::make_unique<CollectionItem>(CollectionItemType::Collection, dir.dirName(), m_rootPath);
+    QString collName = dir.dirName();
+    QString openCollYml = dir.filePath(QStringLiteral("opencollection.yml"));
+    QString openCollYaml = dir.filePath(QStringLiteral("opencollection.yaml"));
+    QString collYml = dir.filePath(QStringLiteral("collection.yml"));
+
+    if (QFile::exists(openCollYml) || QFile::exists(openCollYaml)) {
+        QString ocPath = QFile::exists(openCollYml) ? openCollYml : openCollYaml;
+        auto ocInfo = OpenCollectionParser::parseCollectionFile(ocPath);
+        if (!ocInfo.name.isEmpty()) collName = ocInfo.name;
+    } else if (QFile::exists(collYml)) {
+        auto ocInfo = OpenCollectionParser::parseCollectionFile(collYml);
+        if (!ocInfo.name.isEmpty()) collName = ocInfo.name;
+    }
+
+    m_rootItem = std::make_unique<CollectionItem>(CollectionItemType::Collection, collName, m_rootPath);
 
     // Watch directory
     QStringList existingPaths = m_fileWatcher.directories();
@@ -152,10 +168,13 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
     for (const auto& entry : entries) {
         if (entry.isDir()) {
             const QString dirName = entry.fileName();
-            if (dirName.startsWith('.') || dirName == "environments") continue;
+            if (dirName.startsWith('.') || dirName == "environments" || dirName == "node_modules") continue;
 
             auto* folderItem = new CollectionItem(CollectionItemType::Folder, dirName, entry.canonicalFilePath());
             QString folderBru = QDir(entry.canonicalFilePath()).filePath(QStringLiteral("folder.bru"));
+            QString folderYml = QDir(entry.canonicalFilePath()).filePath(QStringLiteral("folder.yml"));
+            QString folderYaml = QDir(entry.canonicalFilePath()).filePath(QStringLiteral("folder.yaml"));
+
             if (QFile::exists(folderBru)) {
                 QFile fb(folderBru);
                 if (fb.open(QIODevice::ReadOnly | QIODevice::Text)) {
@@ -164,21 +183,65 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
                     folderItem->setSeq(BruParser::parseMetaSeq(folderContent, 1));
                     folderItem->setAuth(BruParser::parse(folderContent).auth);
                 }
+            } else if (QFile::exists(folderYml) || QFile::exists(folderYaml)) {
+                QString ymlPath = QFile::exists(folderYml) ? folderYml : folderYaml;
+                auto fInfo = OpenCollectionParser::parseFolderFile(ymlPath);
+                folderItem->setVariables(fInfo.vars);
+                folderItem->setSeq(fInfo.seq);
+                folderItem->setAuth(fInfo.auth);
+                if (!fInfo.name.isEmpty()) {
+                    folderItem->setName(fInfo.name);
+                }
             }
             parentItem->appendChild(folderItem);
             m_fileWatcher.addPath(entry.canonicalFilePath());
             scanDirectory(entry.canonicalFilePath(), folderItem);
-        } else if (entry.isFile() && entry.fileName().endsWith(QLatin1String(".bru"), Qt::CaseInsensitive)) {
+        } else if (entry.isFile()) {
             const QString fileName = entry.fileName();
-            // Bruno folder/collection metadata files are not requests
-            if (fileName.compare(QLatin1String("folder.bru"), Qt::CaseInsensitive) == 0) continue;
+            bool isBru = fileName.endsWith(QLatin1String(".bru"), Qt::CaseInsensitive);
+            bool isYml = fileName.endsWith(QLatin1String(".yml"), Qt::CaseInsensitive) ||
+                         fileName.endsWith(QLatin1String(".yaml"), Qt::CaseInsensitive);
+
+            if (!isBru && !isYml) continue;
+
+            // Folder metadata files are not requests
+            if (fileName.compare(QLatin1String("folder.bru"), Qt::CaseInsensitive) == 0 ||
+                fileName.compare(QLatin1String("folder.yml"), Qt::CaseInsensitive) == 0 ||
+                fileName.compare(QLatin1String("folder.yaml"), Qt::CaseInsensitive) == 0) {
+                continue;
+            }
+
+            // Collection metadata files are not requests
             if (fileName.compare(QLatin1String("collection.bru"), Qt::CaseInsensitive) == 0) {
                 parentItem->setVariables(BruParser::parseVarsFile(entry.canonicalFilePath()));
                 parentItem->setAuth(BruParser::parseFile(entry.canonicalFilePath()).auth);
                 continue;
             }
+            if (fileName.compare(QLatin1String("opencollection.yml"), Qt::CaseInsensitive) == 0 ||
+                fileName.compare(QLatin1String("opencollection.yaml"), Qt::CaseInsensitive) == 0 ||
+                fileName.compare(QLatin1String("collection.yml"), Qt::CaseInsensitive) == 0 ||
+                fileName.compare(QLatin1String("collection.yaml"), Qt::CaseInsensitive) == 0) {
+                auto cInfo = OpenCollectionParser::parseCollectionFile(entry.canonicalFilePath());
+                if (parentItem == m_rootItem.get() && !cInfo.name.isEmpty()) {
+                    parentItem->setName(cInfo.name);
+                }
+                if (cInfo.auth.type != AuthType::None) {
+                    parentItem->setAuth(cInfo.auth);
+                }
+                continue;
+            }
 
-            RequestModel req = BruParser::parseFile(entry.canonicalFilePath());
+            RequestModel req;
+            if (isBru) {
+                req = BruParser::parseFile(entry.canonicalFilePath());
+            } else {
+                YamlNode yNode = YamlNode::parseFile(entry.canonicalFilePath());
+                if (!OpenCollectionParser::isOpenCollectionRequest(yNode)) {
+                    continue; // Skip non-request YAML files (e.g. CI/CD or other config)
+                }
+                req = OpenCollectionParser::parseRequest(yNode, entry.completeBaseName());
+            }
+
             QString reqName = req.name.isEmpty() ? entry.completeBaseName() : req.name;
             auto* reqItem = new CollectionItem(CollectionItemType::Request, reqName, entry.canonicalFilePath());
             reqItem->setRequest(req);
@@ -196,6 +259,7 @@ void CollectionModel::reloadEnvironments() {
     QDir envDir(m_rootPath + "/environments");
     if (!envDir.exists()) return;
 
+    // 1. Standard .env files
     QFileInfoList entries = envDir.entryInfoList(QStringList() << "*.env", QDir::Files);
     for (const auto& entry : entries) {
         if (entry.fileName().endsWith(".secret.env")) continue; // skip secret file directly; it merges into the base env
@@ -211,6 +275,22 @@ void CollectionModel::reloadEnvironments() {
 
         m_environments.append(env);
     }
+
+    // 2. OpenCollection YAML environments (*.yml, *.yaml)
+    QFileInfoList ymlEntries = envDir.entryInfoList(QStringList() << "*.yml" << "*.yaml", QDir::Files);
+    for (const auto& entry : ymlEntries) {
+        EnvironmentModel env = OpenCollectionParser::parseEnvironmentFile(entry.canonicalFilePath());
+        bool exists = false;
+        for (const auto& existing : m_environments) {
+            if (existing.name().compare(env.name(), Qt::CaseInsensitive) == 0) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            m_environments.append(env);
+        }
+    }
 }
 
 bool CollectionModel::saveEnvironment(const EnvironmentModel& env) {
@@ -222,10 +302,24 @@ bool CollectionModel::saveEnvironment(const EnvironmentModel& env) {
     if (!envDir.isEmpty() && !m_fileWatcher.directories().contains(envDir)) {
         m_fileWatcher.addPath(envDir);
     }
-    const QString envPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".env"));
-    const QString secretPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".secret.env"));
-    bool ok = env.saveToEnvFile(envPath);
-    env.saveSecretsToEnvFile(secretPath);
+
+    const QString ymlPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".yml"));
+    const QString yamlPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".yaml"));
+    bool isOpenCollectionEnv = QFile::exists(ymlPath) || QFile::exists(yamlPath) ||
+                               QFile::exists(dir.filePath(QStringLiteral("opencollection.yml"))) ||
+                               QFile::exists(dir.filePath(QStringLiteral("opencollection.yaml")));
+
+    bool ok = false;
+    if (isOpenCollectionEnv) {
+        QString targetPath = QFile::exists(yamlPath) ? yamlPath : ymlPath;
+        ok = OpenCollectionWriter::writeEnvironmentFile(targetPath, env);
+    } else {
+        const QString envPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".env"));
+        const QString secretPath = dir.filePath(QStringLiteral("environments/") + env.name() + QStringLiteral(".secret.env"));
+        ok = env.saveToEnvFile(envPath);
+        env.saveSecretsToEnvFile(secretPath);
+    }
+
     bool found = false;
     for (auto& existing : m_environments) {
         if (existing.name() == env.name()) {
@@ -246,11 +340,31 @@ CollectionItem* CollectionModel::addRequest(CollectionItem* parent, const QStrin
 
     suppressDiskWatcher();
     QString parentDir = targetParent->path();
-    QString filePath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(name), ".bru");
+
+    bool useYml = false;
+    if (QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yml"))) ||
+        QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yaml")))) {
+        useYml = true;
+    } else {
+        QDir pDir(parentDir);
+        QStringList ymls = pDir.entryList(QStringList() << "*.yml" << "*.yaml", QDir::Files);
+        if (!ymls.isEmpty()) {
+            useYml = true;
+        }
+    }
+
+    QString ext = useYml ? QStringLiteral(".yml") : QStringLiteral(".bru");
+    QString filePath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(name), ext);
 
     RequestModel copy = req;
     copy.name = name;
-    if (!BruWriter::writeToFile(filePath, copy)) {
+    bool written = false;
+    if (useYml) {
+        written = OpenCollectionWriter::writeRequestFile(filePath, copy);
+    } else {
+        written = BruWriter::writeToFile(filePath, copy);
+    }
+    if (!written) {
         return nullptr;
     }
 
@@ -286,6 +400,9 @@ bool CollectionModel::saveRequest(CollectionItem* item) {
         return false;
     }
     suppressDiskWatcher();
+    if (item->path().endsWith(".yml", Qt::CaseInsensitive) || item->path().endsWith(".yaml", Qt::CaseInsensitive)) {
+        return OpenCollectionWriter::writeRequestFile(item->path(), *item->request());
+    }
     return BruWriter::writeToFile(item->path(), *item->request());
 }
 
@@ -294,6 +411,14 @@ bool CollectionModel::saveFolderVariables(CollectionItem* folder) {
         return false;
     }
     suppressDiskWatcher();
+    QString folderYml = QDir(folder->path()).filePath(QStringLiteral("folder.yml"));
+    QString folderYaml = QDir(folder->path()).filePath(QStringLiteral("folder.yaml"));
+    bool hasYml = QFile::exists(folderYml) || QFile::exists(folderYaml) ||
+                  QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yml"))) ||
+                  QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yaml")));
+    if (hasYml) {
+        return OpenCollectionWriter::writeFolderFile(folder->path(), folder->name(), folder->seq(), folder->auth(), folder->variables());
+    }
     return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables(), folder->seq());
 }
 
@@ -363,9 +488,14 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
             m_fileWatcher.addPath(item->path());
         }
         item->setName(newName);
-        BruWriter::writeFolderFile(item->path(), newName, item->variables(), item->seq());
+        if (QFile::exists(QDir(item->path()).filePath(QStringLiteral("folder.yml")))) {
+            OpenCollectionWriter::writeFolderFile(item->path(), newName, item->seq(), item->auth(), item->variables());
+        } else {
+            BruWriter::writeFolderFile(item->path(), newName, item->variables(), item->seq());
+        }
     } else {
-        QString newPath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(newName), ".bru", oldPath);
+        QString ext = fi.suffix().isEmpty() ? QStringLiteral(".bru") : ("." + fi.suffix());
+        QString newPath = BruWriter::uniqueFilePath(parentDir, BruWriter::safeFileStem(newName), ext, oldPath);
         if (QDir::cleanPath(newPath) != QDir::cleanPath(oldPath)
             && QFileInfo(newPath).canonicalFilePath() != QFileInfo(oldPath).canonicalFilePath()) {
             QFile file(oldPath);

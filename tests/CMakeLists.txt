@@ -88,3 +88,7 @@ add_executable(test_markdown_exporter test_markdown_exporter.cpp)
 target_link_libraries(test_markdown_exporter PRIVATE poppy_core Qt6::Core)
 add_test(NAME test_markdown_exporter COMMAND test_markdown_exporter)
 
+add_executable(test_opencollection test_opencollection.cpp)
+target_link_libraries(test_opencollection PRIVATE poppy_core Qt6::Core)
+add_test(NAME test_opencollection COMMAND test_opencollection)
+

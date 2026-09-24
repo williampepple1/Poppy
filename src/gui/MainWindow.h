@@ -32,6 +32,8 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
+    bool openPath(const QString& path);
+
 protected:
     void closeEvent(QCloseEvent* event) override;
 

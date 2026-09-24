@@ -24,6 +24,9 @@ add_library(poppy_core STATIC
     HistoryManager.h HistoryManager.cpp
     SseParser.h SseParser.cpp
     DocGenerator.h DocGenerator.cpp
+    YamlNode.h YamlNode.cpp
+    OpenCollectionParser.h OpenCollectionParser.cpp
+    OpenCollectionWriter.h OpenCollectionWriter.cpp
 )
 
 target_include_directories(poppy_core PUBLIC

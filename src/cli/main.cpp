@@ -13,6 +13,7 @@
 #include <core/CollectionModel.h>
 #include <core/CsvParser.h>
 #include <core/BruParser.h>
+#include <core/OpenCollectionParser.h>
 #include <core/VariableResolver.h>
 #include <core/ScriptRunner.h>
 #include <core/assertions/DeclarativeAssertion.h>
@@ -237,14 +238,23 @@ int main(int argc, char *argv[]) {
             return 1;
         }
         collectRequests(collection.rootItem(), requestsToRun, folderVarsToRun);
-    } else if (fi.isFile() && fi.suffix().toLower() == "bru") {
-        core::RequestModel single = core::BruParser::parseFile(collectionPath);
+    } else if (fi.isFile() && (fi.suffix().compare(QLatin1String("bru"), Qt::CaseInsensitive) == 0 ||
+                              fi.suffix().compare(QLatin1String("yml"), Qt::CaseInsensitive) == 0 ||
+                              fi.suffix().compare(QLatin1String("yaml"), Qt::CaseInsensitive) == 0)) {
+        core::RequestModel single;
+        if (fi.suffix().compare(QLatin1String("bru"), Qt::CaseInsensitive) == 0) {
+            single = core::BruParser::parseFile(collectionPath);
+        } else {
+            single = core::OpenCollectionParser::parseRequestFile(collectionPath);
+        }
         requestsToRun.append(single);
         folderVarsToRun.append(QMap<QString, QString>());
         QDir dir = fi.absoluteDir();
         for (int up = 0; up < 8; ++up) {
             if (QDir(dir.filePath(QStringLiteral("environments"))).exists()
-                || QFile::exists(dir.filePath(QStringLiteral("collection.bru")))) {
+                || QFile::exists(dir.filePath(QStringLiteral("collection.bru")))
+                || QFile::exists(dir.filePath(QStringLiteral("opencollection.yml")))
+                || QFile::exists(dir.filePath(QStringLiteral("opencollection.yaml")))) {
                 collection.openDirectory(dir.absolutePath());
                 break;
             }
