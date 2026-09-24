@@ -242,6 +242,23 @@ QString Theme::darkStyleSheet() {
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
         }
+        QTabBar::close-button {
+            image: url(:/icons/close_tab.png);
+            subcontrol-position: right;
+            subcontrol-origin: padding;
+            margin-left: 6px;
+            margin-right: 2px;
+            padding: 3px;
+            border-radius: 4px;
+            background: transparent;
+        }
+        QTabBar::close-button:hover {
+            image: url(:/icons/close_tab_hover.png);
+            background: rgba(255, 255, 255, 0.12);
+        }
+        QTabBar::close-button:pressed {
+            background: rgba(255, 255, 255, 0.22);
+        }
 
         /* TreeView & TableView */
         QTreeView, QTableView, QTreeWidget, QTableWidget {
@@ -607,6 +624,23 @@ QString Theme::lightStyleSheet() {
             color: #334155;
             border-top-left-radius: 4px;
             border-top-right-radius: 4px;
+        }
+        QTabBar::close-button {
+            image: url(:/icons/close_tab_light.png);
+            subcontrol-position: right;
+            subcontrol-origin: padding;
+            margin-left: 6px;
+            margin-right: 2px;
+            padding: 3px;
+            border-radius: 4px;
+            background: transparent;
+        }
+        QTabBar::close-button:hover {
+            image: url(:/icons/close_tab_light_hover.png);
+            background: rgba(0, 0, 0, 0.08);
+        }
+        QTabBar::close-button:pressed {
+            background: rgba(0, 0, 0, 0.15);
         }
 
         /* TreeView & TableWidget */
