@@ -74,7 +74,7 @@
       --mockup-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.05);
     }
 
-    html { scroll-behavior: smooth; }
+    html { scroll-behavior: smooth; overflow-x: hidden; width: 100%; }
 
     body {
       background: var(--bg);
@@ -84,6 +84,8 @@
       line-height: 1.6;
       -webkit-font-smoothing: antialiased;
       transition: background-color 0.2s ease, color 0.2s ease;
+      overflow-x: hidden;
+      width: 100%;
     }
 
     /* ── NAV ── */
@@ -284,6 +286,10 @@
       font-size: 0.8rem;
       color: var(--muted);
       font-weight: 500;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      min-width: 0;
     }
     .window-body {
       display: grid;
@@ -334,6 +340,7 @@
       display: flex;
       flex-direction: column;
       background: var(--mockup-main-bg);
+      min-width: 0;
     }
     .url-bar {
       display: flex;
@@ -359,6 +366,7 @@
       font-family: monospace;
       font-size: 0.8rem;
       color: var(--mockup-input-color);
+      min-width: 0;
     }
     .url-var { color: var(--accent-blue); font-weight: 600; }
     .send-pill {
@@ -368,6 +376,7 @@
       font-size: 0.8rem;
       padding: 6px 16px;
       border-radius: 6px;
+      cursor: pointer;
     }
 
     .telemetry-row {
@@ -396,7 +405,12 @@
       padding: 8px 16px 0;
       background: var(--mockup-header-bg);
       border-bottom: 1px solid var(--border);
+      overflow-x: auto;
+      white-space: nowrap;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
     }
+    .tabs-row::-webkit-scrollbar { display: none; }
     .tab-pill {
       padding: 6px 12px;
       font-size: 0.75rem;
@@ -446,13 +460,28 @@
       text-align: center;
       margin-bottom: 2rem;
     }
-    .benchmark-table {
+    .table-responsive {
       width: 100%;
-      border-collapse: collapse;
-      background: var(--card-bg);
+      overflow-x: auto;
+      -webkit-overflow-scrolling: touch;
       border: 1px solid var(--border);
       border-radius: 8px;
-      overflow: hidden;
+      margin-bottom: 0.75rem;
+      background: var(--card-bg);
+    }
+    .table-scroll-hint {
+      display: none;
+      font-size: 0.75rem;
+      color: var(--muted);
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .benchmark-table {
+      width: 100%;
+      min-width: 580px;
+      border-collapse: collapse;
+      background: var(--card-bg);
+      border: none;
       font-size: 0.88rem;
     }
     .benchmark-table th, .benchmark-table td {
@@ -480,7 +509,7 @@
     }
     .pillars-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
       gap: 1.5rem;
     }
     .pillar-card {
@@ -527,7 +556,7 @@
     }
     .feature-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr));
       gap: 1.25rem;
     }
     .feature-item {
@@ -574,14 +603,19 @@
       margin-bottom: 1.25rem;
     }
     .cli-box {
-      display: inline-block;
+      display: block;
+      max-width: 100%;
+      overflow-x: auto;
+      white-space: nowrap;
       background: var(--code-bg);
       border: 1px solid var(--border);
       border-radius: 6px;
-      padding: 12px 20px;
+      padding: 12px 18px;
       font-family: Consolas, Monaco, monospace;
       font-size: 0.85rem;
       color: var(--accent);
+      -webkit-overflow-scrolling: touch;
+      margin: 0 auto;
     }
 
     /* ── FOOTER ── */
@@ -598,12 +632,50 @@
     footer a { color: var(--fg); text-decoration: none; border-bottom: 1px solid #52525b; padding-bottom: 1px; }
     footer a:hover { border-color: #fafafa; }
 
+    /* ── COMPREHENSIVE RESPONSIVE BREAKPOINTS ── */
     @media (max-width: 768px) {
-      nav { padding: 1rem 1.25rem; }
+      nav { padding: 0.85rem 1.25rem; }
+      nav .nav-right { gap: 0.85rem; }
+      .hero { margin: 3rem auto 2.25rem; padding: 0 1.25rem; }
+      .hero h1 { font-size: clamp(2rem, 7vw, 3rem); }
+      .hero p { font-size: 1.05rem; }
+      .preview-container { padding: 0 1.25rem; margin: 2rem auto 3.5rem; }
       .window-body { grid-template-columns: 1fr; }
       .window-sidebar { display: none; }
-      .hero { margin: 3.5rem auto 2.5rem; }
-      footer { flex-direction: column; align-items: flex-start; }
+      .telemetry-row { flex-wrap: wrap; gap: 8px; }
+      .telemetry-timing { margin-left: 0 !important; width: 100%; font-size: 0.72rem; }
+      .table-scroll-hint { display: block; }
+      .benchmark-section, .pillars-section, .features { padding: 0 1.25rem; margin-bottom: 3.5rem; }
+      .benchmark-section h2, .features h2 { font-size: 1.5rem; }
+      .cli-section { margin: 0 1.25rem 3.5rem; padding: 1.75rem 1.25rem; }
+      footer { padding: 1.75rem 1.25rem; flex-direction: column; text-align: center; align-items: center; gap: 0.75rem; }
+    }
+
+    @media (max-width: 640px) {
+      .hero-icon { width: 68px; height: 68px; margin-bottom: 1.25rem; }
+      .downloads { flex-direction: column; width: 100%; max-width: 380px; margin: 0 auto 1.5rem; }
+      .downloads .btn { width: 100%; justify-content: center; }
+      .url-bar { flex-wrap: wrap; gap: 6px; padding: 10px 12px; }
+      .url-input { order: 2; width: calc(100% - 75px); min-width: 170px; font-size: 0.75rem; }
+      .method-pill { order: 1; padding: 5px 10px; font-size: 0.7rem; }
+      .send-pill { order: 3; width: 100%; text-align: center; padding: 6px 12px; margin-top: 4px; }
+      .pillars-grid, .feature-grid { grid-template-columns: 1fr; gap: 1rem; }
+      .pillar-card, .feature-item { padding: 1.15rem; }
+      .cli-box { font-size: 0.78rem; padding: 10px 14px; }
+    }
+
+    @media (max-width: 440px) {
+      nav { padding: 0.75rem 1rem; }
+      nav .badge-version { display: none; }
+      nav .logo { font-size: 1.05rem; }
+      .hero { padding: 0 1rem; margin: 2rem auto 1.75rem; }
+      .hero-tagline { font-size: 0.72rem; padding: 3px 10px; }
+      .preview-container, .benchmark-section, .pillars-section, .features { padding: 0 1rem; }
+      .cli-section { margin: 0 1rem 3rem; padding: 1.25rem 0.85rem; }
+      .window-dots { display: none; }
+      .window-title { font-size: 0.75rem; }
+      .window-header { padding: 8px 12px; }
+      .benchmark-table th, .benchmark-table td { padding: 9px 12px; font-size: 0.8rem; }
     }
   </style>
 </head>
@@ -644,6 +716,11 @@
         📦 Windows Portable (.zip)
       </a>
       <a class="btn"
+         href="https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-macos.dmg"
+         download>
+        🍎 macOS (.dmg)
+      </a>
+      <a class="btn"
          href="https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-linux-x64.tar.gz"
          download>
         🐧 Linux (.tar.gz)
@@ -654,7 +731,7 @@
         All Releases ↗
       </a>
     </div>
-    <p class="version-note">Release v1.4.3 · Windows x64 (Installer &amp; Portable) &bull; Linux x64 Binaries</p>
+    <p class="version-note">Release v1.4.3 · Windows x64 · macOS (Apple Silicon) · Linux x64</p>
   </section>
 
   <!-- APP PREVIEW MOCKUP -->
@@ -699,7 +776,7 @@
             <span class="status-badge" title="200 OK — The request succeeded and the server returned the requested payload.">200 OK ⓘ</span>
             <span class="time-badge">⏱ 14 ms</span>
             <span class="size-badge">📦 2.4 KB</span>
-            <span style="color:#71717a; margin-left:auto;">DNS: 2ms | TCP: 3ms | TTFB: 8ms</span>
+            <span class="telemetry-timing" style="color:#71717a; margin-left:auto;">DNS: 2ms | TCP: 3ms | TTFB: 8ms</span>
           </div>
           <div class="tabs-row">
             <div class="tab-pill">Pretty</div>
@@ -737,78 +814,81 @@
   <section class="benchmark-section">
     <h2>Native C++ vs. Electron Runtimes</h2>
     <p class="sub">Why native code matters when developing and testing APIs all day.</p>
-    <table class="benchmark-table">
-      <thead>
-        <tr>
-          <th>Metric</th>
-          <th>Postman</th>
-          <th>Bruno</th>
-          <th class="col-highlight">Poppy (v1.4.3)</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td><strong>Architecture</strong></td>
-          <td>Electron (Chromium + Node)</td>
-          <td>Electron (Chromium + Node)</td>
-          <td class="col-highlight"><strong>Native C++20 + Qt 6 + libcurl</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Cold Startup</strong></td>
-          <td>3.0s – 6.0s</td>
-          <td>2.0s – 3.5s</td>
-          <td class="col-highlight"><strong>&lt; 100 ms (Instantaneous)</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Idle Memory (RAM)</strong></td>
-          <td>350 MB – 600 MB</td>
-          <td>180 MB – 320 MB</td>
-          <td class="col-highlight"><strong>&lt; 30 MB</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Data-Driven Testing</strong></td>
-          <td>Paid / Complex</td>
-          <td>CLI Only</td>
-          <td class="col-highlight"><strong>Built-in GUI (CSV/JSON Fixtures)</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Response Cookies Tab</strong></td>
-          <td>Basic Table</td>
-          <td>Raw Headers Only</td>
-          <td class="col-highlight"><strong>Parsed Tab with Flags &amp; Counts</strong></td>
-        </tr>
-        <tr>
-          <td><strong>cURL Paste Auto-Detect</strong></td>
-          <td>Manual Import Modal</td>
-          <td>Manual Import Modal</td>
-          <td class="col-highlight"><strong>Instant Paste in Main URL Bar</strong></td>
-        </tr>
-        <tr>
-          <td><strong>API Doc Generator</strong></td>
-          <td>Cloud Hosted Only</td>
-          <td>None</td>
-          <td class="col-highlight"><strong>Offline Single-Page HTML &amp; Markdown</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Local Mock Server</strong></td>
-          <td>Cloud Only (Paid)</td>
-          <td>None</td>
-          <td class="col-highlight"><strong>Built-in with Latency Sim</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Response Visualizer</strong></td>
-          <td>Manual JS Scripts</td>
-          <td>None</td>
-          <td class="col-highlight"><strong>Auto JSON Table &amp; ASCII Chart</strong></td>
-        </tr>
-        <tr>
-          <td><strong>Protocols</strong></td>
-          <td>Full</td>
-          <td>Partial (Plugins required)</td>
-          <td class="col-highlight"><strong>HTTP, WS, gRPC, SSE, GraphQL</strong></td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-responsive">
+      <table class="benchmark-table">
+        <thead>
+          <tr>
+            <th>Metric</th>
+            <th>Postman</th>
+            <th>Bruno</th>
+            <th class="col-highlight">Poppy (v1.4.3)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Architecture</strong></td>
+            <td>Electron (Chromium + Node)</td>
+            <td>Electron (Chromium + Node)</td>
+            <td class="col-highlight"><strong>Native C++20 + Qt 6 + libcurl</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Cold Startup</strong></td>
+            <td>3.0s – 6.0s</td>
+            <td>2.0s – 3.5s</td>
+            <td class="col-highlight"><strong>&lt; 100 ms (Instantaneous)</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Idle Memory (RAM)</strong></td>
+            <td>350 MB – 600 MB</td>
+            <td>180 MB – 320 MB</td>
+            <td class="col-highlight"><strong>&lt; 30 MB</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Data-Driven Testing</strong></td>
+            <td>Paid / Complex</td>
+            <td>CLI Only</td>
+            <td class="col-highlight"><strong>Built-in GUI (CSV/JSON Fixtures)</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Response Cookies Tab</strong></td>
+            <td>Basic Table</td>
+            <td>Raw Headers Only</td>
+            <td class="col-highlight"><strong>Parsed Tab with Flags &amp; Counts</strong></td>
+          </tr>
+          <tr>
+            <td><strong>cURL Paste Auto-Detect</strong></td>
+            <td>Manual Import Modal</td>
+            <td>Manual Import Modal</td>
+            <td class="col-highlight"><strong>Instant Paste in Main URL Bar</strong></td>
+          </tr>
+          <tr>
+            <td><strong>API Doc Generator</strong></td>
+            <td>Cloud Hosted Only</td>
+            <td>None</td>
+            <td class="col-highlight"><strong>Offline Single-Page HTML &amp; Markdown</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Local Mock Server</strong></td>
+            <td>Cloud Only (Paid)</td>
+            <td>None</td>
+            <td class="col-highlight"><strong>Built-in with Latency Sim</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Response Visualizer</strong></td>
+            <td>Manual JS Scripts</td>
+            <td>None</td>
+            <td class="col-highlight"><strong>Auto JSON Table &amp; ASCII Chart</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Protocols</strong></td>
+            <td>Full</td>
+            <td>Partial (Plugins required)</td>
+            <td class="col-highlight"><strong>HTTP, WS, gRPC, SSE, GraphQL</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="table-scroll-hint">⇄ Swipe horizontally to compare runtimes</p>
   </section>
 
   <!-- ELITE FEATURE PILLARS -->
