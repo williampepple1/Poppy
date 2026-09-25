@@ -11,6 +11,7 @@ add_executable(poppy
     Theme.h Theme.cpp
     components/KeyValueTable.h components/KeyValueTable.cpp
     components/JsonSyntaxHighlighter.h components/JsonSyntaxHighlighter.cpp
+    components/NetworkWaterfallWidget.h components/NetworkWaterfallWidget.cpp
     editors/ParamsEditor.h editors/ParamsEditor.cpp
     editors/HeadersEditor.h editors/HeadersEditor.cpp
     editors/BodyEditor.h editors/BodyEditor.cpp
@@ -27,6 +28,7 @@ add_executable(poppy
     dialogs/SettingsDialog.h dialogs/SettingsDialog.cpp
     dialogs/OAuth2TokenDialog.h dialogs/OAuth2TokenDialog.cpp
     dialogs/QuickOpenDialog.h dialogs/QuickOpenDialog.cpp
+    dialogs/CommandPaletteDialog.h dialogs/CommandPaletteDialog.cpp
     dialogs/CookieManagerDialog.h dialogs/CookieManagerDialog.cpp
     dialogs/DiffViewerDialog.h dialogs/DiffViewerDialog.cpp
     dialogs/WebSocketDialog.h dialogs/WebSocketDialog.cpp
@@ -62,7 +64,7 @@ elseif(APPLE)
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_BUNDLE_NAME "Poppy"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.poppy.app"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.4.3"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.4.3"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.4.4"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.4.4"
     )
 endif()

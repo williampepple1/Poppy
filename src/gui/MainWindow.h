@@ -91,6 +91,7 @@ private slots:
     void onShowSessionTelemetry();
     void onExportMarkdown();
     void onFindAndReplace();
+    void onOpenCommandPalette();
 
 private:
     void setupUi();
@@ -100,6 +101,7 @@ private:
     void saveUiIntoRequest(core::RequestModel& req);
     void closeTab(int index);
     void updateTabTitle(int index);
+    void updateRequestTabBadges();
     core::VariableResolver currentVariableResolver() const;
     core::CollectionItem* scopeItem() const;
     core::RequestModel requestForExecution() const;

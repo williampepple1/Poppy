@@ -9,6 +9,7 @@
 #include <QFile>
 #include <QMessageBox>
 #include <QShortcut>
+#include <QTimer>
 #include <QRegularExpression>
 #include <core/JsonPathEvaluator.h>
 #include <dialogs/DiffViewerDialog.h>
@@ -58,23 +59,18 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     topBar->setSpacing(8);
 
     m_statusBadge = new QLabel(this);
-    m_statusBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_statusBadge->setText("STATUS: ---");
     topBar->addWidget(m_statusBadge);
 
     m_latencyBadge = new QLabel(this);
-    m_latencyBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_latencyBadge->setText("TIME: ---");
     topBar->addWidget(m_latencyBadge);
 
     m_sizeBadge = new QLabel(this);
-    m_sizeBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_sizeBadge->setText("SIZE: ---");
     topBar->addWidget(m_sizeBadge);
 
     m_timingDetails = new QLabel(this);
-    m_timingDetails->setStyleSheet("color: #71717a; font-size: 11px;");
     topBar->addWidget(m_timingDetails);
+
+    applyDefaultBadgeStyles(Theme::isDarkMode());
 
     topBar->addStretch();
 
@@ -105,6 +101,10 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     topBar->addWidget(m_diffBtn);
 
     mainLayout->addLayout(topBar);
+
+    m_waterfallWidget = new NetworkWaterfallWidget(this);
+    m_waterfallWidget->setVisible(false);
+    mainLayout->addWidget(m_waterfallWidget);
 
     // 2. Tabs
     m_tabWidget = new QTabWidget(this);
@@ -413,15 +413,27 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
     mainLayout->addWidget(m_tabWidget);
 }
 
+void ResponseInspector::applyDefaultBadgeStyles(bool isDark) {
+    QString badgeStyle = isDark
+        ? QStringLiteral("background-color: #161820; color: #6b7280; border: 1px solid #252834; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;")
+        : QStringLiteral("background-color: #f1f5f9; color: #94a3b8; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
+    m_statusBadge->setStyleSheet(badgeStyle);
+    m_statusBadge->setText("● STATUS: ---");
+    m_latencyBadge->setStyleSheet(badgeStyle);
+    m_latencyBadge->setText("⏱ TIME: ---");
+    m_sizeBadge->setStyleSheet(badgeStyle);
+    m_sizeBadge->setText("📦 SIZE: ---");
+    m_timingDetails->setStyleSheet(isDark ? "color: #71717a; font-size: 11px;" : "color: #94a3b8; font-size: 11px;");
+}
+
 void ResponseInspector::clear() {
     m_currentResponse = core::ResponseModel{};
-    m_statusBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_statusBadge->setText("STATUS: ---");
-    m_latencyBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_latencyBadge->setText("TIME: ---");
-    m_sizeBadge->setStyleSheet("background-color: #1e1f24; color: #6b7280; border: 1px solid #28292e; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
-    m_sizeBadge->setText("SIZE: ---");
+    applyDefaultBadgeStyles(Theme::isDarkMode());
     m_timingDetails->clear();
+    if (m_waterfallWidget) {
+        m_waterfallWidget->clear();
+        m_waterfallWidget->setVisible(false);
+    }
     m_bodyViewer->clear();
     m_previewBrowser->clear();
     m_hexViewer->clear();
@@ -452,6 +464,11 @@ void ResponseInspector::clear() {
 void ResponseInspector::setTheme(bool isDark) {
     if (m_jsonHighlighter) {
         m_jsonHighlighter->setDarkTheme(isDark);
+    }
+    if (m_currentResponse.statusCode > 0 || !m_currentResponse.errorString.isEmpty()) {
+        updateTelemetryBar(m_currentResponse);
+    } else {
+        applyDefaultBadgeStyles(isDark);
     }
 }
 
@@ -529,24 +546,28 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
     const bool dark = Theme::isDarkMode();
     if (!res.errorString.isEmpty() && res.statusCode == 0) {
         m_statusBadge->setStyleSheet(
-            "background-color: rgba(239, 68, 68, 0.15); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 11px;"
+            "background-color: rgba(239, 68, 68, 0.16); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.40); border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 11px;"
         );
-        m_statusBadge->setText("ERROR");
+        m_statusBadge->setText("● ERROR");
         m_statusBadge->setToolTip(res.errorString);
     } else {
         QColor sc = Theme::statusColor(res.statusCode);
-        QString bgRgba = QString("rgba(%1, %2, %3, 0.15)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
-        QString borderRgba = QString("rgba(%1, %2, %3, 0.35)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
+        QString bgRgba = QString("rgba(%1, %2, %3, 0.16)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
+        QString borderRgba = QString("rgba(%1, %2, %3, 0.40)").arg(sc.red()).arg(sc.green()).arg(sc.blue());
         m_statusBadge->setStyleSheet(QString(
             "background-color: %1; color: %2; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; font-weight: 700; font-size: 11px;"
         ).arg(bgRgba, sc.name(), borderRgba));
-        m_statusBadge->setText(QString("%1 %2").arg(res.statusCode).arg(res.statusText));
+        m_statusBadge->setText(QString("● %1 %2").arg(res.statusCode).arg(res.statusText));
         m_statusBadge->setToolTip(httpStatusExplanation(res.statusCode));
     }
 
-    m_latencyBadge->setStyleSheet(dark
-        ? "background-color: #1e1f24; color: #d1d5db; border: 1px solid #2e2f35; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
-        : "background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
+    // Color-scale latency
+    QColor latColor = (res.latencyMs < 200) ? QColor("#10b981") : (res.latencyMs < 600 ? QColor("#f59e0b") : QColor("#ef4444"));
+    QString latBg = QString("rgba(%1, %2, %3, 0.14)").arg(latColor.red()).arg(latColor.green()).arg(latColor.blue());
+    QString latBorder = QString("rgba(%1, %2, %3, 0.35)").arg(latColor.red()).arg(latColor.green()).arg(latColor.blue());
+    m_latencyBadge->setStyleSheet(QString(
+        "background-color: %1; color: %2; border: 1px solid %3; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
+    ).arg(latBg, latColor.name(), latBorder));
     m_latencyBadge->setText(QString("⏱ %1 ms").arg(res.latencyMs));
 
     // Size formatting
@@ -559,19 +580,27 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
         sizeStr = QString("%1 MB").arg(res.sizeBytes / (1024.0 * 1024.0), 0, 'f', 2);
     }
     m_sizeBadge->setStyleSheet(dark
-        ? "background-color: #1e1f24; color: #d1d5db; border: 1px solid #2e2f35; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
-        : "background-color: #f1f5f9; color: #334155; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
+        ? "background-color: #161820; color: #f3f4f6; border: 1px solid #282a35; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;"
+        : "background-color: #ffffff; color: #0f172a; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; font-weight: 600; font-size: 11px;");
     m_sizeBadge->setText(QString("📦 %1").arg(sizeStr));
 
     // Timing breakdown
-    if (res.dnsTimeMs > 0 || res.connectTimeMs > 0 || res.sslHandshakeTimeMs > 0) {
-        m_timingDetails->setText(QString("DNS: %1ms | TCP: %2ms | SSL: %3ms | TTFB: %4ms")
+    if (res.dnsTimeMs > 0 || res.connectTimeMs > 0 || res.sslHandshakeTimeMs > 0 || res.ttfbMs > 0 || res.latencyMs > 0) {
+        m_timingDetails->setText(QString("DNS: %1ms · TCP: %2ms · SSL: %3ms · TTFB: %4ms")
             .arg(static_cast<int>(res.dnsTimeMs))
             .arg(static_cast<int>(res.connectTimeMs))
             .arg(static_cast<int>(res.sslHandshakeTimeMs))
             .arg(static_cast<int>(res.ttfbMs)));
+        if (m_waterfallWidget) {
+            m_waterfallWidget->setTimings(res.dnsTimeMs, res.connectTimeMs, res.sslHandshakeTimeMs, res.ttfbMs, static_cast<double>(res.latencyMs));
+            m_waterfallWidget->setVisible(m_waterfallWidget->hasData());
+        }
     } else {
         m_timingDetails->clear();
+        if (m_waterfallWidget) {
+            m_waterfallWidget->clear();
+            m_waterfallWidget->setVisible(false);
+        }
     }
 }
 
@@ -656,6 +685,12 @@ void ResponseInspector::toggleWordWrap() {
 void ResponseInspector::copyBodyToClipboard() {
     QClipboard* clipboard = QGuiApplication::clipboard();
     clipboard->setText(m_bodyViewer->toPlainText());
+    if (m_copyBtn) {
+        m_copyBtn->setText("✓ Copied!");
+        QTimer::singleShot(1400, this, [this]() {
+            if (m_copyBtn) m_copyBtn->setText("📋 Copy");
+        });
+    }
 }
 
 void ResponseInspector::saveBodyToFile() {

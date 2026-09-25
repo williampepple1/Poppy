@@ -22,6 +22,7 @@
 #include "dialogs/CollectionRunnerDialog.h"
 #include "dialogs/SettingsDialog.h"
 #include "dialogs/QuickOpenDialog.h"
+#include "dialogs/CommandPaletteDialog.h"
 #include "dialogs/CookieManagerDialog.h"
 #include "dialogs/DiffViewerDialog.h"
 #include "dialogs/WebSocketDialog.h"
@@ -56,10 +57,64 @@
 #include <QHeaderView>
 #include <QCloseEvent>
 #include <QPointer>
+#include <QStyledItemDelegate>
+#include <QPainter>
 #include <core/DocGenerator.h>
 #include <core/VariableResolver.h>
 
 namespace poppy::gui {
+
+namespace {
+
+class MethodItemDelegate : public QStyledItemDelegate {
+public:
+    explicit MethodItemDelegate(QObject* parent = nullptr) : QStyledItemDelegate(parent) {}
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index) const override {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setRenderHint(QPainter::TextAntialiasing, true);
+
+        const bool isDark = Theme::isDarkMode();
+        const bool isSelected = option.state & QStyle::State_Selected;
+
+        if (isSelected) {
+            painter->setPen(Qt::NoPen);
+            painter->setBrush(QColor(isDark ? "#252834" : "#e2e8f0"));
+            painter->drawRoundedRect(option.rect.adjusted(2, 1, -2, -1), 4, 4);
+        }
+
+        auto method = static_cast<core::HttpMethod>(index.data(Qt::UserRole).toInt());
+        QColor color = Theme::methodColor(method);
+        QString text = core::methodToString(method);
+
+        // Pill badge
+        QRect badgeRect(option.rect.left() + 8, option.rect.top() + (option.rect.height() - 18) / 2, 60, 18);
+        QColor bg = color;
+        bg.setAlpha(isDark ? 40 : 30);
+        QColor border = color;
+        border.setAlpha(isDark ? 110 : 80);
+
+        painter->setPen(QPen(border, 1));
+        painter->setBrush(bg);
+        painter->drawRoundedRect(badgeRect, 3, 3);
+
+        QFont f = painter->font();
+        f.setPixelSize(10);
+        f.setBold(true);
+        painter->setFont(f);
+        painter->setPen(color);
+        painter->drawText(badgeRect, Qt::AlignCenter, text);
+
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& /*index*/) const override {
+        return QSize(option.rect.width(), 28);
+    }
+};
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("Poppy - Native API Client");
@@ -114,6 +169,7 @@ void MainWindow::setupUi() {
     connect(m_sidebar, &CollectionSidebar::environmentChanged, this, &MainWindow::onEnvironmentChanged);
     connect(m_sidebar, &CollectionSidebar::manageEnvironmentsRequested, this, &MainWindow::onManageEnvironments);
     connect(m_sidebar, &CollectionSidebar::openCollectionRequested, this, &MainWindow::onOpenCollection);
+    connect(m_sidebar, &CollectionSidebar::gitSyncRequested, this, &MainWindow::onOpenGitSync);
     mainSplitter->addWidget(m_sidebar);
 
     // Right Content Area (Vertical Splitter: Request Editor | Response Inspector)
@@ -202,7 +258,8 @@ void MainWindow::setupUi() {
     m_methodCombo->addItem("PATCH", static_cast<int>(core::HttpMethod::PATCH));
     m_methodCombo->addItem("HEAD", static_cast<int>(core::HttpMethod::HEAD));
     m_methodCombo->addItem("OPTIONS", static_cast<int>(core::HttpMethod::OPTIONS));
-    m_methodCombo->setFixedWidth(95);
+    m_methodCombo->setItemDelegate(new MethodItemDelegate(m_methodCombo));
+    m_methodCombo->setFixedWidth(102);
     connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &MainWindow::onMethodChanged);
     connect(m_methodCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { markCurrentTabDirty(); });
     urlBarLayout->addWidget(m_methodCombo);
@@ -214,7 +271,7 @@ void MainWindow::setupUi() {
 
     m_urlEdit = new QLineEdit(urlBarFrame);
     m_urlEdit->setObjectName("urlEdit");
-    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Enter to send)");
+    m_urlEdit->setPlaceholderText("Enter request URL or {{baseUrl}}/path... (Ctrl+Enter to send)");
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::markCurrentTabDirty);
     connect(m_urlEdit, &QLineEdit::textChanged, this, &MainWindow::updateUrlVariableInspection);
     connect(m_urlEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
@@ -241,9 +298,10 @@ void MainWindow::setupUi() {
 
     urlBarLayout->addWidget(m_urlEdit, 1);
 
-    m_sendBtn = new QPushButton("Send", urlBarFrame);
+    m_sendBtn = new QPushButton("Send  ↵", urlBarFrame);
     m_sendBtn->setObjectName("primaryBtn");
-    m_sendBtn->setFixedWidth(90);
+    m_sendBtn->setFixedWidth(100);
+    m_sendBtn->setToolTip("Send HTTP Request (Ctrl+Enter)");
     connect(m_sendBtn, &QPushButton::clicked, this, &MainWindow::onSendClicked);
     urlBarLayout->addWidget(m_sendBtn);
 
@@ -266,12 +324,19 @@ void MainWindow::setupUi() {
     m_requestTabs->addTab(m_assertionsEditor, "Assertions");
     m_requestTabs->addTab(m_scriptEditor, "Scripts & Tests");
 
-    connect(m_paramsEditor, &ParamsEditor::paramsChanged, this, &MainWindow::markCurrentTabDirty);
-    connect(m_headersEditor, &HeadersEditor::headersChanged, this, &MainWindow::markCurrentTabDirty);
-    connect(m_bodyEditor, &BodyEditor::bodyChanged, this, &MainWindow::markCurrentTabDirty);
-    connect(m_authEditor, &AuthEditor::authChanged, this, &MainWindow::markCurrentTabDirty);
-    connect(m_assertionsEditor, &AssertionsEditor::assertionsChanged, this, &MainWindow::markCurrentTabDirty);
-    connect(m_scriptEditor, &ScriptEditor::scriptChanged, this, &MainWindow::markCurrentTabDirty);
+    auto onEditorModified = [this]() {
+        if (!m_loadingUi) {
+            saveUiIntoRequest(m_currentRequest);
+            updateRequestTabBadges();
+            markCurrentTabDirty();
+        }
+    };
+    connect(m_paramsEditor, &ParamsEditor::paramsChanged, this, onEditorModified);
+    connect(m_headersEditor, &HeadersEditor::headersChanged, this, onEditorModified);
+    connect(m_bodyEditor, &BodyEditor::bodyChanged, this, onEditorModified);
+    connect(m_authEditor, &AuthEditor::authChanged, this, onEditorModified);
+    connect(m_assertionsEditor, &AssertionsEditor::assertionsChanged, this, onEditorModified);
+    connect(m_scriptEditor, &ScriptEditor::scriptChanged, this, onEditorModified);
 
     reqLayout->addWidget(m_requestTabs);
     contentSplitter->addWidget(requestEditorWidget);
@@ -341,17 +406,17 @@ void MainWindow::setupUi() {
     // Status Bar & Variable Quick-Look / Telemetry Widgets
     auto* sb = statusBar();
 
-    m_sessionTelemetryBtn = new QPushButton("⚡ 0 reqs | 📦 0 B | ⏱ 0 ms", this);
+    m_sessionTelemetryBtn = new QPushButton("⚡ 0 reqs · 📦 0 B · ⏱ 0 ms", this);
+    m_sessionTelemetryBtn->setObjectName("sessionTelemetryBtn");
     m_sessionTelemetryBtn->setCursor(Qt::PointingHandCursor);
     m_sessionTelemetryBtn->setToolTip("Session Network Telemetry & Bandwidth (Click to inspect breakdown or reset)");
-    m_sessionTelemetryBtn->setStyleSheet("QPushButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-size: 11px; background: #27272a; color: #a1a1aa; } QPushButton:hover { background: #3f3f46; color: #ffffff; }");
     connect(m_sessionTelemetryBtn, &QPushButton::clicked, this, &MainWindow::onShowSessionTelemetry);
     sb->addPermanentWidget(m_sessionTelemetryBtn);
 
     m_varQuickBtn = new QPushButton("Active Variables: 0", this);
+    m_varQuickBtn->setObjectName("sessionTelemetryBtn");
     m_varQuickBtn->setCursor(Qt::PointingHandCursor);
     m_varQuickBtn->setToolTip("View all active variables across Environment, Folder, and Collection scopes (Click to inspect)");
-    m_varQuickBtn->setStyleSheet("QPushButton { border: 1px solid #3f3f46; border-radius: 3px; padding: 2px 8px; font-size: 11px; background: #27272a; color: #a1a1aa; } QPushButton:hover { background: #3f3f46; color: #ffffff; }");
     connect(m_varQuickBtn, &QPushButton::clicked, this, &MainWindow::onShowQuickVariables);
     sb->addPermanentWidget(m_varQuickBtn);
 
@@ -383,13 +448,16 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("E&xit", this, &QWidget::close);
 
     auto* editMenu = menuBar()->addMenu("&Edit");
+    auto* cmdPaletteAct = editMenu->addAction("&Command Palette...", QKeySequence(Qt::CTRL | Qt::Key_K), this, &MainWindow::onOpenCommandPalette);
+    cmdPaletteAct->setShortcuts({QKeySequence(Qt::CTRL | Qt::Key_K), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_P)});
     editMenu->addAction("Find && &Replace in Collection...", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F), this, &MainWindow::onFindAndReplace);
 
     auto* envMenu = menuBar()->addMenu("&Environments");
     envMenu->addAction("&Manage Environments...", QKeySequence(Qt::CTRL | Qt::Key_E), this, &MainWindow::onManageEnvironments);
 
     auto* toolsMenu = menuBar()->addMenu("&Tools");
-    toolsMenu->addAction("&Cookie Manager...", QKeySequence(Qt::CTRL | Qt::Key_K), this, &MainWindow::onManageCookies);
+    toolsMenu->addAction("&Command Palette...", QKeySequence(Qt::CTRL | Qt::Key_K), this, &MainWindow::onOpenCommandPalette);
+    toolsMenu->addAction("&Cookie Manager...", QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C), this, &MainWindow::onManageCookies);
     toolsMenu->addAction("Clear &Cookie Jar", this, &MainWindow::onClearCookieJar);
     toolsMenu->addSeparator();
     toolsMenu->addAction("Clear &History", this, [this]() {
@@ -428,7 +496,7 @@ void MainWindow::setupMenus() {
     helpMenu->addSeparator();
     helpMenu->addAction("&About Poppy", this, [this]() {
         QMessageBox::about(this, "About Poppy",
-            "<h3>Poppy API Client</h3>"
+            "<h3>Poppy API Client v1.4.4</h3>"
             "<p>A native, ultra-fast, local-first API client & test runner written in C++20 and Qt 6.</p>"
             "<p>Inspired by Bruno. Complete local ownership of your collections and environments.</p>");
     });
@@ -437,17 +505,79 @@ void MainWindow::setupMenus() {
 void MainWindow::onMethodChanged(int index) {
     auto method = static_cast<core::HttpMethod>(m_methodCombo->itemData(index).toInt());
     QColor c = Theme::methodColor(method);
+    const bool dark = Theme::isDarkMode();
     m_methodCombo->setStyleSheet(QString(
         "QComboBox#methodCombo { color: %1; font-weight: 800; font-size: 13px; background: transparent; border: none; padding-left: 6px; }"
-        "QComboBox#methodCombo:hover { background-color: rgba(255, 255, 255, 0.05); border-radius: 4px; }"
+        "QComboBox#methodCombo:hover { background-color: %2; border-radius: 4px; }"
         "QComboBox#methodCombo::drop-down { border: none; width: 16px; }"
-    ).arg(c.name()));
+    ).arg(c.name(), dark ? "rgba(255, 255, 255, 0.06)" : "rgba(0, 0, 0, 0.05)"));
+}
+
+void MainWindow::updateRequestTabBadges() {
+    if (!m_requestTabs) return;
+
+    // 0: Params
+    int paramCount = 0;
+    for (const auto& p : m_currentRequest.queryParams) {
+        if (p.enabled && !p.key.trimmed().isEmpty()) paramCount++;
+    }
+    for (const auto& p : m_currentRequest.pathParams) {
+        if (p.enabled && !p.key.trimmed().isEmpty()) paramCount++;
+    }
+    m_requestTabs->setTabText(0, paramCount > 0 ? QString("Params (%1)").arg(paramCount) : "Params");
+
+    // 1: Headers
+    int headerCount = 0;
+    for (const auto& h : m_currentRequest.headers) {
+        if (h.enabled && !h.name.trimmed().isEmpty()) headerCount++;
+    }
+    m_requestTabs->setTabText(1, headerCount > 0 ? QString("Headers (%1)").arg(headerCount) : "Headers");
+
+    // 2: Body
+    QString bodyTitle = "Body";
+    if (m_currentRequest.bodyType != core::BodyType::None && !m_currentRequest.bodyContent.trimmed().isEmpty()) {
+        bodyTitle = QString("Body (%1)").arg(core::bodyTypeToString(m_currentRequest.bodyType));
+    }
+    m_requestTabs->setTabText(2, bodyTitle);
+
+    // 3: Auth
+    QString authTitle = "Auth";
+    if (m_currentRequest.auth.type != core::AuthType::None) {
+        authTitle = QString("Auth (%1)").arg(core::authTypeToString(m_currentRequest.auth.type));
+    }
+    m_requestTabs->setTabText(3, authTitle);
+
+    // 4: Assertions
+    int assertCount = m_currentRequest.assertions.size();
+    m_requestTabs->setTabText(4, assertCount > 0 ? QString("Assertions (%1)").arg(assertCount) : "Assertions");
+
+    // 5: Scripts
+    int scriptCount = 0;
+    if (!m_currentRequest.scripts.preRequestScript.trimmed().isEmpty()) scriptCount++;
+    if (!m_currentRequest.scripts.postResponseScript.trimmed().isEmpty()) scriptCount++;
+    if (!m_currentRequest.scripts.tests.trimmed().isEmpty()) scriptCount++;
+    m_requestTabs->setTabText(5, scriptCount > 0 ? QString("Scripts (%1)").arg(scriptCount) : "Scripts & Tests");
 }
 
 void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
     m_loadingUi = true;
     m_currentRequest = req;
-    m_requestNameLabel->setText(req.name.isEmpty() ? "Untitled Request" : req.name);
+
+    // Breadcrumb path display
+    QString reqDisplayName = req.name.isEmpty() ? "Untitled Request" : req.name;
+    if (m_activeItem) {
+        QStringList pathParts;
+        for (auto* p = m_activeItem->parent(); p; p = p->parent()) {
+            if (!p->name().isEmpty()) {
+                pathParts.prepend(p->name());
+            }
+        }
+        if (!pathParts.isEmpty()) {
+            reqDisplayName = QString("<span style=\"color:#888ea0; font-weight:normal; font-size:12px;\">%1  ›  </span><b>%2</b>")
+                .arg(pathParts.join("  ›  ").toHtmlEscaped(), (req.name.isEmpty() ? "Untitled Request" : req.name).toHtmlEscaped());
+        }
+    }
+    m_requestNameLabel->setText(reqDisplayName);
 
     int idx = m_methodCombo->findData(static_cast<int>(req.method));
     if (idx >= 0) {
@@ -470,11 +600,16 @@ void MainWindow::loadRequestIntoUi(const core::RequestModel& req) {
 
     m_responseInspector->clear();
     updateUrlVariableInspection();
+    updateRequestTabBadges();
     m_loadingUi = false;
 }
 
 void MainWindow::saveUiIntoRequest(core::RequestModel& req) {
-    req.name = m_requestNameLabel->text();
+    if (m_activeItem && m_activeItem->request()) {
+        req.name = m_activeItem->request()->name;
+    } else if (req.name.isEmpty()) {
+        req.name = "Untitled Request";
+    }
     req.method = static_cast<core::HttpMethod>(m_methodCombo->currentData().toInt());
     req.url = m_urlEdit->text().trimmed();
     req.proxy = m_currentRequest.proxy;
@@ -758,6 +893,80 @@ void MainWindow::onQuickOpen() {
     QuickOpenDialog dialog(&m_collectionModel, this);
     if (dialog.exec() == QDialog::Accepted && dialog.selectedItem()) {
         onRequestSelected(dialog.selectedItem());
+    }
+}
+
+void MainWindow::onOpenCommandPalette() {
+    CommandPaletteDialog dialog(this);
+
+    // 1. Core Actions
+    QList<PaletteEntry> actions = {
+        {PaletteItemType::Action, "Send Request", "Execute current HTTP request", "Ctrl+Enter", "Request", core::HttpMethod::GET, "", nullptr, [this]() { onSendClicked(); }},
+        {PaletteItemType::Action, "New Request", "Create a new blank request tab", "Ctrl+N", "Request", core::HttpMethod::GET, "", nullptr, [this]() { onNewRequest(); }},
+        {PaletteItemType::Action, "Quick Open Request...", "Quickly search and jump to any request", "Ctrl+P", "Request", core::HttpMethod::GET, "", nullptr, [this]() { onQuickOpen(); }},
+        {PaletteItemType::Action, "Save Request", "Save active request to collection disk", "Ctrl+S", "Request", core::HttpMethod::GET, "", nullptr, [this]() { onSaveRequest(); }},
+        {PaletteItemType::Action, "Close Tab", "Close currently active request tab", "Ctrl+W", "Request", core::HttpMethod::GET, "", nullptr, [this]() { onCloseCurrentTab(); }},
+        {PaletteItemType::Action, "Open Collection...", "Open a directory containing Bruno or Poppy collection", "Ctrl+O", "Collection", core::HttpMethod::GET, "", nullptr, [this]() { onOpenCollection(); }},
+        {PaletteItemType::Action, "Copy as cURL", "Export active request as cURL command to clipboard", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onCopyAsCurl(); }},
+        {PaletteItemType::Action, "Show Code Snippets...", "Generate client code in Python, Node.js, Go, Rust, etc.", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onShowCodeSnippets(); }},
+        {PaletteItemType::Action, "Toggle Dark / Light Theme", "Switch between Obsidian dark and crisp light mode", "Ctrl+T", "View", core::HttpMethod::GET, "", nullptr, [this]() { onToggleTheme(); }},
+        {PaletteItemType::Action, "Toggle Layout Split", "Switch between horizontal side-by-side and vertical stacked layout", "Ctrl+Shift+L", "View", core::HttpMethod::GET, "", nullptr, [this]() {
+            if (!m_contentSplitter) return;
+            bool isVert = (m_contentSplitter->orientation() == Qt::Vertical);
+            m_contentSplitter->setOrientation(isVert ? Qt::Horizontal : Qt::Vertical);
+            m_contentSplitter->setSizes({500, 500});
+        }},
+        {PaletteItemType::Action, "Manage Environments...", "Edit environment variables, secrets, and configurations", "Ctrl+E", "Environments", core::HttpMethod::GET, "", nullptr, [this]() { onManageEnvironments(); }},
+        {PaletteItemType::Action, "Cookie Manager...", "Inspect and edit domain cookies stored in jar", "Ctrl+Alt+C", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onManageCookies(); }},
+        {PaletteItemType::Action, "Clear Cookie Jar", "Flush all session and persistent cookies", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onClearCookieJar(); }},
+        {PaletteItemType::Action, "Clear Request History", "Clear all request execution history", "", "History", core::HttpMethod::GET, "", nullptr, [this]() {
+            if (m_historyManager.count() > 0) {
+                auto res = QMessageBox::question(this, "Clear History", "Clear all request execution history?", QMessageBox::Yes | QMessageBox::No);
+                if (res == QMessageBox::Yes) {
+                    m_historyManager.clear();
+                }
+            }
+        }},
+        {PaletteItemType::Action, "Find & Replace in Collection...", "Search and bulk replace strings across collection", "Ctrl+Shift+F", "Edit", core::HttpMethod::GET, "", nullptr, [this]() { onFindAndReplace(); }},
+        {PaletteItemType::Action, "Run Collection Runner...", "Batch execute requests and view automated test results", "", "Collection", core::HttpMethod::GET, "", nullptr, [this]() { onRunCollection(); }},
+        {PaletteItemType::Action, "Session Network Telemetry...", "View network roundtrip statistics and throughput", "", "Telemetry", core::HttpMethod::GET, "", nullptr, [this]() { onShowSessionTelemetry(); }},
+        {PaletteItemType::Action, "Response Diff Viewer...", "Compare two response payloads side-by-side", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenDiffViewer(); }},
+        {PaletteItemType::Action, "WebSocket Client...", "Open interactive real-time WebSocket client", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenWebSocket(); }},
+        {PaletteItemType::Action, "gRPC Client...", "Invoke gRPC services with Protobuf reflection", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGrpc(); }},
+        {PaletteItemType::Action, "Server-Sent Events (SSE)...", "Stream SSE event-source feeds in real-time", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenSse(); }},
+        {PaletteItemType::Action, "Mock Server...", "Launch local HTTP mock server for offline testing", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenMockServer(); }},
+        {PaletteItemType::Action, "Git Sync & Branches...", "Manage git commits, branches, and push/pull", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGitSync(); }},
+        {PaletteItemType::Action, "Generate API Documentation...", "Create styled interactive HTML documentation", "", "Documentation", core::HttpMethod::GET, "", nullptr, [this]() { onGenerateDocumentation(); }},
+        {PaletteItemType::Action, "Export Collection as OpenAPI 3.0...", "Generate OpenAPI v3 JSON specification", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportOpenApi(); }},
+        {PaletteItemType::Action, "Export Collection as Postman (v2.1)...", "Export to Postman collection format", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportPostman(); }},
+        {PaletteItemType::Action, "Export Collection as Insomnia (v4)...", "Export to Insomnia collection format", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportInsomnia(); }},
+        {PaletteItemType::Action, "Export Collection as HTTP Archive (.har)...", "Export collection as HAR archive", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportHar(); }},
+        {PaletteItemType::Action, "Export Collection as Markdown Runbook...", "Generate documentation markdown file", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportMarkdown(); }},
+        {PaletteItemType::Action, "Import Collection / OpenAPI / Postman...", "Import from Bruno, Postman, or OpenAPI file", "", "Import", core::HttpMethod::GET, "", nullptr, [this]() { onImport(); }},
+        {PaletteItemType::Action, "Settings & Preferences...", "Configure SSL verification, proxies, and timeouts", "Ctrl+,", "Settings", core::HttpMethod::GET, "", nullptr, [this]() { onOpenSettings(); }},
+        {PaletteItemType::Action, "Keyboard Shortcuts...", "Show cheat sheet of all Poppy shortcut keys", "Ctrl+/", "Help", core::HttpMethod::GET, "", nullptr, [this]() { onShowShortcuts(); }}
+    };
+    dialog.setActions(actions);
+
+    // 2. Environments
+    QStringList envNames;
+    for (const auto& env : m_collectionModel.environments()) {
+        envNames.append(env.name());
+    }
+    dialog.setEnvironments(envNames, m_activeEnvName);
+
+    // 3. Requests
+    dialog.setCollection(&m_collectionModel);
+
+    if (dialog.exec() == QDialog::Accepted) {
+        PaletteEntry chosen = dialog.selectedEntry();
+        if (chosen.type == PaletteItemType::Action && chosen.action) {
+            chosen.action();
+        } else if (chosen.type == PaletteItemType::Environment) {
+            onEnvironmentChanged(chosen.envName);
+        } else if (chosen.type == PaletteItemType::Request && chosen.requestItem) {
+            onRequestSelected(chosen.requestItem);
+        }
     }
 }
 
@@ -1540,6 +1749,12 @@ void MainWindow::onToggleTheme() {
         app->setStyleSheet(dark ? Theme::darkStyleSheet() : Theme::lightStyleSheet());
     }
     applyRequestChrome();
+    if (m_methodCombo) {
+        onMethodChanged(m_methodCombo->currentIndex());
+    }
+    updateTopEnvCombo();
+    updateRequestTabBadges();
+    m_sidebar->refreshTree();
     m_responseInspector->setTheme(dark);
     statusBar()->showMessage(QString("Switched to %1 theme (Ctrl+T)").arg(dark ? "Dark" : "Light"), 3000);
 }
@@ -1679,11 +1894,11 @@ void MainWindow::updateTopEnvCombo() {
     if (!m_topEnvCombo) return;
     m_topEnvCombo->blockSignals(true);
     m_topEnvCombo->clear();
-    m_topEnvCombo->addItem("No Environment", QString());
+    m_topEnvCombo->addItem("⚪ No Environment", QString());
 
     int selectIdx = 0;
     for (const auto& env : m_collectionModel.environments()) {
-        m_topEnvCombo->addItem(env.name(), env.name());
+        m_topEnvCombo->addItem("🟢 " + env.name(), env.name());
         if (env.name() == m_activeEnvName) {
             selectIdx = m_topEnvCombo->count() - 1;
         }

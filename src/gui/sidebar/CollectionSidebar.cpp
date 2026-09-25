@@ -13,6 +13,9 @@
 #include <components/KeyValueTable.h>
 #include <core/codegen/CodeGenerator.h>
 #include <QDialog>
+#include <QDir>
+#include <QFileInfo>
+#include <QFile>
 
 namespace poppy::gui {
 
@@ -56,12 +59,7 @@ CollectionSidebar::CollectionSidebar(core::CollectionModel* model, core::History
     mainLayout->setSpacing(4);
 
     m_tabs = new QTabWidget(this);
-    m_tabs->setStyleSheet(
-        "QTabWidget::pane { border: none; border-top: 1px solid #232429; background: transparent; }"
-        "QTabBar::tab { background: transparent; color: #9ca3af; padding: 7px 14px; font-weight: 600; border: none; border-bottom: 2px solid transparent; font-size: 12px; }"
-        "QTabBar::tab:selected { color: #f59e0b; border-bottom: 2px solid #f59e0b; }"
-        "QTabBar::tab:hover:!selected { color: #ffffff; background: rgba(255, 255, 255, 0.03); border-top-left-radius: 4px; border-top-right-radius: 4px; }"
-    );
+    m_tabs->setObjectName("sidebarTabs");
 
     // Tab 1: Collections
     auto* colContainer = new QWidget(this);
@@ -119,7 +117,14 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
 
     layout->addLayout(topBtnLayout);
 
-    // 1b. Collection search filter
+    // 1b. Git branch indicator chip
+    m_gitBranchChip = new QPushButton(container);
+    m_gitBranchChip->setCursor(Qt::PointingHandCursor);
+    m_gitBranchChip->setVisible(false);
+    connect(m_gitBranchChip, &QPushButton::clicked, this, &CollectionSidebar::gitSyncRequested);
+    layout->addWidget(m_gitBranchChip);
+
+    // 1c. Collection search filter
     m_collectionFilterEdit = new QLineEdit(container);
     m_collectionFilterEdit->setPlaceholderText("🔍  Search requests...");
     m_collectionFilterEdit->setClearButtonEnabled(true);
@@ -198,10 +203,10 @@ void CollectionSidebar::updateEnvironmentsCombo() {
     if (!m_model) return;
     QString current = m_envCombo->currentData().toString();
     m_envCombo->clear();
-    m_envCombo->addItem("No Environment", "");
+    m_envCombo->addItem("⚪ No Environment", "");
 
     for (const auto& env : m_model->environments()) {
-        m_envCombo->addItem(env.name(), env.name());
+        m_envCombo->addItem("🟢 " + env.name(), env.name());
     }
 
     int idx = m_envCombo->findData(current);
@@ -217,9 +222,76 @@ void CollectionSidebar::setActiveEnvironment(const QString& name) {
     m_envCombo->blockSignals(false);
 }
 
+static QString detectGitBranch(const QString& rootPath) {
+    if (rootPath.isEmpty()) return {};
+    QDir dir(rootPath);
+    while (true) {
+        QString gitPath = dir.filePath(".git");
+        QFileInfo fi(gitPath);
+        if (fi.exists()) {
+            QString headPath;
+            if (fi.isDir()) {
+                headPath = dir.filePath(".git/HEAD");
+            } else if (fi.isFile()) {
+                QFile f(gitPath);
+                if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    QString line = QString::fromUtf8(f.readLine()).trimmed();
+                    if (line.startsWith("gitdir:", Qt::CaseInsensitive)) {
+                        QString targetDir = line.mid(7).trimmed();
+                        QDir gDir(fi.absoluteDir());
+                        headPath = gDir.filePath(targetDir + "/HEAD");
+                    }
+                }
+            }
+            if (!headPath.isEmpty()) {
+                QFile headFile(headPath);
+                if (headFile.open(QIODevice::ReadOnly | QIODevice::Text)) {
+                    QString content = QString::fromUtf8(headFile.readLine()).trimmed();
+                    if (content.startsWith("ref: refs/heads/")) {
+                        return content.mid(16).trimmed();
+                    } else if (!content.isEmpty()) {
+                        return content.left(7);
+                    }
+                }
+            }
+            break;
+        }
+        if (!dir.cdUp()) break;
+    }
+    return {};
+}
+
+void CollectionSidebar::updateGitBranch() {
+    if (!m_gitBranchChip) return;
+    if (!m_model || m_model->rootPath().isEmpty()) {
+        m_gitBranchChip->setVisible(false);
+        return;
+    }
+
+    QString branch = detectGitBranch(m_model->rootPath());
+    if (branch.isEmpty()) {
+        m_gitBranchChip->setVisible(false);
+        return;
+    }
+
+    const bool dark = Theme::isDarkMode();
+    m_gitBranchChip->setText(QString("🌿 %1").arg(branch));
+    m_gitBranchChip->setToolTip(QString("Git Branch: %1\nRepository: %2\nClick to open Git Sync & Branches dialog").arg(branch, m_model->rootPath()));
+    m_gitBranchChip->setStyleSheet(QString(
+        "QPushButton { text-align: left; padding: 4px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; "
+        "background-color: %1; color: %2; border: 1px solid %3; }"
+        "QPushButton:hover { background-color: %4; border-color: #10b981; }"
+    ).arg(dark ? "rgba(16, 185, 129, 0.12)" : "rgba(16, 185, 129, 0.10)",
+          dark ? "#10b981" : "#047857",
+          dark ? "rgba(16, 185, 129, 0.35)" : "rgba(16, 185, 129, 0.40)",
+          dark ? "rgba(16, 185, 129, 0.22)" : "rgba(16, 185, 129, 0.18)"));
+    m_gitBranchChip->setVisible(true);
+}
+
 void CollectionSidebar::refreshTree() {
     m_tree->clear();
     updateEnvironmentsCombo();
+    updateGitBranch();
 
     if (!m_model) return;
     auto* root = m_model->rootItem();

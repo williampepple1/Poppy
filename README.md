@@ -292,10 +292,11 @@ The repository includes an automated release workflow ([`.github/workflows/relea
   - `Poppy-windows-x64-setup.exe` (Windows Installer with Start Menu, Desktop Shortcut, Uninstaller & `.bru` Association)
   - `Poppy-windows-x64.zip` (Windows Portable)
   - `Poppy-linux-x64.tar.gz` (Linux Portable)
-- **Version Tag**: Push any version tag (e.g. `v1.4.3`) to publish a release snapshot with all installers and archives:
+  - `Poppy-macos.dmg` & `Poppy-macos.zip` (macOS Apple Silicon & Intel)
+- **Version Tag**: Push any version tag (e.g. `v1.4.4`) to publish a release snapshot with all installers and archives:
   ```bash
-  git tag v1.4.3
-  git push origin v1.4.3
+  git tag v1.4.4
+  git push origin v1.4.4
   ```
 - **Manual Trigger**: Navigate to **GitHub Actions -> Release -> Run workflow**, specify the tag name, and trigger on demand.
 

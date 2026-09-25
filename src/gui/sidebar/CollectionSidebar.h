@@ -23,6 +23,7 @@ public:
     void updateEnvironmentsCombo();
     void setActiveEnvironment(const QString& name);
     QString currentEnvironmentName() const;
+    void updateGitBranch();
 
 signals:
     void requestSelected(core::CollectionItem* item);
@@ -30,6 +31,7 @@ signals:
     void environmentChanged(const QString& envName);
     void manageEnvironmentsRequested();
     void openCollectionRequested();
+    void gitSyncRequested();
 
 private slots:
     void onItemClicked(QTreeWidgetItem* item, int column);
@@ -69,6 +71,7 @@ private:
     QPushButton* m_openBtn;
     QPushButton* m_addReqBtn;
     QPushButton* m_addFolderBtn;
+    QPushButton* m_gitBranchChip{nullptr};
     QTreeWidget* m_tree;
 
     // History Tab widgets

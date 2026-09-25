@@ -16,8 +16,8 @@ QString VariableResolver::lookupVariable(const QString& name) const {
 }
 
 QString VariableResolver::lookupVariableWithScope(const QString& name, QString* outScope) const {
-    // 1. Dynamic generators (exact token names only)
-    if (name == QLatin1String("$guid")) {
+    // 1. Dynamic generators (faker and runtime utilities)
+    if (name == QLatin1String("$guid") || name == QLatin1String("$randomUUID")) {
         if (outScope) *outScope = "Dynamic ($guid)";
         return QUuid::createUuid().toString(QUuid::WithoutBraces);
     }
@@ -25,9 +25,53 @@ QString VariableResolver::lookupVariableWithScope(const QString& name, QString* 
         if (outScope) *outScope = "Dynamic ($timestamp)";
         return QString::number(QDateTime::currentSecsSinceEpoch());
     }
+    if (name == QLatin1String("$timestampMs")) {
+        if (outScope) *outScope = "Dynamic ($timestampMs)";
+        return QString::number(QDateTime::currentMSecsSinceEpoch());
+    }
+    if (name == QLatin1String("$isoTimestamp")) {
+        if (outScope) *outScope = "Dynamic ($isoTimestamp)";
+        return QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+    }
     if (name == QLatin1String("$randomInt")) {
         if (outScope) *outScope = "Dynamic ($randomInt)";
-        return QString::number(QRandomGenerator::global()->bounded(1000));
+        return QString::number(QRandomGenerator::global()->bounded(1, 1000));
+    }
+    if (name == QLatin1String("$randomEmail")) {
+        if (outScope) *outScope = "Dynamic ($randomEmail)";
+        quint32 n = QRandomGenerator::global()->bounded(100, 9999);
+        return QString("user%1@example.com").arg(n);
+    }
+    if (name == QLatin1String("$randomFirstName")) {
+        if (outScope) *outScope = "Dynamic ($randomFirstName)";
+        static const QStringList names = {"Alex", "Jordan", "Taylor", "Morgan", "Sam", "Chris", "Pat", "Riley", "Casey", "Avery"};
+        return names.at(QRandomGenerator::global()->bounded(names.size()));
+    }
+    if (name == QLatin1String("$randomLastName")) {
+        if (outScope) *outScope = "Dynamic ($randomLastName)";
+        static const QStringList names = {"Smith", "Johnson", "Williams", "Brown", "Jones", "Garcia", "Miller", "Davis", "Taylor"};
+        return names.at(QRandomGenerator::global()->bounded(names.size()));
+    }
+    if (name == QLatin1String("$randomFullName")) {
+        if (outScope) *outScope = "Dynamic ($randomFullName)";
+        static const QStringList firsts = {"Alex", "Jordan", "Taylor", "Morgan", "Sam", "Chris"};
+        static const QStringList lasts = {"Smith", "Johnson", "Williams", "Brown", "Davis"};
+        return QString("%1 %2").arg(firsts.at(QRandomGenerator::global()->bounded(firsts.size())),
+                                    lasts.at(QRandomGenerator::global()->bounded(lasts.size())));
+    }
+    if (name == QLatin1String("$randomBoolean")) {
+        if (outScope) *outScope = "Dynamic ($randomBoolean)";
+        return (QRandomGenerator::global()->bounded(2) == 1) ? QStringLiteral("true") : QStringLiteral("false");
+    }
+    if (name == QLatin1String("$randomPrice")) {
+        if (outScope) *outScope = "Dynamic ($randomPrice)";
+        double price = QRandomGenerator::global()->bounded(100, 9999) / 100.0;
+        return QString::number(price, 'f', 2);
+    }
+    if (name == QLatin1String("$randomColor")) {
+        if (outScope) *outScope = "Dynamic ($randomColor)";
+        static const QStringList colors = {"#10b981", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4"};
+        return colors.at(QRandomGenerator::global()->bounded(colors.size()));
     }
 
     // Nearest scope wins: runtime, then folder, collection, environment, global.
@@ -62,6 +106,21 @@ QString VariableResolver::lookupVariableWithScope(const QString& name, QString* 
 
 QMap<QString, QPair<QString, QString>> VariableResolver::allAvailableVariables() const {
     QMap<QString, QPair<QString, QString>> result;
+    // Dynamic utility tokens
+    result["$guid"] = {"Random UUID v4", "Dynamic"};
+    result["$randomUUID"] = {"Random UUID v4", "Dynamic"};
+    result["$timestamp"] = {"Current Unix epoch (s)", "Dynamic"};
+    result["$timestampMs"] = {"Current Unix epoch (ms)", "Dynamic"};
+    result["$isoTimestamp"] = {"Current UTC ISO-8601 string", "Dynamic"};
+    result["$randomInt"] = {"Random integer (1-1000)", "Dynamic"};
+    result["$randomEmail"] = {"Random email address", "Dynamic"};
+    result["$randomFirstName"] = {"Random first name", "Dynamic"};
+    result["$randomLastName"] = {"Random last name", "Dynamic"};
+    result["$randomFullName"] = {"Random full name", "Dynamic"};
+    result["$randomBoolean"] = {"Random boolean (true/false)", "Dynamic"};
+    result["$randomPrice"] = {"Random price (0.00-99.99)", "Dynamic"};
+    result["$randomColor"] = {"Random hex color", "Dynamic"};
+
     for (auto it = m_globals.cbegin(); it != m_globals.cend(); ++it) {
         result[it.key()] = {it.value(), "Global"};
     }

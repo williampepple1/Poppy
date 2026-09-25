@@ -97,7 +97,24 @@ int main() {
     QString tsOk = resolver.resolveString("{{$timestamp}}");
     assert(!tsOk.contains("{{$timestamp}}"));
     assert(resolver.resolveString("{{$timestampMillis}}") == "{{$timestampMillis}}");
-    assert(resolver.resolveString("{{$guidExtra}}") == "{{$guidExtra}}");
+    // Test extended dynamic generator variables
+    QString emailRes = resolver.resolveString("Email: {{$randomEmail}}");
+    assert(emailRes.contains("@example.com"));
+
+    QString uuidRes = resolver.resolveString("UUID: {{$randomUUID}}");
+    assert(!uuidRes.contains("{{$randomUUID}}") && uuidRes.length() > 20);
+
+    QString isoRes = resolver.resolveString("ISO: {{$isoTimestamp}}");
+    assert(isoRes.contains("T") && isoRes.contains("Z"));
+
+    QString nameRes = resolver.resolveString("Name: {{$randomFullName}}");
+    assert(!nameRes.contains("{{$randomFullName}}") && nameRes.contains(" "));
+
+    QString priceRes = resolver.resolveString("Price: {{$randomPrice}}");
+    assert(priceRes.contains("."));
+
+    QString colorRes = resolver.resolveString("Color: {{$randomColor}}");
+    assert(colorRes.startsWith("Color: #"));
 
     std::cout << "test_variable_resolver PASSED!" << std::endl;
     return 0;

@@ -49,16 +49,16 @@ public:
             else if (mStr == "OPTIONS") mStr = "OPT";
 
             // Draw compact pill badge
-            const int badgeWidth = 36;
-            const int badgeHeight = 16;
+            const int badgeWidth = 38;
+            const int badgeHeight = 17;
             QRect badgeRect(option.rect.left() + 6, option.rect.top() + (option.rect.height() - badgeHeight) / 2, badgeWidth, badgeHeight);
 
             // Badge background & border
-            QColor bgTint(mColor.red(), mColor.green(), mColor.blue(), isDark ? 36 : 28);
-            QColor borderTint(mColor.red(), mColor.green(), mColor.blue(), isDark ? 100 : 80);
+            QColor bgTint(mColor.red(), mColor.green(), mColor.blue(), isDark ? 40 : 30);
+            QColor borderTint(mColor.red(), mColor.green(), mColor.blue(), isDark ? 110 : 85);
             painter->setPen(QPen(borderTint, 1));
             painter->setBrush(bgTint);
-            painter->drawRoundedRect(badgeRect, 3, 3);
+            painter->drawRoundedRect(badgeRect, 4, 4);
 
             // Badge text
             QFont badgeFont = painter->font();
@@ -78,7 +78,7 @@ public:
                 nameFont.setBold(isSelected);
                 painter->setFont(nameFont);
                 painter->setPen(isSelected ? (isDark ? QColor("#ffffff") : QColor("#0f172a"))
-                                           : (isDark ? QColor("#e5e7eb") : QColor("#1e293b")));
+                                           : (isDark ? QColor("#f3f4f6") : QColor("#1e293b")));
                 QString displayName = index.data(Qt::DisplayRole).toString();
                 painter->drawText(textRect, Qt::AlignVCenter | Qt::AlignLeft, painter->fontMetrics().elidedText(displayName, Qt::ElideRight, textRect.width()));
             }
@@ -95,13 +95,13 @@ public:
             QString urlOrName = index.data(Qt::DisplayRole).toString();
 
             // Method badge
-            QRect mBadge(option.rect.left() + 6, option.rect.top() + 4, 34, 15);
-            painter->setPen(QPen(QColor(mColor.red(), mColor.green(), mColor.blue(), 100), 1));
-            painter->setBrush(QColor(mColor.red(), mColor.green(), mColor.blue(), isDark ? 36 : 28));
-            painter->drawRoundedRect(mBadge, 3, 3);
+            QRect mBadge(option.rect.left() + 6, option.rect.top() + 4, 36, 16);
+            painter->setPen(QPen(QColor(mColor.red(), mColor.green(), mColor.blue(), 110), 1));
+            painter->setBrush(QColor(mColor.red(), mColor.green(), mColor.blue(), isDark ? 40 : 30));
+            painter->drawRoundedRect(mBadge, 4, 4);
 
             QFont bFont = painter->font();
-            bFont.setPixelSize(8);
+            bFont.setPixelSize(9);
             bFont.setBold(true);
             painter->setFont(bFont);
             painter->setPen(mColor);
@@ -109,10 +109,10 @@ public:
 
             // Status code pill
             QColor sColor = Theme::statusColor(statusCode);
-            QRect sBadge(mBadge.right() + 4, option.rect.top() + 4, 30, 15);
-            painter->setPen(QPen(QColor(sColor.red(), sColor.green(), sColor.blue(), 100), 1));
-            painter->setBrush(QColor(sColor.red(), sColor.green(), sColor.blue(), isDark ? 36 : 28));
-            painter->drawRoundedRect(sBadge, 3, 3);
+            QRect sBadge(mBadge.right() + 5, option.rect.top() + 4, 34, 16);
+            painter->setPen(QPen(QColor(sColor.red(), sColor.green(), sColor.blue(), 110), 1));
+            painter->setBrush(QColor(sColor.red(), sColor.green(), sColor.blue(), isDark ? 40 : 30));
+            painter->drawRoundedRect(sBadge, 4, 4);
             painter->setPen(sColor);
             painter->drawText(sBadge, Qt::AlignCenter, statusCode > 0 ? QString::number(statusCode) : "ERR");
 
@@ -120,9 +120,9 @@ public:
             const int latLeft = sBadge.right() + 6;
             const int latWidth = option.rect.right() - latLeft - 4;
             if (latWidth > 0) {
-                QRect latRect(latLeft, option.rect.top() + 4, latWidth, 15);
+                QRect latRect(latLeft, option.rect.top() + 4, latWidth, 16);
                 QFont latFont = painter->font();
-                latFont.setPixelSize(9);
+                latFont.setPixelSize(10);
                 latFont.setBold(false);
                 painter->setFont(latFont);
                 painter->setPen(QColor(isDark ? "#9ca3af" : "#64748b"));
@@ -132,7 +132,7 @@ public:
             // URL on second line
             const int urlWidth = option.rect.width() - 12;
             if (urlWidth > 0) {
-                QRect urlRect(option.rect.left() + 6, option.rect.top() + 21, urlWidth, 16);
+                QRect urlRect(option.rect.left() + 6, option.rect.top() + 22, urlWidth, 16);
                 QFont urlFont = option.font;
                 urlFont.setPixelSize(11);
                 painter->setFont(urlFont);
@@ -162,9 +162,9 @@ public:
     QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override {
         int itemType = index.data(Qt::UserRole + 2).toInt();
         if (itemType == 2) {
-            return QSize(option.rect.width(), 40); // 2-line row for history
+            return QSize(option.rect.width(), 42); // 2-line row for history
         }
-        return QSize(option.rect.width(), 28); // comfortable 28px row height
+        return QSize(option.rect.width(), 30); // comfortable 30px row height
     }
 };
 

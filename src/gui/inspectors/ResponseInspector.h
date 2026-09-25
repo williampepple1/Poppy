@@ -10,6 +10,7 @@
 #include <QTextBrowser>
 #include <QTreeWidget>
 #include <components/JsonSyntaxHighlighter.h>
+#include <components/NetworkWaterfallWidget.h>
 #include <core/ResponseModel.h>
 #include <core/ScriptRunner.h>
 
@@ -46,6 +47,7 @@ signals:
     void storeVariableRequested(const QString& selectedValue);
 
 private:
+    void applyDefaultBadgeStyles(bool isDark);
     void updateTelemetryBar(const core::ResponseModel& res);
     void updateHeadersTable(const core::ResponseModel& res);
     void updateTestsTab(const core::TestReport* testReport);
@@ -57,6 +59,7 @@ private:
     QLabel* m_latencyBadge;
     QLabel* m_sizeBadge;
     QLabel* m_timingDetails;
+    NetworkWaterfallWidget* m_waterfallWidget{nullptr};
     QPushButton* m_prettyRawToggleBtn;
     QPushButton* m_wordWrapBtn;
     QPushButton* m_copyBtn;
