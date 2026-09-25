@@ -134,7 +134,7 @@ private:
     void updateCookiesTab(const core::ResponseModel& res);
     void updateJsonTreeTab(const core::ResponseModel& res);
     static void populateJsonTree(QTreeWidgetItem* parent, const QJsonValue& val, const QString& key = {});
-    void filterJsonTree(QTreeWidgetItem* item, const QString& query);
+    bool filterJsonTree(QTreeWidgetItem* item, const QString& query, bool ancestorMatch = false);
     static QString httpStatusExplanation(int code);
 };
 

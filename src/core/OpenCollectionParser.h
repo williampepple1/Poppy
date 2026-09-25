@@ -22,6 +22,7 @@ struct OpenCollectionInfo {
     QString version;
     AuthModel auth;
     QMap<QString, QString> vars;
+    QList<HttpHeader> headers;
 };
 
 class OpenCollectionParser {

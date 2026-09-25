@@ -375,15 +375,25 @@ ResponseInspector::ResponseInspector(QWidget* parent) : QWidget(parent) {
         connect(copyVal, &QAction::triggered, this, [item]() {
             QGuiApplication::clipboard()->setText(item->text(1));
         });
-        connect(copyPath, &QAction::triggered, this, [this, item]() {
-            // Build JSONPath by walking up to root
+        connect(copyPath, &QAction::triggered, this, [item]() {
             QStringList parts;
             const QTreeWidgetItem* cur = item;
             while (cur && cur->parent()) {
-                QString key = cur->text(0);
-                bool isIndex = false;
-                key.toInt(&isIndex);
-                parts.prepend(isIndex ? QString("[%1]").arg(key) : QString(".%1").arg(key));
+                const QString key = cur->text(0);
+                const bool inArray = cur->parent()->text(2) == QLatin1String("array");
+                if (inArray) {
+                    parts.prepend(QString("[%1]").arg(key));
+                } else {
+                    static const QRegularExpression ident(QStringLiteral("^[A-Za-z_][A-Za-z0-9_]*$"));
+                    if (ident.match(key).hasMatch()) {
+                        parts.prepend(QString(".%1").arg(key));
+                    } else {
+                        QString escaped = key;
+                        escaped.replace('\\', "\\\\");
+                        escaped.replace('\'', "\\'");
+                        parts.prepend(QString("['%1']").arg(escaped));
+                    }
+                }
                 cur = cur->parent();
             }
             QGuiApplication::clipboard()->setText("$" + parts.join(""));
@@ -1133,8 +1143,9 @@ void ResponseInspector::updateJsonTreeTab(const core::ResponseModel& res) {
     m_jsonTreeWidget->clear();
     m_jsonTreeSearch->clear();
 
+    const int treeIndex = m_tabWidget->indexOf(m_jsonTreeTab);
     if (!res.isJson()) {
-        m_tabWidget->setTabText(8, "JSON Tree");
+        if (treeIndex >= 0) m_tabWidget->setTabText(treeIndex, "JSON Tree");
         auto* placeholder = new QTreeWidgetItem(m_jsonTreeWidget);
         placeholder->setText(0, "(not JSON)");
         placeholder->setForeground(0, QBrush(QColor("#71717a")));
@@ -1144,7 +1155,7 @@ void ResponseInspector::updateJsonTreeTab(const core::ResponseModel& res) {
     QJsonParseError err;
     QJsonDocument doc = QJsonDocument::fromJson(res.rawBody, &err);
     if (doc.isNull()) {
-        m_tabWidget->setTabText(8, "JSON Tree");
+        if (treeIndex >= 0) m_tabWidget->setTabText(treeIndex, "JSON Tree");
         auto* placeholder = new QTreeWidgetItem(m_jsonTreeWidget);
         placeholder->setText(0, "Parse error: " + err.errorString());
         placeholder->setForeground(0, QBrush(QColor("#ef4444")));
@@ -1165,7 +1176,7 @@ void ResponseInspector::updateJsonTreeTab(const core::ResponseModel& res) {
     int count = 0;
     if (doc.isObject()) count = doc.object().size();
     else count = doc.array().size();
-    m_tabWidget->setTabText(8, QString("JSON Tree (%1)").arg(count));
+    if (treeIndex >= 0) m_tabWidget->setTabText(treeIndex, QString("JSON Tree (%1)").arg(count));
 }
 
 /*static*/ void ResponseInspector::populateJsonTree(QTreeWidgetItem* parent, const QJsonValue& val, const QString& key) {
@@ -1246,21 +1257,22 @@ void ResponseInspector::updateJsonTreeTab(const core::ResponseModel& res) {
     Q_UNUSED(key)
 }
 
-void ResponseInspector::filterJsonTree(QTreeWidgetItem* item, const QString& query) {
-    if (!item) return;
-    bool selfMatch = query.isEmpty()
+bool ResponseInspector::filterJsonTree(QTreeWidgetItem* item, const QString& query, bool ancestorMatch) {
+    if (!item) return false;
+    const bool selfMatch = query.isEmpty()
         || item->text(0).contains(query, Qt::CaseInsensitive)
         || item->text(1).contains(query, Qt::CaseInsensitive);
+    const bool showDescendants = ancestorMatch || selfMatch;
 
     bool childMatch = false;
     for (int i = 0; i < item->childCount(); ++i) {
-        filterJsonTree(item->child(i), query);
-        if (!item->child(i)->isHidden()) childMatch = true;
+        if (filterJsonTree(item->child(i), query, showDescendants)) childMatch = true;
     }
 
-    bool visible = selfMatch || childMatch;
+    const bool visible = query.isEmpty() || selfMatch || childMatch || ancestorMatch;
     item->setHidden(!visible);
-    if (!query.isEmpty() && visible) item->setExpanded(true);
+    if (!query.isEmpty() && visible && (selfMatch || childMatch)) item->setExpanded(true);
+    return selfMatch || childMatch;
 }
 
 } // namespace poppy::gui

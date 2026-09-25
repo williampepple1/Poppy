@@ -1,6 +1,10 @@
 #include "OpenCollectionParser.h"
+#include <QFile>
 #include <QFileInfo>
 #include <QDir>
+#include <QSet>
+#include <QTextStream>
+#include <QRegularExpression>
 
 namespace poppy::core {
 
@@ -46,6 +50,46 @@ void parseAuthNode(const YamlNode& authNode, AuthModel& auth) {
         auth.type = AuthType::Inherit;
     } else if (aType == "none") {
         auth.type = AuthType::None;
+    }
+}
+
+QString capturePreservedSections(const QString& yamlText) {
+    static const QSet<QString> preservedKeys = {
+        QStringLiteral("settings"),
+        QStringLiteral("examples"),
+        QStringLiteral("docs")
+    };
+    const QStringList lines = yamlText.split(QRegularExpression(QStringLiteral("\r\n|\n|\r")));
+    QString result;
+    bool capturing = false;
+    for (const QString& line : lines) {
+        const QString trimmed = line.trimmed();
+        const bool topLevel = !line.startsWith(' ') && !line.startsWith('\t')
+            && !trimmed.isEmpty() && !trimmed.startsWith('#');
+        if (topLevel) {
+            const int colon = line.indexOf(':');
+            const QString key = colon > 0 ? line.left(colon).trimmed() : QString();
+            capturing = preservedKeys.contains(key);
+        }
+        if (capturing) {
+            result += line;
+            result += '\n';
+        }
+    }
+    return result;
+}
+
+void parseRuntimeVariables(const YamlNode& node, RequestModel& req) {
+    if (!node.hasKey("runtime")) return;
+    const auto& runtime = node["runtime"];
+    if (!runtime.hasKey("variables") || !runtime["variables"].isSequence()) return;
+    for (const auto& item : runtime["variables"].sequence) {
+        RuntimeVariable var;
+        var.name = item["name"].asString();
+        var.value = item["value"].asString();
+        if (item.hasKey("disabled")) var.enabled = !item["disabled"].asBool(false);
+        else if (item.hasKey("enabled")) var.enabled = item["enabled"].asBool(true);
+        if (!var.name.isEmpty()) req.runtimeVariables.append(var);
     }
 }
 
@@ -172,6 +216,8 @@ RequestModel OpenCollectionParser::parseRequest(const YamlNode& node, const QStr
         parseAuthNode(node["request"]["auth"], req.auth);
     }
 
+    parseRuntimeVariables(node, req);
+
     // Runtime scripts
     if (node.hasKey("runtime") && node["runtime"].hasKey("scripts") && node["runtime"]["scripts"].isSequence()) {
         for (const auto& script : node["runtime"]["scripts"].sequence) {
@@ -192,13 +238,18 @@ RequestModel OpenCollectionParser::parseRequest(const YamlNode& node, const QStr
 
 RequestModel OpenCollectionParser::parseRequestText(const QString& yamlText, const QString& fallbackName) {
     YamlNode node = YamlNode::parse(yamlText);
-    return parseRequest(node, fallbackName);
+    RequestModel req = parseRequest(node, fallbackName);
+    req.preservedOpenCollectionYaml = capturePreservedSections(yamlText);
+    return req;
 }
 
 RequestModel OpenCollectionParser::parseRequestFile(const QString& filePath) {
-    YamlNode node = YamlNode::parseFile(filePath);
-    QString fallbackName = QFileInfo(filePath).completeBaseName();
-    return parseRequest(node, fallbackName);
+    QFile file(filePath);
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        return RequestModel{};
+    }
+    QTextStream in(&file);
+    return parseRequestText(in.readAll(), QFileInfo(filePath).completeBaseName());
 }
 
 EnvironmentModel OpenCollectionParser::parseEnvironment(const YamlNode& node, const QString& fallbackName) {
@@ -247,8 +298,16 @@ OpenCollectionFolderInfo OpenCollectionParser::parseFolder(const YamlNode& node,
                 QString hn = h["name"].asString();
                 QString hv = h["value"].asString();
                 bool disabled = h["disabled"].asBool(false);
-                info.headers.append(HttpHeader{hn, hv, !disabled, QString()});
-                info.vars.insert(hn, hv);
+                if (!hn.isEmpty()) {
+                    info.headers.append(HttpHeader{hn, hv, !disabled, QString()});
+                }
+            }
+        }
+        if (req.hasKey("variables") && req["variables"].isSequence()) {
+            for (const auto& item : req["variables"].sequence) {
+                QString name = item["name"].asString();
+                if (name.isEmpty() || item["disabled"].asBool(false)) continue;
+                info.vars.insert(name, item["value"].asString());
             }
         }
     }
@@ -273,8 +332,28 @@ OpenCollectionInfo OpenCollectionParser::parseCollection(const YamlNode& node, c
     if (node.hasKey("auth")) {
         parseAuthNode(node["auth"], info.auth);
     }
-    if (node.hasKey("request") && node["request"].hasKey("auth")) {
-        parseAuthNode(node["request"]["auth"], info.auth);
+    if (node.hasKey("request")) {
+        const auto& req = node["request"];
+        if (req.hasKey("auth")) {
+            parseAuthNode(req["auth"], info.auth);
+        }
+        if (req.hasKey("headers") && req["headers"].isSequence()) {
+            for (const auto& h : req["headers"].sequence) {
+                QString hn = h["name"].asString();
+                QString hv = h["value"].asString();
+                bool disabled = h["disabled"].asBool(false);
+                if (!hn.isEmpty()) {
+                    info.headers.append(HttpHeader{hn, hv, !disabled, QString()});
+                }
+            }
+        }
+        if (req.hasKey("variables") && req["variables"].isSequence()) {
+            for (const auto& item : req["variables"].sequence) {
+                QString name = item["name"].asString();
+                if (name.isEmpty() || item["disabled"].asBool(false)) continue;
+                info.vars.insert(name, item["value"].asString());
+            }
+        }
     }
     return info;
 }

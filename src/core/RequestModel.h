@@ -125,6 +125,14 @@ struct ScriptModel {
     bool operator==(const ScriptModel& other) const = default;
 };
 
+struct RuntimeVariable {
+    QString name;
+    QString value;
+    bool enabled{true};
+
+    bool operator==(const RuntimeVariable& other) const = default;
+};
+
 class RequestModel {
 public:
     RequestModel();
@@ -150,6 +158,9 @@ public:
     AuthModel auth;
     ScriptModel scripts;
     QList<AssertionRule> assertions;
+    QList<RuntimeVariable> runtimeVariables;
+    // Top-level OpenCollection sections the editor does not edit (settings, examples, docs).
+    QString preservedOpenCollectionYaml;
 
     // Computed effective URL after query and path parameter resolution
     QString effectiveUrl() const;

@@ -10,6 +10,11 @@
 #include <QClipboard>
 #include <QGuiApplication>
 #include <QApplication>
+#include <QSettings>
+#include <QDragEnterEvent>
+#include <QDropEvent>
+#include <QMimeData>
+#include <QStandardPaths>
 #include <Theme.h>
 #include "dialogs/EnvironmentDialog.h"
 #include "dialogs/CodeSnippetDialog.h"
@@ -61,6 +66,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowIcon(QIcon(":/icons/app_icon.png"));
     resize(1200, 750);
     setMinimumSize(800, 500);
+    setAcceptDrops(true);
 
     m_historyManager.loadFromFile(core::HistoryManager::defaultHistoryFilePath());
 
@@ -85,6 +91,8 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     m_openRequestsTabBar->addTab("Quick Request");
     m_currentTabIndex = 0;
     loadRequestIntoUi(m_currentRequest);
+
+    restoreAppState();
 }
 
 MainWindow::~MainWindow() = default;
@@ -96,7 +104,8 @@ void MainWindow::setupUi() {
     mainLayout->setSpacing(0);
 
     // 1. Central Horizontal Splitter: Sidebar | Main Content
-    auto* mainSplitter = new QSplitter(Qt::Horizontal, this);
+    m_mainSplitter = new QSplitter(Qt::Horizontal, this);
+    auto* mainSplitter = m_mainSplitter;
 
     // Sidebar
     m_sidebar = new CollectionSidebar(&m_collectionModel, &m_historyManager, this);
@@ -355,6 +364,9 @@ void MainWindow::setupMenus() {
     fileMenu->addAction("&New Request", QKeySequence::New, this, &MainWindow::onNewRequest);
     fileMenu->addAction("&Quick Open...", QKeySequence(Qt::CTRL | Qt::Key_P), this, &MainWindow::onQuickOpen);
     fileMenu->addAction("&Open Collection...", QKeySequence::Open, this, &MainWindow::onOpenCollection);
+    m_recentCollectionsMenu = fileMenu->addMenu("Open &Recent");
+    m_closeCollectionAction = fileMenu->addAction("&Close Collection", this, &MainWindow::onCloseCollection);
+    fileMenu->addSeparator();
     fileMenu->addAction("&Import...", this, &MainWindow::onImport);
     auto* exportMenu = fileMenu->addMenu("&Export Collection");
     exportMenu->addAction("as &OpenAPI 3.0...", this, &MainWindow::onExportOpenApi);
@@ -828,14 +840,36 @@ void MainWindow::onExportHar() {
     }
 }
 
-bool MainWindow::openPath(const QString& path) {
+bool MainWindow::openPath(const QString& path, bool remember) {
     if (path.isEmpty()) return false;
     QFileInfo fi(path);
-    QString dirPath = fi.isDir() ? path : fi.dir().path();
+    QString dirPath = fi.isDir() ? fi.canonicalFilePath() : fi.dir().canonicalPath();
+    if (dirPath.isEmpty()) {
+        dirPath = fi.isDir() ? path : fi.dir().path();
+    }
     if (m_collectionModel.openDirectory(dirPath)) {
         m_sidebar->refreshTree();
         updateTopEnvCombo();
         updateUrlVariableInspection();
+
+        QString collName = m_collectionModel.name();
+        if (collName.isEmpty()) collName = QDir(dirPath).dirName();
+        setWindowTitle(QString("%1 - Poppy").arg(collName));
+
+        if (remember) {
+            QSettings settings;
+            settings.setValue("collection/lastPath", dirPath);
+
+            QStringList recent = settings.value("collection/recentPaths").toStringList();
+            recent.removeAll(dirPath);
+            recent.prepend(dirPath);
+            while (recent.size() > 10) recent.removeLast();
+            settings.setValue("collection/recentPaths", recent);
+
+            updateRecentCollectionsMenu();
+            saveAppState();
+        }
+
         if (fi.isFile()) {
             auto* item = m_collectionModel.findItemByPath(fi.canonicalFilePath());
             if (item) {
@@ -848,7 +882,12 @@ bool MainWindow::openPath(const QString& path) {
 }
 
 void MainWindow::onOpenCollection() {
-    QString dir = QFileDialog::getExistingDirectory(this, "Open Collection Directory", QString());
+    QSettings settings;
+    QString lastDir = settings.value("collection/lastPath").toString();
+    if (lastDir.isEmpty() || !QDir(lastDir).exists()) {
+        lastDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation);
+    }
+    QString dir = QFileDialog::getExistingDirectory(this, "Open Collection Directory", lastDir);
     if (!dir.isEmpty()) {
         if (!openPath(dir)) {
             QMessageBox::warning(this, "Error", "Failed to open collection directory.");
@@ -927,10 +966,12 @@ void MainWindow::onImport() {
         statusBar()->showMessage("cURL command imported successfully!", 3000);
     });
     connect(&dlg, &ImportDialog::collectionImported, this, [this](const QString& dirPath) {
-        m_collectionModel.openDirectory(dirPath);
-        m_sidebar->refreshTree();
-        refreshEnvironmentUi();
-        statusBar()->showMessage("Collection imported successfully!", 3000);
+        if (openPath(dirPath)) {
+            saveAppState();
+            statusBar()->showMessage(QString("Collection imported and loaded from %1").arg(dirPath), 4000);
+        } else {
+            statusBar()->showMessage("Failed to open imported collection directory.", 4000);
+        }
     });
     dlg.exec();
 }
@@ -1315,12 +1356,13 @@ core::CollectionItem* MainWindow::scopeItem() const {
 
 core::RequestModel MainWindow::requestForExecution() const {
     core::RequestModel toSend = m_currentRequest;
-    if (toSend.auth.type == core::AuthType::Inherit) {
-        if (core::CollectionItem* scope = scopeItem()) {
+    if (core::CollectionItem* scope = scopeItem()) {
+        if (toSend.auth.type == core::AuthType::Inherit) {
             toSend.auth = scope->effectiveAuth();
-        } else {
-            toSend.auth = {};
         }
+        scope->applyInheritedHeaders(toSend);
+    } else if (toSend.auth.type == core::AuthType::Inherit) {
+        toSend.auth = {};
     }
     return toSend;
 }
@@ -1869,8 +1911,188 @@ void MainWindow::closeEvent(QCloseEvent* event) {
         }
     }
 
+    saveAppState();
     m_networkEngine.cancelAll();
     event->accept();
+}
+
+void MainWindow::saveAppState() {
+    QSettings settings;
+    settings.setValue("window/geometry", saveGeometry());
+    settings.setValue("window/state", saveState());
+    if (m_contentSplitter) {
+        settings.setValue("window/contentSplitter", m_contentSplitter->saveState());
+        settings.setValue("window/contentOrientation", static_cast<int>(m_contentSplitter->orientation()));
+    }
+    if (m_mainSplitter) {
+        settings.setValue("window/mainSplitter", m_mainSplitter->saveState());
+    }
+
+    if (!m_collectionModel.rootPath().isEmpty()) {
+        settings.setValue("collection/lastPath", m_collectionModel.rootPath());
+        settings.setValue("collection/lastActiveEnvironment", m_activeEnvName);
+
+        QStringList openTabPaths;
+        for (const auto& tab : m_openTabs) {
+            if (!tab.itemPath.isEmpty()) {
+                openTabPaths.append(tab.itemPath);
+            }
+        }
+        settings.setValue("collection/openTabPaths", openTabPaths);
+        settings.setValue("collection/currentTabIndex", m_currentTabIndex);
+    }
+}
+
+void MainWindow::restoreAppState() {
+    QSettings settings;
+    if (settings.contains("window/geometry")) {
+        restoreGeometry(settings.value("window/geometry").toByteArray());
+    }
+    if (settings.contains("window/state")) {
+        restoreState(settings.value("window/state").toByteArray());
+    }
+    if (m_mainSplitter && settings.contains("window/mainSplitter")) {
+        m_mainSplitter->restoreState(settings.value("window/mainSplitter").toByteArray());
+    }
+    if (m_contentSplitter && settings.contains("window/contentSplitter")) {
+        int orientation = settings.value("window/contentOrientation", static_cast<int>(Qt::Vertical)).toInt();
+        m_contentSplitter->setOrientation(static_cast<Qt::Orientation>(orientation));
+        m_contentSplitter->restoreState(settings.value("window/contentSplitter").toByteArray());
+    }
+
+    updateRecentCollectionsMenu();
+
+    QString lastPath = settings.value("collection/lastPath").toString();
+    if (!lastPath.isEmpty() && QDir(lastPath).exists()) {
+        if (openPath(lastPath, false)) {
+            QString lastEnv = settings.value("collection/lastActiveEnvironment").toString();
+            if (!lastEnv.isEmpty()) {
+                onEnvironmentChanged(lastEnv);
+            }
+
+            QStringList openTabPaths = settings.value("collection/openTabPaths").toStringList();
+            for (const QString& tabPath : openTabPaths) {
+                auto* item = m_collectionModel.findItemByPath(tabPath);
+                if (item) {
+                    onRequestSelected(item);
+                }
+            }
+
+            int savedIndex = settings.value("collection/currentTabIndex", -1).toInt();
+            if (savedIndex >= 0 && savedIndex < m_openTabs.size() && m_openRequestsTabBar) {
+                m_openRequestsTabBar->setCurrentIndex(savedIndex);
+            }
+        }
+    }
+}
+
+void MainWindow::onCloseCollection() {
+    if (m_collectionModel.rootPath().isEmpty()) return;
+
+    // Check unsaved changes
+    bool hasDirty = false;
+    for (const auto& tab : m_openTabs) {
+        if (tab.isDirty) { hasDirty = true; break; }
+    }
+    if (hasDirty) {
+        auto res = QMessageBox::question(this, "Unsaved Changes",
+            "You have unsaved changes in the collection. Save before closing?",
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel);
+        if (res == QMessageBox::Cancel) return;
+        if (res == QMessageBox::Save) onSaveRequest();
+    }
+
+    // Reset open tabs
+    while (m_openRequestsTabBar->count() > 0) {
+        m_openRequestsTabBar->removeTab(0);
+    }
+    m_openTabs.clear();
+
+    m_currentRequest = core::RequestModel{};
+    m_currentRequest.name = "Quick Request";
+    m_currentRequest.method = core::HttpMethod::GET;
+    m_currentRequest.url = "https://httpbin.org/get";
+    OpenTabInfo initTab;
+    initTab.tabId = ++m_nextTabId;
+    initTab.request = m_currentRequest;
+    m_openTabs.append(initTab);
+    m_openRequestsTabBar->addTab("Quick Request");
+    m_currentTabIndex = 0;
+    m_activeItem = nullptr;
+    loadRequestIntoUi(m_currentRequest);
+
+    m_collectionModel.closeCollection();
+    m_activeEnvName.clear();
+    m_sidebar->refreshTree();
+    updateTopEnvCombo();
+    updateUrlVariableInspection();
+    setWindowTitle("Poppy - Native API Client");
+
+    QSettings settings;
+    settings.remove("collection/lastPath");
+    settings.remove("collection/lastActiveEnvironment");
+    settings.remove("collection/openTabPaths");
+    settings.remove("collection/currentTabIndex");
+
+    statusBar()->showMessage("Collection closed.", 3000);
+}
+
+void MainWindow::updateRecentCollectionsMenu() {
+    if (!m_recentCollectionsMenu) return;
+    m_recentCollectionsMenu->clear();
+
+    QSettings settings;
+    QStringList recent = settings.value("collection/recentPaths").toStringList();
+    QStringList validRecent;
+
+    for (const QString& path : recent) {
+        if (QDir(path).exists()) {
+            validRecent.append(path);
+            QString name = QDir(path).dirName();
+            auto* act = m_recentCollectionsMenu->addAction(QString("%1 (%2)").arg(name, path));
+            connect(act, &QAction::triggered, this, [this, path]() {
+                openPath(path);
+            });
+        }
+    }
+
+    if (validRecent.size() != recent.size()) {
+        settings.setValue("collection/recentPaths", validRecent);
+    }
+
+    if (validRecent.isEmpty()) {
+        auto* emptyAct = m_recentCollectionsMenu->addAction("No Recent Collections");
+        emptyAct->setEnabled(false);
+    } else {
+        m_recentCollectionsMenu->addSeparator();
+        auto* clearAct = m_recentCollectionsMenu->addAction("Clear Recent Collections");
+        connect(clearAct, &QAction::triggered, this, &MainWindow::clearRecentCollections);
+    }
+}
+
+void MainWindow::clearRecentCollections() {
+    QSettings settings;
+    settings.remove("collection/recentPaths");
+    updateRecentCollectionsMenu();
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    } else {
+        event->ignore();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* event) {
+    const auto urls = event->mimeData()->urls();
+    if (!urls.isEmpty()) {
+        QString localPath = urls.first().toLocalFile();
+        if (!localPath.isEmpty()) {
+            openPath(localPath);
+            event->acceptProposedAction();
+        }
+    }
 }
 
 } // namespace poppy::gui

@@ -15,8 +15,8 @@ public:
     static QString serializeEnvironment(const EnvironmentModel& env);
     static bool writeEnvironmentFile(const QString& filePath, const EnvironmentModel& env);
 
-    static QString serializeFolder(const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars);
-    static bool writeFolderFile(const QString& folderPath, const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars);
+    static QString serializeFolder(const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars, const QList<HttpHeader>& headers = {});
+    static bool writeFolderFile(const QString& folderPath, const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars, const QList<HttpHeader>& headers = {});
 };
 
 } // namespace poppy::core

@@ -74,11 +74,48 @@ AuthModel CollectionItem::effectiveAuth() const {
     return {};
 }
 
+void CollectionItem::applyInheritedHeaders(RequestModel& req) const {
+    QList<const CollectionItem*> chain;
+    const CollectionItem* node = (m_type == CollectionItemType::Request) ? m_parent : this;
+    while (node) {
+        chain.prepend(node);
+        node = node->m_parent;
+    }
+
+    QList<HttpHeader> inherited;
+    for (const CollectionItem* ancestor : chain) {
+        for (const HttpHeader& header : ancestor->m_headers) {
+            if (!header.enabled || header.name.isEmpty()) continue;
+            bool replaced = false;
+            for (HttpHeader& existing : inherited) {
+                if (existing.name.compare(header.name, Qt::CaseInsensitive) == 0) {
+                    existing = header;
+                    replaced = true;
+                    break;
+                }
+            }
+            if (!replaced) inherited.append(header);
+        }
+    }
+
+    for (const HttpHeader& header : inherited) {
+        bool present = false;
+        for (const HttpHeader& existing : req.headers) {
+            if (existing.name.compare(header.name, Qt::CaseInsensitive) == 0) {
+                present = true;
+                break;
+            }
+        }
+        if (!present) req.headers.append(header);
+    }
+}
+
 RequestModel CollectionItem::requestForExecution() const {
     RequestModel req = m_request ? *m_request : RequestModel{};
     if (req.auth.type == AuthType::Inherit) {
         req.auth = effectiveAuth();
     }
+    applyInheritedHeaders(req);
     return req;
 }
 
@@ -135,6 +172,22 @@ bool CollectionModel::openDirectory(const QString& dirPath) {
     }
 
     m_rootItem = std::make_unique<CollectionItem>(CollectionItemType::Collection, collName, m_rootPath);
+    if (QFile::exists(openCollYml) || QFile::exists(openCollYaml)) {
+        QString ocPath = QFile::exists(openCollYml) ? openCollYml : openCollYaml;
+        auto ocInfo = OpenCollectionParser::parseCollectionFile(ocPath);
+        m_rootItem->setVariables(ocInfo.vars);
+        m_rootItem->setHeaders(ocInfo.headers);
+        if (ocInfo.auth.type != AuthType::None) {
+            m_rootItem->setAuth(ocInfo.auth);
+        }
+    } else if (QFile::exists(collYml)) {
+        auto ocInfo = OpenCollectionParser::parseCollectionFile(collYml);
+        m_rootItem->setVariables(ocInfo.vars);
+        m_rootItem->setHeaders(ocInfo.headers);
+        if (ocInfo.auth.type != AuthType::None) {
+            m_rootItem->setAuth(ocInfo.auth);
+        }
+    }
 
     // Watch directory
     QStringList existingPaths = m_fileWatcher.directories();
@@ -159,6 +212,18 @@ void CollectionModel::reload() {
     if (!m_rootPath.isEmpty()) {
         openDirectory(m_rootPath);
     }
+}
+
+void CollectionModel::closeCollection() {
+    emit collectionAboutToReload();
+    m_rootPath.clear();
+    m_rootItem.reset();
+    m_environments.clear();
+    QStringList existingPaths = m_fileWatcher.directories();
+    if (!existingPaths.isEmpty()) {
+        m_fileWatcher.removePaths(existingPaths);
+    }
+    emit collectionLoaded();
 }
 
 void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* parentItem) {
@@ -187,6 +252,7 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
                 QString ymlPath = QFile::exists(folderYml) ? folderYml : folderYaml;
                 auto fInfo = OpenCollectionParser::parseFolderFile(ymlPath);
                 folderItem->setVariables(fInfo.vars);
+                folderItem->setHeaders(fInfo.headers);
                 folderItem->setSeq(fInfo.seq);
                 folderItem->setAuth(fInfo.auth);
                 if (!fInfo.name.isEmpty()) {
@@ -239,7 +305,7 @@ void CollectionModel::scanDirectory(const QString& dirPath, CollectionItem* pare
                 if (!OpenCollectionParser::isOpenCollectionRequest(yNode)) {
                     continue; // Skip non-request YAML files (e.g. CI/CD or other config)
                 }
-                req = OpenCollectionParser::parseRequest(yNode, entry.completeBaseName());
+                req = OpenCollectionParser::parseRequestFile(entry.canonicalFilePath());
             }
 
             QString reqName = req.name.isEmpty() ? entry.completeBaseName() : req.name;
@@ -417,7 +483,7 @@ bool CollectionModel::saveFolderVariables(CollectionItem* folder) {
                   QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yml"))) ||
                   QFile::exists(QDir(m_rootPath).filePath(QStringLiteral("opencollection.yaml")));
     if (hasYml) {
-        return OpenCollectionWriter::writeFolderFile(folder->path(), folder->name(), folder->seq(), folder->auth(), folder->variables());
+        return OpenCollectionWriter::writeFolderFile(folder->path(), folder->name(), folder->seq(), folder->auth(), folder->variables(), folder->headers());
     }
     return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables(), folder->seq());
 }
@@ -489,7 +555,7 @@ bool CollectionModel::renameItem(CollectionItem* item, const QString& newName) {
         }
         item->setName(newName);
         if (QFile::exists(QDir(item->path()).filePath(QStringLiteral("folder.yml")))) {
-            OpenCollectionWriter::writeFolderFile(item->path(), newName, item->seq(), item->auth(), item->variables());
+            OpenCollectionWriter::writeFolderFile(item->path(), newName, item->seq(), item->auth(), item->variables(), item->headers());
         } else {
             BruWriter::writeFolderFile(item->path(), newName, item->variables(), item->seq());
         }

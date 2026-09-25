@@ -50,6 +50,11 @@ public:
 
     const AuthModel& auth() const { return m_auth; }
     void setAuth(const AuthModel& auth) { m_auth = auth; }
+
+    const QList<HttpHeader>& headers() const { return m_headers; }
+    void setHeaders(const QList<HttpHeader>& headers) { m_headers = headers; }
+    // Folder and collection headers, nearest scope winning. Request headers are not included.
+    void applyInheritedHeaders(RequestModel& req) const;
     // Nearest folder or collection auth, skipping None and Inherit.
     AuthModel effectiveAuth() const;
     // Request copy with Inherit replaced by effectiveAuth().
@@ -77,6 +82,7 @@ private:
     QList<CollectionItem*> m_children;
     std::unique_ptr<RequestModel> m_request;
     QMap<QString, QString> m_variables;
+    QList<HttpHeader> m_headers;
     AuthModel m_auth;
     int m_seq{1};
 };
@@ -89,6 +95,7 @@ public:
 
     bool openDirectory(const QString& dirPath);
     void reload();
+    void closeCollection();
 
     CollectionItem* rootItem() const { return m_rootItem.get(); }
     const QString& rootPath() const { return m_rootPath; }

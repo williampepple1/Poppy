@@ -4,6 +4,9 @@
 #include <QLabel>
 #include <QFileDialog>
 #include <QMessageBox>
+#include <QStandardPaths>
+#include <QDir>
+#include <QFileInfo>
 #include <core/importers/CurlImporter.h>
 #include <core/importers/PostmanImporter.h>
 #include <core/importers/OpenApiImporter.h>
@@ -13,6 +16,11 @@ namespace poppy::gui {
 
 ImportDialog::ImportDialog(const QString& defaultOutputDir, QWidget* parent)
     : QDialog(parent), m_defaultOutputDir(defaultOutputDir) {
+    if (m_defaultOutputDir.trimmed().isEmpty()) {
+        m_defaultOutputDir = QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation) + "/Poppy Collections";
+    }
+    QDir().mkpath(m_defaultOutputDir);
+
     setWindowTitle("Import Request / Collection");
     resize(650, 420);
 
@@ -56,7 +64,13 @@ ImportDialog::ImportDialog(const QString& defaultOutputDir, QWidget* parent)
     auto* browsePFileBtn = new QPushButton("Browse...", postmanTab);
     connect(browsePFileBtn, &QPushButton::clicked, this, [this]() {
         QString f = QFileDialog::getOpenFileName(this, "Select Postman Collection", QString(), "JSON Files (*.json)");
-        if (!f.isEmpty()) m_postmanFileEdit->setText(f);
+        if (!f.isEmpty()) {
+            m_postmanFileEdit->setText(f);
+            if (m_postmanDestEdit->text().trimmed().isEmpty() || m_postmanDestEdit->text() == m_defaultOutputDir) {
+                QString stem = QFileInfo(f).completeBaseName();
+                m_postmanDestEdit->setText(QDir(m_defaultOutputDir).filePath(stem));
+            }
+        }
     });
     pFileLayout->addWidget(browsePFileBtn);
     postmanLayout->addLayout(pFileLayout);
@@ -95,8 +109,14 @@ ImportDialog::ImportDialog(const QString& defaultOutputDir, QWidget* parent)
     oFileLayout->addWidget(m_openApiFileEdit);
     auto* browseOFileBtn = new QPushButton("Browse...", openApiTab);
     connect(browseOFileBtn, &QPushButton::clicked, this, [this]() {
-        QString f = QFileDialog::getOpenFileName(this, "Select OpenAPI Spec", QString(), "JSON Files (*.json)");
-        if (!f.isEmpty()) m_openApiFileEdit->setText(f);
+        QString f = QFileDialog::getOpenFileName(this, "Select OpenAPI Spec", QString(), "JSON Files (*.json);;YAML Files (*.yaml *.yml)");
+        if (!f.isEmpty()) {
+            m_openApiFileEdit->setText(f);
+            if (m_openApiDestEdit->text().trimmed().isEmpty() || m_openApiDestEdit->text() == m_defaultOutputDir) {
+                QString stem = QFileInfo(f).completeBaseName();
+                m_openApiDestEdit->setText(QDir(m_defaultOutputDir).filePath(stem));
+            }
+        }
     });
     oFileLayout->addWidget(browseOFileBtn);
     openApiLayout->addLayout(oFileLayout);
@@ -136,7 +156,13 @@ ImportDialog::ImportDialog(const QString& defaultOutputDir, QWidget* parent)
     auto* browseIFileBtn = new QPushButton("Browse...", insomniaTab);
     connect(browseIFileBtn, &QPushButton::clicked, this, [this]() {
         QString f = QFileDialog::getOpenFileName(this, "Select Insomnia Export", QString(), "JSON Files (*.json);;All Files (*.*)");
-        if (!f.isEmpty()) m_insomniaFileEdit->setText(f);
+        if (!f.isEmpty()) {
+            m_insomniaFileEdit->setText(f);
+            if (m_insomniaDestEdit->text().trimmed().isEmpty() || m_insomniaDestEdit->text() == m_defaultOutputDir) {
+                QString stem = QFileInfo(f).completeBaseName();
+                m_insomniaDestEdit->setText(QDir(m_defaultOutputDir).filePath(stem));
+            }
+        }
     });
     iFileLayout->addWidget(browseIFileBtn);
     insomniaLayout->addLayout(iFileLayout);

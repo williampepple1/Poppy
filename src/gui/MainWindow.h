@@ -32,12 +32,17 @@ public:
     explicit MainWindow(QWidget* parent = nullptr);
     ~MainWindow() override;
 
-    bool openPath(const QString& path);
+    bool openPath(const QString& path, bool remember = true);
+    void onCloseCollection();
 
 protected:
     void closeEvent(QCloseEvent* event) override;
+    void dragEnterEvent(class QDragEnterEvent* event) override;
+    void dropEvent(class QDropEvent* event) override;
 
 private slots:
+    void updateRecentCollectionsMenu();
+    void clearRecentCollections();
     void onNewRequest();
     void onQuickOpen();
     void onSendClicked();
@@ -105,6 +110,8 @@ private:
     core::EnvironmentModel* mutableActiveEnvironment();
     void persistActiveEnvironment();
     void flushDirtyTab(int index);
+    void saveAppState();
+    void restoreAppState();
 
     // Core & Network engines
     core::CollectionModel m_collectionModel;
@@ -167,7 +174,10 @@ private:
     class QCompleter* m_urlCompleter{nullptr};
     QPushButton* m_varQuickBtn{nullptr};
     QComboBox* m_topEnvCombo{nullptr};
+    QSplitter* m_mainSplitter{nullptr};
     QSplitter* m_contentSplitter{nullptr};  // Request | Response splitter (toggled H/V)
+    QMenu* m_recentCollectionsMenu{nullptr};
+    QAction* m_closeCollectionAction{nullptr};
 };
 
 } // namespace poppy::gui

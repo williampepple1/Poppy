@@ -35,6 +35,51 @@ QString formatBlockScalar(const QString& val, int indentSpaces) {
     return result;
 }
 
+void writeAuth(QTextStream& ts, const QString& indent, const AuthModel& auth) {
+    if (auth.type == AuthType::Inherit) {
+        ts << indent << "auth: inherit\n";
+        return;
+    }
+    const bool supported = auth.type == AuthType::Bearer || auth.type == AuthType::Basic
+        || auth.type == AuthType::ApiKey || auth.type == AuthType::OAuth2
+        || auth.type == AuthType::AwsSigV4;
+    if (!supported) return;
+
+    ts << indent << "auth:\n";
+    const QString pad = indent + QStringLiteral("  ");
+    switch (auth.type) {
+    case AuthType::Bearer:
+        ts << pad << "type: bearer\n";
+        ts << pad << "token: " << formatScalar(auth.bearerToken) << "\n";
+        break;
+    case AuthType::Basic:
+        ts << pad << "type: basic\n";
+        ts << pad << "username: " << formatScalar(auth.basicUsername) << "\n";
+        ts << pad << "password: " << formatScalar(auth.basicPassword) << "\n";
+        break;
+    case AuthType::ApiKey:
+        ts << pad << "type: api-key\n";
+        ts << pad << "name: " << formatScalar(auth.apiKeyName) << "\n";
+        ts << pad << "value: " << formatScalar(auth.apiKeyValue) << "\n";
+        ts << pad << "placement: " << formatScalar(auth.apiKeyPlacement) << "\n";
+        break;
+    case AuthType::OAuth2:
+        ts << pad << "type: oauth2\n";
+        ts << pad << "accessToken: " << formatScalar(auth.oauth2AccessToken) << "\n";
+        break;
+    case AuthType::AwsSigV4:
+        ts << pad << "type: awsv4\n";
+        ts << pad << "accessKey: " << formatScalar(auth.awsAccessKey) << "\n";
+        ts << pad << "secretKey: " << formatScalar(auth.awsSecretKey) << "\n";
+        ts << pad << "sessionToken: " << formatScalar(auth.awsSessionToken) << "\n";
+        ts << pad << "region: " << formatScalar(auth.awsRegion) << "\n";
+        ts << pad << "service: " << formatScalar(auth.awsService) << "\n";
+        break;
+    default:
+        break;
+    }
+}
+
 } // namespace
 
 QString OpenCollectionWriter::serializeRequest(const RequestModel& req) {
@@ -131,65 +176,43 @@ QString OpenCollectionWriter::serializeRequest(const RequestModel& req) {
         }
     }
 
-    // Auth
-    switch (req.auth.type) {
-    case AuthType::Inherit:
-        ts << "  auth: inherit\n";
-        break;
-    case AuthType::Bearer:
-        ts << "  auth:\n";
-        ts << "    type: bearer\n";
-        ts << "    token: " << formatScalar(req.auth.bearerToken) << "\n";
-        break;
-    case AuthType::Basic:
-        ts << "  auth:\n";
-        ts << "    type: basic\n";
-        ts << "    username: " << formatScalar(req.auth.basicUsername) << "\n";
-        ts << "    password: " << formatScalar(req.auth.basicPassword) << "\n";
-        break;
-    case AuthType::ApiKey:
-        ts << "  auth:\n";
-        ts << "    type: api-key\n";
-        ts << "    name: " << formatScalar(req.auth.apiKeyName) << "\n";
-        ts << "    value: " << formatScalar(req.auth.apiKeyValue) << "\n";
-        ts << "    placement: " << formatScalar(req.auth.apiKeyPlacement) << "\n";
-        break;
-    case AuthType::OAuth2:
-        ts << "  auth:\n";
-        ts << "    type: oauth2\n";
-        ts << "    accessToken: " << formatScalar(req.auth.oauth2AccessToken) << "\n";
-        break;
-    case AuthType::AwsSigV4:
-        ts << "  auth:\n";
-        ts << "    type: awsv4\n";
-        ts << "    accessKey: " << formatScalar(req.auth.awsAccessKey) << "\n";
-        ts << "    secretKey: " << formatScalar(req.auth.awsSecretKey) << "\n";
-        ts << "    sessionToken: " << formatScalar(req.auth.awsSessionToken) << "\n";
-        ts << "    region: " << formatScalar(req.auth.awsRegion) << "\n";
-        ts << "    service: " << formatScalar(req.auth.awsService) << "\n";
-        break;
-    default:
-        break;
+    writeAuth(ts, QStringLiteral("  "), req.auth);
+
+    const bool hasScripts = !req.scripts.postResponseScript.trimmed().isEmpty()
+        || !req.scripts.preRequestScript.trimmed().isEmpty()
+        || !req.scripts.tests.trimmed().isEmpty();
+    if (!req.runtimeVariables.isEmpty() || hasScripts) {
+        ts << "\nruntime:\n";
+        if (!req.runtimeVariables.isEmpty()) {
+            ts << "  variables:\n";
+            for (const auto& var : req.runtimeVariables) {
+                ts << "    - name: " << formatScalar(var.name) << "\n";
+                ts << "      value: " << formatScalar(var.value) << "\n";
+                if (!var.enabled) ts << "      disabled: true\n";
+            }
+        }
+        if (hasScripts) {
+            ts << "  scripts:\n";
+            if (!req.scripts.preRequestScript.trimmed().isEmpty()) {
+                ts << "    - type: before-request\n";
+                ts << "      code: " << formatBlockScalar(req.scripts.preRequestScript, 8) << "\n";
+            }
+            if (!req.scripts.postResponseScript.trimmed().isEmpty()) {
+                ts << "    - type: after-response\n";
+                ts << "      code: " << formatBlockScalar(req.scripts.postResponseScript, 8) << "\n";
+            }
+            if (!req.scripts.tests.trimmed().isEmpty()) {
+                ts << "    - type: test\n";
+                ts << "      code: " << formatBlockScalar(req.scripts.tests, 8) << "\n";
+            }
+        }
     }
 
-    // Scripts
-    if (!req.scripts.postResponseScript.trimmed().isEmpty() ||
-        !req.scripts.preRequestScript.trimmed().isEmpty() ||
-        !req.scripts.tests.trimmed().isEmpty()) {
-        ts << "\nruntime:\n";
-        ts << "  scripts:\n";
-        if (!req.scripts.preRequestScript.trimmed().isEmpty()) {
-            ts << "    - type: before-request\n";
-            ts << "      code: " << formatBlockScalar(req.scripts.preRequestScript, 8) << "\n";
-        }
-        if (!req.scripts.postResponseScript.trimmed().isEmpty()) {
-            ts << "    - type: after-response\n";
-            ts << "      code: " << formatBlockScalar(req.scripts.postResponseScript, 8) << "\n";
-        }
-        if (!req.scripts.tests.trimmed().isEmpty()) {
-            ts << "    - type: test\n";
-            ts << "      code: " << formatBlockScalar(req.scripts.tests, 8) << "\n";
-        }
+    ts.flush();
+    if (!req.preservedOpenCollectionYaml.trimmed().isEmpty()) {
+        if (!out.endsWith('\n')) out += '\n';
+        out += req.preservedOpenCollectionYaml;
+        if (!out.endsWith('\n')) out += '\n';
     }
 
     return out;
@@ -230,7 +253,7 @@ bool OpenCollectionWriter::writeEnvironmentFile(const QString& filePath, const E
     return true;
 }
 
-QString OpenCollectionWriter::serializeFolder(const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars) {
+QString OpenCollectionWriter::serializeFolder(const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars, const QList<HttpHeader>& headers) {
     QString out;
     QTextStream ts(&out);
 
@@ -240,25 +263,26 @@ QString OpenCollectionWriter::serializeFolder(const QString& name, int seq, cons
     ts << "  seq: " << seq << "\n\n";
 
     ts << "request:\n";
-    if (!vars.isEmpty()) {
+    if (!headers.isEmpty()) {
         ts << "  headers:\n";
+        for (const auto& header : headers) {
+            ts << "    - name: " << formatScalar(header.name) << "\n";
+            ts << "      value: " << formatScalar(header.value) << "\n";
+            if (!header.enabled) ts << "      disabled: true\n";
+        }
+    }
+    if (!vars.isEmpty()) {
+        ts << "  variables:\n";
         for (auto it = vars.begin(); it != vars.end(); ++it) {
             ts << "    - name: " << formatScalar(it.key()) << "\n";
             ts << "      value: " << formatScalar(it.value()) << "\n";
         }
     }
-
-    if (auth.type == AuthType::Inherit) {
-        ts << "  auth: inherit\n";
-    } else if (auth.type == AuthType::Bearer) {
-        ts << "  auth:\n";
-        ts << "    type: bearer\n";
-        ts << "    token: " << formatScalar(auth.bearerToken) << "\n";
-    }
+    writeAuth(ts, QStringLiteral("  "), auth);
     return out;
 }
 
-bool OpenCollectionWriter::writeFolderFile(const QString& folderPath, const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars) {
+bool OpenCollectionWriter::writeFolderFile(const QString& folderPath, const QString& name, int seq, const AuthModel& auth, const QMap<QString, QString>& vars, const QList<HttpHeader>& headers) {
     QDir dir(folderPath);
     QString path = dir.filePath(QStringLiteral("folder.yml"));
     QFile file(path);
@@ -266,7 +290,7 @@ bool OpenCollectionWriter::writeFolderFile(const QString& folderPath, const QStr
         return false;
     }
     QTextStream out(&file);
-    out << serializeFolder(name, seq, auth, vars);
+    out << serializeFolder(name, seq, auth, vars, headers);
     return true;
 }
 

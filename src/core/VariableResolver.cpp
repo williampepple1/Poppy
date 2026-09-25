@@ -112,6 +112,17 @@ QString VariableResolver::resolveString(const QString& input) const {
 }
 
 RequestModel VariableResolver::resolveRequest(const RequestModel& req) const {
+    if (!req.runtimeVariables.isEmpty()) {
+        VariableResolver copy = *this;
+        for (const auto& var : req.runtimeVariables) {
+            if (!var.enabled || var.name.isEmpty() || copy.m_runtimeVars.contains(var.name)) continue;
+            copy.m_runtimeVars.insert(var.name, var.value);
+        }
+        RequestModel stripped = req;
+        stripped.runtimeVariables.clear();
+        return copy.resolveRequest(stripped);
+    }
+
     RequestModel res = req;
 
     res.url = resolveString(req.url);
