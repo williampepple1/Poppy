@@ -16,6 +16,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFile>
+#include <QProcess>
 
 namespace poppy::gui {
 
@@ -115,13 +116,23 @@ void CollectionSidebar::setupCollectionsTab(QWidget* container) {
     connect(m_addFolderBtn, &QPushButton::clicked, this, &CollectionSidebar::onAddFolder);
     topBtnLayout->addWidget(m_addFolderBtn);
 
+    m_gitPushBtn = new QPushButton("⬆ Push", container);
+    m_gitPushBtn->setToolTip("Push changes using Git (git add, commit, push)");
+    m_gitPushBtn->setEnabled(false);
+    connect(m_gitPushBtn, &QPushButton::clicked, this, [this]() {
+        emit gitSyncRequested(m_model ? m_model->rootPath() : QString(), QStringLiteral("update api collection"));
+    });
+    topBtnLayout->addWidget(m_gitPushBtn);
+
     layout->addLayout(topBtnLayout);
 
     // 1b. Git branch indicator chip
     m_gitBranchChip = new QPushButton(container);
     m_gitBranchChip->setCursor(Qt::PointingHandCursor);
     m_gitBranchChip->setVisible(false);
-    connect(m_gitBranchChip, &QPushButton::clicked, this, &CollectionSidebar::gitSyncRequested);
+    connect(m_gitBranchChip, &QPushButton::clicked, this, [this]() {
+        emit gitSyncRequested(m_model ? m_model->rootPath() : QString(), QStringLiteral("update api collection"));
+    });
     layout->addWidget(m_gitBranchChip);
 
     // 1c. Collection search filter
@@ -264,30 +275,102 @@ static QString detectGitBranch(const QString& rootPath) {
     return {};
 }
 
+int CollectionSidebar::queryFolderGitChanges(const QString& folderPath) const {
+    if (!m_model || m_model->rootPath().isEmpty()) return 0;
+    QString repoRoot = m_model->rootPath();
+    if (!QDir(repoRoot).exists()) return 0;
+
+    QProcess proc;
+    proc.setWorkingDirectory(repoRoot);
+    QStringList args = {"status", "--porcelain"};
+    if (!folderPath.isEmpty()) {
+        QDir repoDir(repoRoot);
+        QString rel = repoDir.relativeFilePath(folderPath);
+        if (!rel.isEmpty() && rel != ".") {
+            args.append("--");
+            args.append(rel);
+        }
+    }
+    proc.start("git", args);
+    if (!proc.waitForFinished(1200)) return 0;
+    QString out = QString::fromUtf8(proc.readAllStandardOutput()).trimmed();
+    if (out.isEmpty()) return 0;
+    return out.split('\n', Qt::SkipEmptyParts).size();
+}
+
 void CollectionSidebar::updateGitBranch() {
     if (!m_gitBranchChip) return;
     if (!m_model || m_model->rootPath().isEmpty()) {
         m_gitBranchChip->setVisible(false);
+        if (m_gitPushBtn) m_gitPushBtn->setEnabled(false);
         return;
     }
 
     QString branch = detectGitBranch(m_model->rootPath());
     if (branch.isEmpty()) {
         m_gitBranchChip->setVisible(false);
+        if (m_gitPushBtn) {
+            m_gitPushBtn->setEnabled(false);
+            m_gitPushBtn->setToolTip("Not a Git repository");
+        }
         return;
     }
 
+    int uncommitted = queryFolderGitChanges(m_model->rootPath());
+
+    int unpushed = 0;
+    QProcess revProc;
+    revProc.setWorkingDirectory(m_model->rootPath());
+    revProc.start("git", {"rev-list", "--count", "@{u}..HEAD"});
+    if (revProc.waitForFinished(1200) && revProc.exitCode() == 0) {
+        bool ok = false;
+        int count = QString::fromUtf8(revProc.readAllStandardOutput()).trimmed().toInt(&ok);
+        if (ok) unpushed = count;
+    }
+
+    int totalChanges = uncommitted + unpushed;
+    bool hasChanges = (totalChanges > 0);
+
     const bool dark = Theme::isDarkMode();
-    m_gitBranchChip->setText(QString("🌿 %1").arg(branch));
-    m_gitBranchChip->setToolTip(QString("Git Branch: %1\nRepository: %2\nClick to open Git Sync & Branches dialog").arg(branch, m_model->rootPath()));
+
+    // Configure push button
+    if (m_gitPushBtn) {
+        m_gitPushBtn->setEnabled(hasChanges);
+        if (hasChanges) {
+            m_gitPushBtn->setText("⬆ Push");
+            m_gitPushBtn->setToolTip(QString("Push %1 change(s) using Git (git add, commit, push)").arg(totalChanges));
+            m_gitPushBtn->setStyleSheet(
+                "QPushButton { background-color: #10b981; color: white; font-weight: bold; padding: 4px 8px; border-radius: 4px; }"
+                "QPushButton:hover { background-color: #059669; }"
+            );
+        } else {
+            m_gitPushBtn->setText("⬆ Push");
+            m_gitPushBtn->setToolTip("Working tree clean - no uncommitted or unpushed changes to push");
+            m_gitPushBtn->setStyleSheet(QString(
+                "QPushButton { background-color: transparent; color: %1; border: 1px solid %2; padding: 4px 8px; border-radius: 4px; }"
+            ).arg(dark ? "#52525b" : "#94a3b8", dark ? "#27272a" : "#e2e8f0"));
+        }
+    }
+
+    // Configure branch chip
+    if (hasChanges) {
+        m_gitBranchChip->setText(QString("🌿 %1 (+%2)").arg(branch).arg(totalChanges));
+        m_gitBranchChip->setToolTip(QString("Git Branch: %1 (%2 uncommitted/unpushed change(s))\nRepository: %3\nClick to open Git Sync dialog").arg(branch).arg(totalChanges).arg(m_model->rootPath()));
+    } else {
+        m_gitBranchChip->setText(QString("🌿 %1").arg(branch));
+        m_gitBranchChip->setToolTip(QString("Git Branch: %1 (clean)\nRepository: %2\nClick to open Git Sync dialog").arg(branch, m_model->rootPath()));
+    }
+
     m_gitBranchChip->setStyleSheet(QString(
         "QPushButton { text-align: left; padding: 4px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; "
         "background-color: %1; color: %2; border: 1px solid %3; }"
         "QPushButton:hover { background-color: %4; border-color: #10b981; }"
-    ).arg(dark ? "rgba(16, 185, 129, 0.12)" : "rgba(16, 185, 129, 0.10)",
+    ).arg(dark ? (hasChanges ? "rgba(16, 185, 129, 0.18)" : "rgba(16, 185, 129, 0.10)")
+               : (hasChanges ? "rgba(16, 185, 129, 0.16)" : "rgba(16, 185, 129, 0.08)"),
           dark ? "#10b981" : "#047857",
-          dark ? "rgba(16, 185, 129, 0.35)" : "rgba(16, 185, 129, 0.40)",
-          dark ? "rgba(16, 185, 129, 0.22)" : "rgba(16, 185, 129, 0.18)"));
+          dark ? (hasChanges ? "#10b981" : "rgba(16, 185, 129, 0.35)")
+               : (hasChanges ? "#059669" : "rgba(16, 185, 129, 0.40)"),
+          dark ? "rgba(16, 185, 129, 0.25)" : "rgba(16, 185, 129, 0.20)"));
     m_gitBranchChip->setVisible(true);
 }
 
@@ -386,6 +469,29 @@ void CollectionSidebar::onContextMenu(const QPoint& pos) {
     } else if (modelItem->type() == core::CollectionItemType::Folder || modelItem->type() == core::CollectionItemType::Collection) {
         menu.addAction("Add Request", this, &CollectionSidebar::onAddRequest);
         menu.addAction("Add Subfolder", this, &CollectionSidebar::onAddFolder);
+        menu.addSeparator();
+
+        bool isFolder = (modelItem->type() == core::CollectionItemType::Folder);
+        QString itemName = modelItem->name();
+        QString targetPath = modelItem->path();
+
+        // Check if there are git changes in this folder or collection
+        int changesCount = queryFolderGitChanges(targetPath);
+        bool hasChanges = (changesCount > 0);
+
+        auto* pushAct = menu.addAction(
+            hasChanges ? QString("🚀 Push '%1' using Git (%2 changed)...").arg(itemName).arg(changesCount)
+                       : QString("🚀 Push '%1' using Git (No changes)").arg(itemName),
+            [this, targetPath, itemName, hasChanges]() {
+                if (hasChanges) {
+                    emit gitSyncRequested(targetPath, QString("Update %1").arg(itemName));
+                }
+            }
+        );
+        pushAct->setEnabled(hasChanges);
+        pushAct->setToolTip(hasChanges ? QString("Stage, commit, and push changes in '%1' to Git").arg(itemName)
+                                       : QString("No uncommitted changes in '%1'").arg(itemName));
+
         if (modelItem->type() == core::CollectionItemType::Folder) {
             menu.addSeparator();
             menu.addAction("Folder Variables...", this, &CollectionSidebar::onFolderVariables);

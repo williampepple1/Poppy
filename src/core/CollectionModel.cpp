@@ -457,6 +457,7 @@ CollectionItem* CollectionModel::addFolder(CollectionItem* parent, const QString
     auto* item = new CollectionItem(CollectionItemType::Folder, safeName, QFileInfo(folderPath).canonicalFilePath());
     targetParent->appendChild(item);
     m_fileWatcher.addPath(folderPath);
+    saveFolderVariables(item);
     emit itemModified(item);
     return item;
 }

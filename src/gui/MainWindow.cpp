@@ -492,7 +492,8 @@ void MainWindow::setupMenus() {
     toolsMenu->addAction("&gRPC Client...", this, &MainWindow::onOpenGrpc);
     toolsMenu->addAction("&Server-Sent Events (SSE)...", this, &MainWindow::onOpenSse);
     toolsMenu->addAction("&Mock Server...", this, &MainWindow::onOpenMockServer);
-    toolsMenu->addAction("&Git Sync...", this, &MainWindow::onOpenGitSync);
+    toolsMenu->addAction("&Push Changes (Git)...", this, [this]() { onOpenGitSync(); });
+    toolsMenu->addAction("&Git Sync & Branches...", this, [this]() { onOpenGitSync(); });
     toolsMenu->addSeparator();
     toolsMenu->addAction("&Generate API Documentation...", this, &MainWindow::onGenerateDocumentation);
 
@@ -970,7 +971,8 @@ void MainWindow::onOpenCommandPalette() {
         {PaletteItemType::Action, "gRPC Client...", "Invoke gRPC services with Protobuf reflection", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGrpc(); }},
         {PaletteItemType::Action, "Server-Sent Events (SSE)...", "Stream SSE event-source feeds in real-time", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenSse(); }},
         {PaletteItemType::Action, "Mock Server...", "Launch local HTTP mock server for offline testing", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenMockServer(); }},
-        {PaletteItemType::Action, "Git Sync & Branches...", "Manage git commits, branches, and push/pull", "", "Tools", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGitSync(); }},
+        {PaletteItemType::Action, "Push Changes (Git)...", "Stage, commit, and push collection changes to Git", "", "Git", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGitSync(); }},
+        {PaletteItemType::Action, "Git Sync & Branches...", "Manage git commits, branches, and push/pull", "", "Git", core::HttpMethod::GET, "", nullptr, [this]() { onOpenGitSync(); }},
         {PaletteItemType::Action, "Generate API Documentation...", "Create styled interactive HTML documentation", "", "Documentation", core::HttpMethod::GET, "", nullptr, [this]() { onGenerateDocumentation(); }},
         {PaletteItemType::Action, "Export Collection as OpenAPI 3.0...", "Generate OpenAPI v3 JSON specification", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportOpenApi(); }},
         {PaletteItemType::Action, "Export Collection as Postman (v2.1)...", "Export to Postman collection format", "", "Export", core::HttpMethod::GET, "", nullptr, [this]() { onExportPostman(); }},
@@ -1573,10 +1575,14 @@ void MainWindow::onOpenSse() {
     dlg->show();
 }
 
-void MainWindow::onOpenGitSync() {
-    QString repoPath = m_collectionModel.rootPath();
+void MainWindow::onOpenGitSync(const QString& targetPath, const QString& initialCommitMsg) {
+    QString repoPath = targetPath;
+    if (repoPath.isEmpty() || !QDir(repoPath).exists()) {
+        repoPath = m_collectionModel.rootPath();
+    }
     if (repoPath.isEmpty()) repoPath = QDir::currentPath();
-    auto dlg = new GitSyncDialog(repoPath, this);
+    auto dlg = new GitSyncDialog(repoPath, initialCommitMsg, this);
+    connect(dlg, &GitSyncDialog::syncCompleted, m_sidebar, &CollectionSidebar::updateGitBranch);
     dlg->setAttribute(Qt::WA_DeleteOnClose);
     dlg->show();
 }

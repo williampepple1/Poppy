@@ -2,6 +2,7 @@
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QInputDialog>
 #include <QDir>
 #include <QFile>
 #include <QTextStream>
@@ -9,13 +10,14 @@
 
 namespace poppy::gui {
 
-GitSyncDialog::GitSyncDialog(const QString& repoPath, QWidget* parent)
+GitSyncDialog::GitSyncDialog(const QString& repoPath, const QString& initialCommitMsg, QWidget* parent)
     : QDialog(parent)
     , m_repoPath(repoPath.isEmpty() ? QDir::currentPath() : repoPath)
+    , m_initialCommitMsg(initialCommitMsg)
     , m_process(new QProcess(this))
 {
     setWindowTitle("Git Sync - Poppy");
-    resize(720, 520);
+    resize(740, 540);
 
     setupUi();
 
@@ -35,6 +37,12 @@ void GitSyncDialog::setupUi() {
     infoLayout->addWidget(new QLabel("<b>Repository:</b> " + m_repoPath, this));
     infoLayout->addStretch();
 
+    m_initGitBtn = new QPushButton("Initialize Git (git init)", this);
+    m_initGitBtn->setStyleSheet("background-color: #3b82f6; color: white; font-weight: bold; border-radius: 4px; padding: 4px 8px; font-size: 11px;");
+    m_initGitBtn->setVisible(false);
+    connect(m_initGitBtn, &QPushButton::clicked, this, &GitSyncDialog::onInitGit);
+    infoLayout->addWidget(m_initGitBtn);
+
     m_branchLabel = new QLabel("Branch: --", this);
     m_branchLabel->setStyleSheet("background-color: #27272a; color: #a1a1aa; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
     infoLayout->addWidget(m_branchLabel);
@@ -50,11 +58,11 @@ void GitSyncDialog::setupUi() {
     m_changedFilesList = new QListWidget(this);
     mainLayout->addWidget(m_changedFilesList, 1);
 
-    // Commit row
+    // Commit & Push row
     auto* commitRow = new QHBoxLayout();
     m_commitMsgEdit = new QLineEdit(this);
     m_commitMsgEdit->setPlaceholderText("Commit message (e.g. update api collection requests)...");
-    m_commitMsgEdit->setText("update api collection");
+    m_commitMsgEdit->setText(m_initialCommitMsg.isEmpty() ? QStringLiteral("update api collection") : m_initialCommitMsg);
     commitRow->addWidget(m_commitMsgEdit, 1);
 
     m_commitBtn = new QPushButton("Commit All", this);
@@ -107,10 +115,11 @@ void GitSyncDialog::pumpCommandQueue() {
 
 void GitSyncDialog::setBusy(bool busy) {
     m_busy = busy;
-    if (m_commitBtn) m_commitBtn->setEnabled(!busy);
+    if (m_commitBtn) m_commitBtn->setEnabled(!busy && m_uncommittedCount > 0);
     if (m_pullBtn) m_pullBtn->setEnabled(!busy);
-    if (m_pushBtn) m_pushBtn->setEnabled(!busy);
+    if (m_pushBtn) m_pushBtn->setEnabled(!busy && (m_uncommittedCount > 0 || m_unpushedCount > 0));
     if (m_refreshBtn) m_refreshBtn->setEnabled(!busy);
+    if (m_initGitBtn) m_initGitBtn->setEnabled(!busy);
 }
 
 void GitSyncDialog::ensureSecretGitignore() {
@@ -128,6 +137,14 @@ void GitSyncDialog::ensureSecretGitignore() {
     out << "*.secret.env\n";
 }
 
+void GitSyncDialog::onInitGit() {
+    if (m_busy) return;
+    ensureSecretGitignore();
+    runGitCommand({"init"});
+    runGitCommand({"add", "--", ".", ":(exclude)*.secret.env", ":(exclude)**/*.secret.env"});
+    runGitCommand({"commit", "-m", "Initial commit from Poppy"});
+}
+
 void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitStatus) {
     Q_UNUSED(exitStatus);
     QString out = QString::fromUtf8(m_process->readAllStandardOutput());
@@ -137,8 +154,36 @@ void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
     if (!err.isEmpty()) appendLog(err, exitCode != 0);
 
     auto args = m_process->arguments();
+    const bool isPush = !args.isEmpty() && args.first() == "push";
     const bool shouldRefresh = !args.isEmpty()
-        && (args.first() == "commit" || args.first() == "push" || args.first() == "pull");
+        && (args.first() == "commit" || args.first() == "push" || args.first() == "pull" || args.first() == "init");
+
+    // Handle push error cases
+    if (isPush && exitCode != 0) {
+        if (err.contains("no upstream branch") || err.contains("--set-upstream")) {
+            appendLog("Upstream tracking branch not set. Setting upstream to origin/" + m_currentBranch + "...");
+            m_cmdQueue.prepend({"push", "--set-upstream", "origin", m_currentBranch.isEmpty() ? QStringLiteral("main") : m_currentBranch});
+        } else if (err.contains("No such remote 'origin'") || err.contains("does not appear to be a git repository")) {
+            bool ok = false;
+            QString url = QInputDialog::getText(this, "Configure Git Remote",
+                "No remote 'origin' repository is configured for this collection.\nEnter remote Git repository URL (e.g. https://github.com/user/collection.git):",
+                QLineEdit::Normal, QString(), &ok);
+            if (ok && !url.trimmed().isEmpty()) {
+                m_cmdQueue.clear();
+                runGitCommand({"remote", "add", "origin", url.trimmed()});
+                runGitCommand({"push", "--set-upstream", "origin", m_currentBranch.isEmpty() ? QStringLiteral("main") : m_currentBranch});
+            }
+        } else if (err.contains("Updates were rejected") || err.contains("fetch first")) {
+            auto ans = QMessageBox::question(this, "Remote Changes Detected",
+                "The remote repository has changes that you do not have locally.\nWould you like to pull with rebase and then push?",
+                QMessageBox::Yes | QMessageBox::No);
+            if (ans == QMessageBox::Yes) {
+                m_cmdQueue.clear();
+                runGitCommand({"pull", "--rebase"});
+                runGitCommand({"push"});
+            }
+        }
+    }
 
     if (!m_cmdQueue.isEmpty()) {
         pumpCommandQueue();
@@ -146,6 +191,7 @@ void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
     }
     setBusy(false);
     if (shouldRefresh) {
+        emit syncCompleted();
         onRefreshStatus();
     }
 }
@@ -153,19 +199,47 @@ void GitSyncDialog::onProcessFinished(int exitCode, QProcess::ExitStatus exitSta
 void GitSyncDialog::onRefreshStatus() {
     if (m_process->state() != QProcess::NotRunning) return;
     m_changedFilesList->clear();
+    m_uncommittedCount = 0;
+    m_unpushedCount = 0;
+
+    // Check if .git directory exists
+    bool isRepo = false;
+    QDir d(m_repoPath);
+    while (true) {
+        if (QFileInfo::exists(d.filePath(".git"))) {
+            isRepo = true;
+            break;
+        }
+        if (!d.cdUp()) break;
+    }
+
+    if (!isRepo) {
+        m_branchLabel->setText("Not a Git Repo");
+        m_branchLabel->setStyleSheet("background-color: #ef4444; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+        if (m_initGitBtn) m_initGitBtn->setVisible(true);
+        if (m_commitBtn) m_commitBtn->setEnabled(false);
+        if (m_pullBtn) m_pullBtn->setEnabled(false);
+        if (m_pushBtn) m_pushBtn->setEnabled(false);
+        auto* item = new QListWidgetItem("This folder is not a Git repository yet. Click 'Initialize Git' to track it.");
+        item->setForeground(QColor("#f59e0b"));
+        m_changedFilesList->addItem(item);
+        return;
+    }
+
+    if (m_initGitBtn) m_initGitBtn->setVisible(false);
 
     // Query branch
     QProcess branchProc;
     branchProc.setWorkingDirectory(m_repoPath);
     branchProc.start("git", {"rev-parse", "--abbrev-ref", "HEAD"});
     if (branchProc.waitForFinished(3000)) {
-        QString branch = QString::fromUtf8(branchProc.readAllStandardOutput()).trimmed();
-        if (!branch.isEmpty()) {
-            m_branchLabel->setText("Branch: " + branch);
+        m_currentBranch = QString::fromUtf8(branchProc.readAllStandardOutput()).trimmed();
+        if (!m_currentBranch.isEmpty()) {
+            m_branchLabel->setText("Branch: " + m_currentBranch);
             m_branchLabel->setStyleSheet("background-color: #10b981; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
         } else {
-            m_branchLabel->setText("Not a Git Repo");
-            m_branchLabel->setStyleSheet("background-color: #ef4444; color: white; border-radius: 4px; padding: 4px 8px; font-weight: bold; font-size: 11px;");
+            m_currentBranch = "main";
+            m_branchLabel->setText("Branch: main");
         }
     }
 
@@ -177,14 +251,50 @@ void GitSyncDialog::onRefreshStatus() {
         QString statusOut = QString::fromUtf8(statusProc.readAllStandardOutput());
         QStringList lines = statusOut.split('\n', Qt::SkipEmptyParts);
         for (const auto& line : lines) {
-            m_changedFilesList->addItem(line.trimmed());
+            QString trimmed = line.trimmed();
+            if (!trimmed.isEmpty()) {
+                m_changedFilesList->addItem(trimmed);
+                m_uncommittedCount++;
+            }
         }
     }
 
-    if (m_changedFilesList->count() == 0) {
-        auto* item = new QListWidgetItem("Working tree clean (no uncommitted changes).");
+    // Query unpushed commits ahead of upstream
+    QProcess revProc;
+    revProc.setWorkingDirectory(m_repoPath);
+    revProc.start("git", {"rev-list", "--count", "@{u}..HEAD"});
+    if (revProc.waitForFinished(3000) && revProc.exitCode() == 0) {
+        bool ok = false;
+        int count = QString::fromUtf8(revProc.readAllStandardOutput()).trimmed().toInt(&ok);
+        if (ok) m_unpushedCount = count;
+    }
+
+    if (m_uncommittedCount == 0 && m_unpushedCount == 0) {
+        auto* item = new QListWidgetItem("Working tree clean (no uncommitted or unpushed changes).");
         item->setForeground(QColor("#10b981"));
         m_changedFilesList->addItem(item);
+    } else if (m_uncommittedCount == 0 && m_unpushedCount > 0) {
+        auto* item = new QListWidgetItem(QString("%1 commit(s) ahead of remote (ready to push).").arg(m_unpushedCount));
+        item->setForeground(QColor("#3b82f6"));
+        m_changedFilesList->addItem(item);
+    }
+
+    // Configure push & commit button states following the Git way
+    if (m_uncommittedCount > 0) {
+        m_commitBtn->setEnabled(true);
+        m_pushBtn->setEnabled(true);
+        m_pushBtn->setText("🚀 Commit & Push");
+        m_pushBtn->setToolTip(QString("Stage %1 changed file(s), commit them, and push to remote").arg(m_uncommittedCount));
+    } else if (m_unpushedCount > 0) {
+        m_commitBtn->setEnabled(false);
+        m_pushBtn->setEnabled(true);
+        m_pushBtn->setText("Push (↑)");
+        m_pushBtn->setToolTip(QString("Push %1 commit(s) to remote Git repository").arg(m_unpushedCount));
+    } else {
+        m_commitBtn->setEnabled(false);
+        m_pushBtn->setEnabled(false);
+        m_pushBtn->setText("Push (↑)");
+        m_pushBtn->setToolTip("Working tree is clean and up to date with remote.");
     }
 }
 
@@ -217,6 +327,19 @@ void GitSyncDialog::onPush() {
         appendLog("A git command is already running.", true);
         return;
     }
+
+    // Follow the Git way through and through:
+    // If there are uncommitted changes, stage and commit first, then push!
+    if (m_uncommittedCount > 0) {
+        QString msg = m_commitMsgEdit->text().trimmed();
+        if (msg.isEmpty()) {
+            msg = QStringLiteral("update api collection");
+        }
+        ensureSecretGitignore();
+        runGitCommand({"add", "--", ".", ":(exclude)*.secret.env", ":(exclude)**/*.secret.env"});
+        runGitCommand({"commit", "-m", msg});
+    }
+
     runGitCommand({"push"});
 }
 

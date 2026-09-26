@@ -31,7 +31,10 @@ signals:
     void environmentChanged(const QString& envName);
     void manageEnvironmentsRequested();
     void openCollectionRequested();
-    void gitSyncRequested();
+    void gitSyncRequested(const QString& targetPath = QString(), const QString& initialCommitMsg = QString());
+
+public:
+    int queryFolderGitChanges(const QString& folderPath) const;
 
 private slots:
     void onItemClicked(QTreeWidgetItem* item, int column);
@@ -71,6 +74,7 @@ private:
     QPushButton* m_openBtn;
     QPushButton* m_addReqBtn;
     QPushButton* m_addFolderBtn;
+    QPushButton* m_gitPushBtn{nullptr};
     QPushButton* m_gitBranchChip{nullptr};
     QTreeWidget* m_tree;
 

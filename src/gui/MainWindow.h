@@ -84,7 +84,7 @@ private slots:
     void onOpenGrpc();
     void onOpenMockServer();
     void onOpenSse();
-    void onOpenGitSync();
+    void onOpenGitSync(const QString& targetPath = QString(), const QString& initialCommitMsg = QString());
     void onGenerateDocumentation();
     void onToggleTheme();
     void onSelectTheme(const QString& themeId);
