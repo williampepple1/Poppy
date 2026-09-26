@@ -31,6 +31,7 @@ CommandPaletteDialog::CommandPaletteDialog(QWidget* parent)
     m_listWidget->setSelectionMode(QAbstractItemView::SingleSelection);
     m_listWidget->setVerticalScrollMode(QAbstractItemView::ScrollPerPixel);
     connect(m_listWidget, &QListWidget::itemActivated, this, &CommandPaletteDialog::onItemActivated);
+    connect(m_listWidget, &QListWidget::itemClicked, this, &CommandPaletteDialog::onItemActivated);
     mainLayout->addWidget(m_listWidget, 1);
 
     // Status / Tip bar
@@ -152,6 +153,9 @@ void CommandPaletteDialog::rebuildList(const QString& query) {
     const QStringList tokens = q.toLower().split(' ', Qt::SkipEmptyParts);
     const bool dark = Theme::isDarkMode();
 
+    int totalMatches = 0;
+    constexpr int kMaxDisplayed = 100;
+
     for (const auto& entry : m_allEntries) {
         if (mode == ActionsOnly && entry.type != PaletteItemType::Action) continue;
         if (mode == EnvsOnly && entry.type != PaletteItemType::Environment) continue;
@@ -168,6 +172,9 @@ void CommandPaletteDialog::rebuildList(const QString& query) {
             }
             if (!allTokensMatch) continue;
         }
+
+        totalMatches++;
+        if (m_filteredEntries.size() >= kMaxDisplayed) continue;
 
         m_filteredEntries.append(entry);
 
@@ -240,7 +247,13 @@ void CommandPaletteDialog::rebuildList(const QString& query) {
         m_listWidget->setCurrentRow(0);
     }
 
-    m_statusLabel->setText(QString("%1 items · ↑↓ to navigate · Enter to select · Esc to dismiss").arg(m_filteredEntries.size()));
+    if (totalMatches > kMaxDisplayed) {
+        m_statusLabel->setText(QString("Showing %1 of %2 items · ↑↓ to navigate · Enter to select · Esc to dismiss")
+            .arg(m_filteredEntries.size()).arg(totalMatches));
+    } else {
+        m_statusLabel->setText(QString("%1 items · ↑↓ to navigate · Enter to select · Esc to dismiss")
+            .arg(m_filteredEntries.size()));
+    }
 }
 
 void CommandPaletteDialog::onItemActivated(QListWidgetItem* item) {
@@ -254,7 +267,10 @@ void CommandPaletteDialog::onItemActivated(QListWidgetItem* item) {
 bool CommandPaletteDialog::eventFilter(QObject* obj, QEvent* event) {
     if (obj == m_searchEdit && event->type() == QEvent::KeyPress) {
         auto* keyEvent = static_cast<QKeyEvent*>(event);
-        if (keyEvent->key() == Qt::Key_Down) {
+        if (keyEvent->key() == Qt::Key_Escape) {
+            reject();
+            return true;
+        } else if (keyEvent->key() == Qt::Key_Down) {
             int row = m_listWidget->currentRow();
             if (row < m_listWidget->count() - 1) {
                 m_listWidget->setCurrentRow(row + 1);

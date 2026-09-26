@@ -41,7 +41,10 @@ void NetworkWaterfallWidget::setTimings(double dnsMs, double connectMs, double s
     double sslDur = (sslMs > connectMs) ? (sslMs - connectMs) : 0.0;
     double preWait = (sslMs > 0.0) ? sslMs : ((connectMs > 0.0) ? connectMs : dnsMs);
     double waitDur = std::max(0.0, ttfbMs > preWait ? (ttfbMs - preWait) : 0.0);
-    double dlDur = std::max(0.0, m_totalLatencyMs > ttfbMs ? (m_totalLatencyMs - ttfbMs) : 0.0);
+    double dlDur = (ttfbMs > 0.0 && m_totalLatencyMs > ttfbMs) ? (m_totalLatencyMs - ttfbMs) : 0.0;
+    if (ttfbMs <= 0.0 && waitDur <= 0.0 && m_totalLatencyMs > 0.0) {
+        waitDur = m_totalLatencyMs;
+    }
 
     // If curl didn't report detailed breakdown but totalLatencyMs is known
     double sumDurs = dnsDur + tcpDur + sslDur + waitDur + dlDur;
@@ -155,6 +158,17 @@ void NetworkWaterfallWidget::paintEvent(QPaintEvent* /*event*/) {
 
 void NetworkWaterfallWidget::mouseMoveEvent(QMouseEvent* event) {
     if (m_segments.isEmpty() || m_totalLatencyMs <= 0.0) {
+        QWidget::mouseMoveEvent(event);
+        return;
+    }
+
+    double mouseY = event->position().y();
+    if (mouseY < 0 || mouseY > height()) {
+        if (m_hoveredSegmentIndex != -1) {
+            m_hoveredSegmentIndex = -1;
+            update();
+            QToolTip::hideText();
+        }
         QWidget::mouseMoveEvent(event);
         return;
     }

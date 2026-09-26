@@ -514,7 +514,7 @@ void MainWindow::onMethodChanged(int index) {
 }
 
 void MainWindow::updateRequestTabBadges() {
-    if (!m_requestTabs) return;
+    if (!m_requestTabs || m_requestTabs->count() < 6) return;
 
     // 0: Params
     int paramCount = 0;
@@ -1842,8 +1842,11 @@ void MainWindow::updateUrlVariableInspection() {
         for (auto it = allVars.begin(); it != allVars.end(); ++it) {
             varTokens.append(QString("{{%1}}").arg(it.key()));
         }
-        auto* model = new QStringListModel(varTokens, m_urlCompleter);
-        m_urlCompleter->setModel(model);
+        if (auto* existingModel = qobject_cast<QStringListModel*>(m_urlCompleter->model())) {
+            existingModel->setStringList(varTokens);
+        } else {
+            m_urlCompleter->setModel(new QStringListModel(varTokens, m_urlCompleter));
+        }
     }
 
     // Update status bar variable count button

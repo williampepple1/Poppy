@@ -585,7 +585,7 @@ void ResponseInspector::updateTelemetryBar(const core::ResponseModel& res) {
     m_sizeBadge->setText(QString("📦 %1").arg(sizeStr));
 
     // Timing breakdown
-    if (res.dnsTimeMs > 0 || res.connectTimeMs > 0 || res.sslHandshakeTimeMs > 0 || res.ttfbMs > 0 || res.latencyMs > 0) {
+    if (res.statusCode > 0 && (res.dnsTimeMs > 0 || res.connectTimeMs > 0 || res.sslHandshakeTimeMs > 0 || res.ttfbMs > 0 || res.latencyMs > 0)) {
         m_timingDetails->setText(QString("DNS: %1ms · TCP: %2ms · SSL: %3ms · TTFB: %4ms")
             .arg(static_cast<int>(res.dnsTimeMs))
             .arg(static_cast<int>(res.connectTimeMs))

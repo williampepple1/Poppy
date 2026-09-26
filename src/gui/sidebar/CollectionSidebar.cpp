@@ -202,6 +202,7 @@ QString CollectionSidebar::currentEnvironmentName() const {
 void CollectionSidebar::updateEnvironmentsCombo() {
     if (!m_model) return;
     QString current = m_envCombo->currentData().toString();
+    m_envCombo->blockSignals(true);
     m_envCombo->clear();
     m_envCombo->addItem("⚪ No Environment", "");
 
@@ -211,6 +212,8 @@ void CollectionSidebar::updateEnvironmentsCombo() {
 
     int idx = m_envCombo->findData(current);
     if (idx >= 0) m_envCombo->setCurrentIndex(idx);
+    else m_envCombo->setCurrentIndex(0);
+    m_envCombo->blockSignals(false);
 }
 
 void CollectionSidebar::setActiveEnvironment(const QString& name) {
