@@ -13,9 +13,12 @@
 #include <QSettings>
 #include <QDragEnterEvent>
 #include <QDropEvent>
+#include <QHelpEvent>
+#include <QMouseEvent>
 #include <QMimeData>
 #include <QStandardPaths>
 #include <Theme.h>
+#include "components/VariableHoverPopup.h"
 #include "dialogs/EnvironmentDialog.h"
 #include "dialogs/CodeSnippetDialog.h"
 #include "dialogs/ImportDialog.h"
@@ -295,6 +298,11 @@ void MainWindow::setupUi() {
     m_urlCompleter->setCaseSensitivity(Qt::CaseInsensitive);
     m_urlCompleter->setCompletionMode(QCompleter::PopupCompletion);
     m_urlEdit->setCompleter(m_urlCompleter);
+
+    m_variableHoverPopup = new VariableHoverPopup(this);
+    connect(m_variableHoverPopup, &VariableHoverPopup::variableSaved, this, &MainWindow::onVariableSaved);
+    connect(m_variableHoverPopup, &VariableHoverPopup::manageEnvironmentsRequested, this, &MainWindow::onManageEnvironments);
+    m_urlEdit->installEventFilter(this);
 
     urlBarLayout->addWidget(m_urlEdit, 1);
 
@@ -1535,6 +1543,7 @@ void MainWindow::onOpenGitSync() {
 
 core::VariableResolver MainWindow::currentVariableResolver() const {
     core::VariableResolver resolver;
+    resolver.setGlobalVariables(m_sessionGlobals);
     core::EnvironmentModel activeEnv(m_activeEnvName);
     for (const auto& env : m_collectionModel.environments()) {
         if (env.name() == m_activeEnvName) {
@@ -2311,6 +2320,103 @@ void MainWindow::dropEvent(QDropEvent* event) {
             event->acceptProposedAction();
         }
     }
+}
+
+bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
+    if (obj == m_urlEdit) {
+        if (event->type() == QEvent::ToolTip) {
+            auto* helpEvent = static_cast<QHelpEvent*>(event);
+            const QString text = m_urlEdit->text();
+            static const QRegularExpression varRegex(R"(\{\{([^}]+)\}\})");
+            auto matchIter = varRegex.globalMatch(text);
+            if (!matchIter.hasNext()) {
+                return false;
+            }
+
+            int cursorPos = m_urlEdit->cursorPositionAt(helpEvent->pos());
+            QString targetVar;
+            while (matchIter.hasNext()) {
+                auto match = matchIter.next();
+                if (cursorPos >= match.capturedStart() && cursorPos <= match.capturedEnd()) {
+                    targetVar = match.captured(1).trimmed();
+                    break;
+                }
+            }
+
+            if (targetVar.isEmpty()) {
+                auto firstMatch = varRegex.match(text);
+                if (firstMatch.hasMatch()) {
+                    targetVar = firstMatch.captured(1).trimmed();
+                }
+            }
+
+            if (!targetVar.isEmpty() && m_variableHoverPopup) {
+                core::VariableResolver resolver = currentVariableResolver();
+                m_variableHoverPopup->showForVariable(targetVar, helpEvent->globalPos(), &resolver, &m_collectionModel, m_activeEnvName);
+                return true; // Suppress default static tooltip so user can interact with hover card
+            }
+        } else if (event->type() == QEvent::MouseButtonRelease) {
+            auto* mouseEvent = static_cast<QMouseEvent*>(event);
+            if (mouseEvent->button() == Qt::LeftButton) {
+                int cursorPos = m_urlEdit->cursorPositionAt(mouseEvent->pos());
+                static const QRegularExpression varRegex(R"(\{\{([^}]+)\}\})");
+                auto matchIter = varRegex.globalMatch(m_urlEdit->text());
+                while (matchIter.hasNext()) {
+                    auto match = matchIter.next();
+                    if (cursorPos >= match.capturedStart() && cursorPos <= match.capturedEnd()) {
+                        QString targetVar = match.captured(1).trimmed();
+                        if (m_variableHoverPopup) {
+                            core::VariableResolver resolver = currentVariableResolver();
+                            m_variableHoverPopup->showForVariable(targetVar, mouseEvent->globalPosition().toPoint(), &resolver, &m_collectionModel, m_activeEnvName);
+                        }
+                        break;
+                    }
+                }
+            }
+        } else if (event->type() == QEvent::Leave) {
+            if (m_variableHoverPopup) {
+                m_variableHoverPopup->scheduleHide(350);
+            }
+        }
+    }
+    return QMainWindow::eventFilter(obj, event);
+}
+
+void MainWindow::onVariableSaved(const QString& name, const QString& value, const QString& scope, bool isSecret) {
+    if (name.isEmpty()) return;
+
+    if (scope == "env") {
+        if (m_activeEnvName.isEmpty()) {
+            if (!m_collectionModel.environments().isEmpty()) {
+                m_activeEnvName = m_collectionModel.environments().first().name();
+            } else {
+                core::EnvironmentModel devEnv("dev");
+                m_collectionModel.environments().append(devEnv);
+                m_activeEnvName = "dev";
+            }
+        }
+        auto* env = mutableActiveEnvironment();
+        if (env) {
+            env->addOrUpdateVariable(name, value, isSecret, true);
+            persistActiveEnvironment();
+        }
+    } else if (scope == "collection") {
+        if (m_collectionModel.rootItem()) {
+            m_collectionModel.rootItem()->setVariable(name, value);
+            if (!m_collectionModel.rootPath().isEmpty()) {
+                m_collectionModel.saveFolderVariables(m_collectionModel.rootItem());
+            }
+        } else {
+            m_sessionGlobals[name] = value;
+        }
+    } else { // "global"
+        m_sessionGlobals[name] = value;
+    }
+
+    refreshEnvironmentUi();
+    updateUrlVariableInspection();
+    updateRequestTabBadges();
+    statusBar()->showMessage(QString("Variable {{%1}} saved successfully!").arg(name), 3000);
 }
 
 } // namespace poppy::gui

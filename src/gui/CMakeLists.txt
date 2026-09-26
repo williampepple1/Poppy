@@ -12,6 +12,7 @@ add_executable(poppy
     components/KeyValueTable.h components/KeyValueTable.cpp
     components/JsonSyntaxHighlighter.h components/JsonSyntaxHighlighter.cpp
     components/NetworkWaterfallWidget.h components/NetworkWaterfallWidget.cpp
+    components/VariableHoverPopup.h components/VariableHoverPopup.cpp
     editors/ParamsEditor.h editors/ParamsEditor.cpp
     editors/HeadersEditor.h editors/HeadersEditor.cpp
     editors/BodyEditor.h editors/BodyEditor.cpp

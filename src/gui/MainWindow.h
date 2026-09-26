@@ -39,6 +39,7 @@ protected:
     void closeEvent(QCloseEvent* event) override;
     void dragEnterEvent(class QDragEnterEvent* event) override;
     void dropEvent(class QDropEvent* event) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private slots:
     void updateRecentCollectionsMenu();
@@ -92,6 +93,7 @@ private slots:
     void onExportMarkdown();
     void onFindAndReplace();
     void onOpenCommandPalette();
+    void onVariableSaved(const QString& name, const QString& value, const QString& scope, bool isSecret);
 
 private:
     void setupUi();
@@ -180,6 +182,8 @@ private:
     QSplitter* m_contentSplitter{nullptr};  // Request | Response splitter (toggled H/V)
     QMenu* m_recentCollectionsMenu{nullptr};
     QAction* m_closeCollectionAction{nullptr};
+    class VariableHoverPopup* m_variableHoverPopup{nullptr};
+    QMap<QString, QString> m_sessionGlobals;
 };
 
 } // namespace poppy::gui
