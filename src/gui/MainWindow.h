@@ -87,6 +87,8 @@ private slots:
     void onOpenGitSync();
     void onGenerateDocumentation();
     void onToggleTheme();
+    void onSelectTheme(const QString& themeId);
+    void applyTheme(const QString& themeId = QString(), bool notifyUser = true);
     void onShowQuickVariables();
     void updateUrlVariableInspection();
     void onShowSessionTelemetry();

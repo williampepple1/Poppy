@@ -21,6 +21,9 @@ private slots:
     void onBrowseCert();
     void onBrowseKey();
 
+signals:
+    void themeChanged(const QString& themeId);
+
 private:
     network::CurlNetworkEngine* m_engine;
 
@@ -29,6 +32,9 @@ private:
     QCheckBox* m_sslVerifyChk;
     QCheckBox* m_cookieJarChk;
     QPushButton* m_clearCookiesBtn;
+
+    // Appearance
+    QComboBox* m_themeCombo;
 
     // mTLS
     QLineEdit* m_clientCertEdit;

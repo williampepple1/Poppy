@@ -5,8 +5,8 @@
 #include <QGroupBox>
 #include <QLabel>
 #include <QMessageBox>
-
 #include <QFileDialog>
+#include <Theme.h>
 
 namespace poppy::gui {
 
@@ -103,6 +103,20 @@ SettingsDialog::SettingsDialog(network::CurlNetworkEngine* engine, QWidget* pare
 
     mainLayout->addWidget(cookieGroup);
 
+    // 5. Appearance & Theme Group
+    auto* themeGroup = new QGroupBox("Appearance & Theme", this);
+    auto* themeForm = new QFormLayout(themeGroup);
+
+    m_themeCombo = new QComboBox(themeGroup);
+    for (const auto& th : Theme::availableThemes()) {
+        m_themeCombo->addItem(QString("%1 (%2)").arg(th.name, th.category), th.id);
+        if (th.id == Theme::currentThemeId()) {
+            m_themeCombo->setCurrentIndex(m_themeCombo->count() - 1);
+        }
+    }
+    themeForm->addRow("Color Theme:", m_themeCombo);
+    mainLayout->addWidget(themeGroup);
+
     mainLayout->addStretch();
 
     // Dialog buttons
@@ -152,6 +166,10 @@ void SettingsDialog::onApply() {
         m_engine->setClientCertType(m_clientCertTypeCombo->currentText());
         m_engine->setClientKeyPath(m_clientKeyEdit->text().trimmed());
         m_engine->setClientKeyPassword(m_clientPassEdit->text());
+    }
+    QString selectedTheme = m_themeCombo->currentData().toString();
+    if (!selectedTheme.isEmpty()) {
+        emit themeChanged(selectedTheme);
     }
     accept();
 }

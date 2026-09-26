@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QIcon>
+#include <QSettings>
 #include "MainWindow.h"
 #include "Theme.h"
 
@@ -10,8 +11,12 @@ int main(int argc, char *argv[]) {
     app.setOrganizationName("Poppy");
     app.setWindowIcon(QIcon(":/icons/app_icon.png"));
 
-    // Apply modern dark stylesheet
-    app.setStyleSheet(poppy::gui::Theme::darkStyleSheet());
+    QSettings settings;
+    QString savedTheme = settings.value("ui/theme", "obsidian").toString();
+    poppy::gui::Theme::setTheme(savedTheme);
+
+    // Apply configured theme stylesheet
+    app.setStyleSheet(poppy::gui::Theme::currentStyleSheet());
 
     poppy::gui::MainWindow window;
     if (argc > 1) {

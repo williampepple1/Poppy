@@ -128,6 +128,10 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
 
     m_historyManager.loadFromFile(core::HistoryManager::defaultHistoryFilePath());
 
+    QSettings settings;
+    QString savedTheme = settings.value("ui/theme", "obsidian").toString();
+    Theme::setTheme(savedTheme);
+
     setupUi();
     setupMenus();
 
@@ -151,6 +155,7 @@ MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     loadRequestIntoUi(m_currentRequest);
 
     restoreAppState();
+    applyTheme(savedTheme);
 }
 
 MainWindow::~MainWindow() = default;
@@ -430,6 +435,7 @@ void MainWindow::setupUi() {
 
     updateTopEnvCombo();
     onMethodChanged(0);
+    applyTheme(Theme::currentThemeId(), false);
 }
 
 void MainWindow::setupMenus() {
@@ -492,6 +498,27 @@ void MainWindow::setupMenus() {
 
     auto* viewMenu = menuBar()->addMenu("&View");
     viewMenu->addAction("Toggle &Dark/Light Theme", QKeySequence(Qt::CTRL | Qt::Key_T), this, &MainWindow::onToggleTheme);
+
+    auto* themesMenu = viewMenu->addMenu("🎨 &Themes");
+    auto rebuildThemesMenu = [this, themesMenu]() {
+        themesMenu->clear();
+        QString lastCategory;
+        for (const auto& th : Theme::availableThemes()) {
+            if (!lastCategory.isEmpty() && th.category != lastCategory) {
+                themesMenu->addSeparator();
+            }
+            lastCategory = th.category;
+
+            auto* act = themesMenu->addAction(th.name, [this, id = th.id]() {
+                onSelectTheme(id);
+            });
+            act->setCheckable(true);
+            act->setChecked(th.id == Theme::currentThemeId());
+        }
+    };
+    connect(themesMenu, &QMenu::aboutToShow, this, rebuildThemesMenu);
+    rebuildThemesMenu();
+
     viewMenu->addAction("Toggle &Layout Split (Side-by-side / Stacked)", QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L), this, [this]() {
         if (!m_contentSplitter) return;
         bool isVertical = (m_contentSplitter->orientation() == Qt::Vertical);
@@ -954,6 +981,16 @@ void MainWindow::onOpenCommandPalette() {
         {PaletteItemType::Action, "Settings & Preferences...", "Configure SSL verification, proxies, and timeouts", "Ctrl+,", "Settings", core::HttpMethod::GET, "", nullptr, [this]() { onOpenSettings(); }},
         {PaletteItemType::Action, "Keyboard Shortcuts...", "Show cheat sheet of all Poppy shortcut keys", "Ctrl+/", "Help", core::HttpMethod::GET, "", nullptr, [this]() { onShowShortcuts(); }}
     };
+
+    for (const auto& th : Theme::availableThemes()) {
+        QString id = th.id;
+        QString name = th.name;
+        QString category = th.category;
+        actions.append({PaletteItemType::Action, QString("Theme: %1").arg(name), QString("Switch appearance to %1 (%2)").arg(name, category), "", "Theme", core::HttpMethod::GET, "", nullptr, [this, id]() {
+            applyTheme(id);
+        }});
+    }
+
     dialog.setActions(actions);
 
     // 2. Environments
@@ -1355,6 +1392,9 @@ void MainWindow::onClearCookieJar() {
 
 void MainWindow::onOpenSettings() {
     SettingsDialog dlg(&m_networkEngine, this);
+    connect(&dlg, &SettingsDialog::themeChanged, this, [this](const QString& themeId) {
+        applyTheme(themeId, true);
+    });
     dlg.exec();
 }
 
@@ -1647,117 +1687,29 @@ void MainWindow::onGenerateDocumentation() {
 }
 
 void MainWindow::applyRequestChrome() {
-    const bool dark = Theme::isDarkMode();
     if (m_openRequestsTabBar) {
-        if (dark) {
-            m_openRequestsTabBar->setStyleSheet(
-                "QTabBar { background: #111215; border-bottom: 1px solid #23242a; qproperty-drawBase: 0; }"
-                "QTabBar::tab {"
-                "    background: transparent;"
-                "    color: #9496a1;"
-                "    padding: 6px 12px 6px 14px;"
-                "    margin-right: 3px;"
-                "    margin-top: 2px;"
-                "    border-top-left-radius: 6px;"
-                "    border-top-right-radius: 6px;"
-                "    border: 1px solid transparent;"
-                "    border-bottom: 2px solid transparent;"
-                "    font-size: 12px;"
-                "    font-weight: 500;"
-                "    min-width: 80px;"
-                "    max-width: 220px;"
-                "}"
-                "QTabBar::tab:hover:!selected {"
-                "    background: rgba(255, 255, 255, 0.04);"
-                "    color: #e2e4ea;"
-                "    border: 1px solid #1f2026;"
-                "    border-bottom: 2px solid transparent;"
-                "}"
-                "QTabBar::tab:selected {"
-                "    background: #18191e;"
-                "    color: #ffffff;"
-                "    font-weight: 600;"
-                "    border: 1px solid #282932;"
-                "    border-bottom: 2px solid #f59e0b;"
-                "}"
-                "QTabBar::close-button {"
-                "    image: url(:/icons/close_tab.png);"
-                "    subcontrol-position: right;"
-                "    subcontrol-origin: padding;"
-                "    margin-left: 8px;"
-                "    margin-right: 2px;"
-                "    padding: 3px;"
-                "    border-radius: 4px;"
-                "    background: transparent;"
-                "}"
-                "QTabBar::close-button:hover {"
-                "    image: url(:/icons/close_tab_hover.png);"
-                "    background: rgba(255, 255, 255, 0.12);"
-                "}"
-                "QTabBar::close-button:pressed {"
-                "    background: rgba(255, 255, 255, 0.22);"
-                "}"
-            );
-        } else {
-            m_openRequestsTabBar->setStyleSheet(
-                "QTabBar { background: #f8fafc; border-bottom: 1px solid #e2e8f0; qproperty-drawBase: 0; }"
-                "QTabBar::tab {"
-                "    background: transparent;"
-                "    color: #64748b;"
-                "    padding: 6px 12px 6px 14px;"
-                "    margin-right: 3px;"
-                "    margin-top: 2px;"
-                "    border-top-left-radius: 6px;"
-                "    border-top-right-radius: 6px;"
-                "    border: 1px solid transparent;"
-                "    border-bottom: 2px solid transparent;"
-                "    font-size: 12px;"
-                "    font-weight: 500;"
-                "    min-width: 80px;"
-                "    max-width: 220px;"
-                "}"
-                "QTabBar::tab:hover:!selected {"
-                "    background: rgba(0, 0, 0, 0.04);"
-                "    color: #0f172a;"
-                "    border: 1px solid #e2e8f0;"
-                "    border-bottom: 2px solid transparent;"
-                "}"
-                "QTabBar::tab:selected {"
-                "    background: #ffffff;"
-                "    color: #0f172a;"
-                "    font-weight: 600;"
-                "    border: 1px solid #cbd5e1;"
-                "    border-bottom: 2px solid #d97706;"
-                "}"
-                "QTabBar::close-button {"
-                "    image: url(:/icons/close_tab_light.png);"
-                "    subcontrol-position: right;"
-                "    subcontrol-origin: padding;"
-                "    margin-left: 8px;"
-                "    margin-right: 2px;"
-                "    padding: 3px;"
-                "    border-radius: 4px;"
-                "    background: transparent;"
-                "}"
-                "QTabBar::close-button:hover {"
-                "    image: url(:/icons/close_tab_light_hover.png);"
-                "    background: rgba(0, 0, 0, 0.08);"
-                "}"
-                "QTabBar::close-button:pressed {"
-                "    background: rgba(0, 0, 0, 0.15);"
-                "}"
-            );
-        }
+        m_openRequestsTabBar->setStyleSheet(Theme::themeTabBarStylesheet());
     }
     if (m_requestNameLabel) {
-        m_requestNameLabel->setStyleSheet(QString("font-size: 16px; font-weight: 700; color: %1; padding-left: 2px;").arg(dark ? "#f9fafb" : "#0f172a"));
+        m_requestNameLabel->setStyleSheet(QString("font-size: 16px; font-weight: 700; color: %1; padding-left: 2px;").arg(Theme::themeRequestLabelColor()));
     }
 }
 
 void MainWindow::onToggleTheme() {
-    bool dark = Theme::toggleTheme();
+    Theme::toggleTheme();
+    applyTheme(Theme::currentThemeId());
+}
+
+void MainWindow::onSelectTheme(const QString& themeId) {
+    applyTheme(themeId);
+}
+
+void MainWindow::applyTheme(const QString& themeId, bool notifyUser) {
+    if (!themeId.isEmpty()) {
+        Theme::setTheme(themeId);
+    }
     if (auto* app = qobject_cast<QApplication*>(QApplication::instance())) {
-        app->setStyleSheet(dark ? Theme::darkStyleSheet() : Theme::lightStyleSheet());
+        app->setStyleSheet(Theme::currentStyleSheet());
     }
     applyRequestChrome();
     if (m_methodCombo) {
@@ -1766,8 +1718,14 @@ void MainWindow::onToggleTheme() {
     updateTopEnvCombo();
     updateRequestTabBadges();
     m_sidebar->refreshTree();
-    m_responseInspector->setTheme(dark);
-    statusBar()->showMessage(QString("Switched to %1 theme (Ctrl+T)").arg(dark ? "Dark" : "Light"), 3000);
+    m_responseInspector->setTheme(Theme::isDarkMode());
+
+    QSettings settings;
+    settings.setValue("ui/theme", Theme::currentThemeId());
+
+    if (notifyUser) {
+        statusBar()->showMessage(QString("Switched to %1 theme").arg(Theme::currentThemeName()), 3000);
+    }
 }
 
 void MainWindow::onShowQuickVariables() {
