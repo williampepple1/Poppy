@@ -1596,6 +1596,8 @@ void MainWindow::refreshEnvironmentUi() {
     if (!found) {
         m_activeEnvName.clear();
         m_sidebar->setActiveEnvironment(QString());
+    } else {
+        m_sidebar->setActiveEnvironment(m_activeEnvName);
     }
     m_sidebar->updateEnvironmentsCombo();
     updateTopEnvCombo();
@@ -2337,16 +2339,9 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
             QString targetVar;
             while (matchIter.hasNext()) {
                 auto match = matchIter.next();
-                if (cursorPos >= match.capturedStart() && cursorPos <= match.capturedEnd()) {
+                if (cursorPos >= (match.capturedStart() - 1) && cursorPos <= (match.capturedEnd() + 1)) {
                     targetVar = match.captured(1).trimmed();
                     break;
-                }
-            }
-
-            if (targetVar.isEmpty()) {
-                auto firstMatch = varRegex.match(text);
-                if (firstMatch.hasMatch()) {
-                    targetVar = firstMatch.captured(1).trimmed();
                 }
             }
 
@@ -2363,7 +2358,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event) {
                 auto matchIter = varRegex.globalMatch(m_urlEdit->text());
                 while (matchIter.hasNext()) {
                     auto match = matchIter.next();
-                    if (cursorPos >= match.capturedStart() && cursorPos <= match.capturedEnd()) {
+                    if (cursorPos >= (match.capturedStart() - 1) && cursorPos <= (match.capturedEnd() + 1)) {
                         QString targetVar = match.captured(1).trimmed();
                         if (m_variableHoverPopup) {
                             core::VariableResolver resolver = currentVariableResolver();

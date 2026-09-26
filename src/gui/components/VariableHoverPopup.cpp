@@ -6,6 +6,7 @@
 #include <QKeyEvent>
 #include <QGuiApplication>
 #include <QScreen>
+#include <QAbstractItemView>
 #include <Theme.h>
 
 namespace poppy::gui {
@@ -184,13 +185,27 @@ void VariableHoverPopup::showForVariable(const QString& varName,
     m_targetScopeCombo->clear();
     if (!m_activeEnvName.isEmpty()) {
         m_targetScopeCombo->addItem(QString("Environment: %1").arg(m_activeEnvName), "env");
+    } else if (m_model && !m_model->environments().isEmpty()) {
+        m_targetScopeCombo->addItem(QString("Environment: %1").arg(m_model->environments().first().name()), "env");
+    } else {
+        m_targetScopeCombo->addItem("Environment: dev", "env");
     }
     m_targetScopeCombo->addItem("Collection Variables", "collection");
     m_targetScopeCombo->addItem("Global Session", "global");
 
-    m_isSecretCheck->setChecked(false);
+    bool wasSecret = false;
+    if (m_model) {
+        for (const auto& env : m_model->environments()) {
+            if ((env.name() == m_activeEnvName || m_activeEnvName.isEmpty()) && env.isSecretVariable(varName)) {
+                wasSecret = true;
+                break;
+            }
+        }
+    }
+    m_isSecretCheck->setChecked(wasSecret);
     m_feedbackLabel->setText("Press Enter to save");
     m_feedbackLabel->setStyleSheet(dark ? "font-size: 10px; color: #71717a;" : "font-size: 10px; color: #64748b;");
+    m_saveBtn->setEnabled(true);
 
     // Position popup below anchor, keeping on screen
     adjustSize();
@@ -226,7 +241,8 @@ void VariableHoverPopup::scheduleHide(int delayMs) {
 
 bool VariableHoverPopup::isUserInteracting() const {
     if (!isVisible()) return false;
-    if (m_valueEdit->hasFocus() || m_targetScopeCombo->hasFocus() || m_saveBtn->hasFocus()) return true;
+    if (focusWidget() != nullptr) return true;
+    if (m_targetScopeCombo && m_targetScopeCombo->view() && m_targetScopeCombo->view()->isVisible()) return true;
     QPoint mousePos = QCursor::pos();
     return geometry().contains(mousePos);
 }
@@ -237,6 +253,11 @@ void VariableHoverPopup::enterEvent(QEnterEvent* /*event*/) {
 
 void VariableHoverPopup::leaveEvent(QEvent* /*event*/) {
     scheduleHide(350);
+}
+
+void VariableHoverPopup::hideEvent(QHideEvent* event) {
+    cancelHideTimer();
+    QWidget::hideEvent(event);
 }
 
 bool VariableHoverPopup::eventFilter(QObject* obj, QEvent* event) {
@@ -251,12 +272,13 @@ bool VariableHoverPopup::eventFilter(QObject* obj, QEvent* event) {
 }
 
 void VariableHoverPopup::onSaveClicked() {
-    if (m_varName.isEmpty()) return;
+    if (m_varName.isEmpty() || !m_saveBtn->isEnabled()) return;
 
-    QString val = m_valueEdit->text().trimmed();
+    QString val = m_valueEdit->text();
     QString scope = m_targetScopeCombo->currentData().toString();
     bool isSecret = m_isSecretCheck->isChecked();
 
+    m_saveBtn->setEnabled(false);
     emit variableSaved(m_varName, val, scope, isSecret);
 
     m_feedbackLabel->setText("✓ Saved!");
@@ -264,6 +286,7 @@ void VariableHoverPopup::onSaveClicked() {
 
     QTimer::singleShot(500, this, [this]() {
         hide();
+        m_saveBtn->setEnabled(true);
     });
 }
 

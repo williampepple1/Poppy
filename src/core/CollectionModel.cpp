@@ -485,6 +485,13 @@ bool CollectionModel::saveFolderVariables(CollectionItem* folder) {
     if (hasYml) {
         return OpenCollectionWriter::writeFolderFile(folder->path(), folder->name(), folder->seq(), folder->auth(), folder->variables(), folder->headers());
     }
+    if (folder == m_rootItem.get() && QFile::exists(QDir(folder->path()).filePath(QStringLiteral("collection.bru")))) {
+        QFile collFile(QDir(folder->path()).filePath(QStringLiteral("collection.bru")));
+        if (collFile.open(QIODevice::WriteOnly | QIODevice::Text)) {
+            QTextStream out(&collFile);
+            out << BruWriter::serializeFolder(folder->name(), folder->variables(), folder->seq());
+        }
+    }
     return BruWriter::writeFolderFile(folder->path(), folder->name(), folder->variables(), folder->seq());
 }
 
