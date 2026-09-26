@@ -1,0 +1,35 @@
+meta {
+  name: Create Support Ticket
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/anything/{{apiVersion}}/support/tickets
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "customerId": "{{customerId}}",
+    "orderId": "{{orderId}}",
+    "subject": "Change delivery window",
+    "message": "Customer would like delivery moved to Friday afternoon.",
+    "priority": "normal"
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}

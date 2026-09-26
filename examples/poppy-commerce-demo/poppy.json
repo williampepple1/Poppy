@@ -1,0 +1,5 @@
+{
+  "name": "Poppy Commerce Demo API",
+  "version": "1.0.0",
+  "description": "Importable mock commerce API collection for testing Poppy features."
+}

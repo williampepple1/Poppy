@@ -1,0 +1,43 @@
+meta {
+  name: Create Cart
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/anything/{{apiVersion}}/customers/{{customerId}}/carts
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  Idempotency-Key: poppy-demo-cart-001
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "currency": "USD",
+    "metadata": {
+      "source": "poppy-demo",
+      "campaign": "local-first-api-testing"
+    }
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}
+
+tests {
+  test("Create cart payload is echoed", function() {
+    var data = res.getBody();
+    expect(data.json.currency).to.equal("USD");
+  });
+}

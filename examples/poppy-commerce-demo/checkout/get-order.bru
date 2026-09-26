@@ -1,0 +1,29 @@
+meta {
+  name: Get Order
+  type: http
+  seq: 8
+}
+
+get {
+  url: {{baseUrl}}/anything/{{apiVersion}}/orders/:orderId
+  body: none
+  auth: bearer
+}
+
+params:path {
+  orderId: {{orderId}}
+}
+
+headers {
+  Accept: application/json
+  X-Store-Id: {{storeId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}

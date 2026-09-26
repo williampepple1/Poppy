@@ -1,0 +1,41 @@
+meta {
+  name: List Products
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/anything/{{apiVersion}}/stores/{{storeId}}/products
+  body: none
+  auth: apikey
+}
+
+params:query {
+  category: keyboards
+  page: 1
+  limit: 12
+  sort: featured
+}
+
+headers {
+  Accept: application/json
+  X-Client: Poppy Demo
+}
+
+auth:apikey {
+  key: X-API-Key
+  value: {{apiKey}}
+  placement: header
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}
+
+tests {
+  test("Products request includes a store id", function() {
+    var data = res.getBody();
+    expect(data.url.indexOf("demo-store") >= 0).to.equal(true);
+  });
+}

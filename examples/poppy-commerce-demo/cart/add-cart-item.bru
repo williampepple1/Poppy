@@ -1,0 +1,37 @@
+meta {
+  name: Add Cart Item
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/anything/{{apiVersion}}/carts/{{cartId}}/items
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-Store-Id: {{storeId}}
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "productId": "{{productId}}",
+    "quantity": 2,
+    "options": {
+      "switch": "quiet tactile",
+      "layout": "ansi"
+    }
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.body.json.quantity eq 2
+}

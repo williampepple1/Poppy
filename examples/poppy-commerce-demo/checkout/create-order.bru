@@ -1,0 +1,50 @@
+meta {
+  name: Create Order
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/anything/{{apiVersion}}/checkout/orders
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  Idempotency-Key: poppy-demo-order-001
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "cartId": "{{cartId}}",
+    "customerId": "{{customerId}}",
+    "shippingAddress": {
+      "name": "Ada Lovelace",
+      "line1": "12 Algorithm Avenue",
+      "city": "Lagos",
+      "country": "NG"
+    },
+    "payment": {
+      "provider": "demo",
+      "token": "tok_demo_visa"
+    }
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}
+
+tests {
+  test("Order request contains a cart id", function() {
+    var data = res.getBody();
+    expect(data.json.cartId).to.equal("cart_9001");
+  });
+}

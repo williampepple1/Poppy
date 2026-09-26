@@ -1,0 +1,31 @@
+meta {
+  name: Apply Discount Code
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/anything/{{apiVersion}}/carts/{{cartId}}/discount
+  body: json
+  auth: bearer
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+body:json {
+  {
+    "code": "POPPY20"
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}

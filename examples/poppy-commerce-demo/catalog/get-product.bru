@@ -1,0 +1,29 @@
+meta {
+  name: Get Product
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/anything/{{apiVersion}}/stores/{{storeId}}/products/:productId
+  body: none
+  auth: bearer
+}
+
+params:path {
+  productId: {{productId}}
+}
+
+headers {
+  Accept: application/json
+  X-Trace-Id: poppy-demo-product-lookup
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}

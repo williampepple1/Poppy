@@ -1,0 +1,36 @@
+meta {
+  name: Login Customer
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/anything/{{apiVersion}}/auth/login
+  body: json
+  auth: none
+}
+
+headers {
+  Accept: application/json
+  Content-Type: application/json
+  X-Store-Id: {{storeId}}
+}
+
+body:json {
+  {
+    "email": "ada@example.com",
+    "password": "correct-horse-battery-staple",
+    "device": "poppy-desktop"
+  }
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 5000
+}
+
+tests {
+  test("Login endpoint accepts the request", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
