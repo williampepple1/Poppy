@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(Poppy VERSION 1.4.6 LANGUAGES CXX C)
+project(Poppy VERSION 1.4.5 LANGUAGES CXX C)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
