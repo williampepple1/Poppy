@@ -496,7 +496,7 @@ void MainWindow::setupMenus() {
     helpMenu->addSeparator();
     helpMenu->addAction("&About Poppy", this, [this]() {
         QMessageBox::about(this, "About Poppy",
-            "<h3>Poppy API Client v1.4.4</h3>"
+            "<h3>Poppy API Client v1.4.5</h3>"
             "<p>A native, ultra-fast, local-first API client & test runner written in C++20 and Qt 6.</p>"
             "<p>Inspired by Bruno. Complete local ownership of your collections and environments.</p>");
     });

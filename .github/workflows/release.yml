@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       tag_name:
-        description: 'Release tag (e.g. v1.4.4 or latest)'
+        description: 'Release tag (e.g. v1.4.5 or latest)'
         required: true
         default: 'latest'
       draft:
