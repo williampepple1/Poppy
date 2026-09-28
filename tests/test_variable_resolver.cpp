@@ -1,5 +1,6 @@
 #include <iostream>
 #include <cassert>
+#include <QtGlobal>
 #include <core/VariableResolver.h>
 #include <core/EnvironmentModel.h>
 
@@ -115,6 +116,30 @@ int main() {
 
     QString colorRes = resolver.resolveString("Color: {{$randomColor}}");
     assert(colorRes.startsWith("Color: #"));
+
+    qputenv("POPPY_TEST_CI_TOKEN", "from-ci");
+    qputenv("POPPY_TEST_BASE", "https://from-process.example");
+    qputenv("POPPY_TEST_EMPTY", "filled-from-ci");
+    assert(resolver.resolveString("Bearer {{process.env.POPPY_TEST_CI_TOKEN}}") == "Bearer from-ci");
+    assert(resolver.resolveString("{{process.env.POPPY_TEST_CI_TOKEN_MISSING}}")
+           == "{{process.env.POPPY_TEST_CI_TOKEN_MISSING}}");
+    QString processScope;
+    assert(resolver.lookupVariableWithScope("process.env.POPPY_TEST_CI_TOKEN", &processScope) == "from-ci");
+    assert(processScope == "Process");
+
+    EnvironmentModel ci("ci");
+    ci.addOrUpdateVariable("POPPY_TEST_CI_TOKEN", "committed-placeholder", true, true);
+    ci.addOrUpdateVariable("POPPY_TEST_BASE", "https://api.example.com");
+    ci.addOrUpdateVariable("POPPY_TEST_EMPTY", "");
+    ci.addOrUpdateVariable("POPPY_TEST_DISABLED", "", true, false);
+    assert(ci.applyProcessEnvironment() == 2);
+    assert(ci.variableValue("POPPY_TEST_CI_TOKEN") == "from-ci");
+    assert(ci.variableValue("POPPY_TEST_BASE") == "https://api.example.com");
+    assert(ci.variableValue("POPPY_TEST_EMPTY") == "filled-from-ci");
+    assert(ci.variableValue("POPPY_TEST_DISABLED").isEmpty());
+    qunsetenv("POPPY_TEST_CI_TOKEN");
+    qunsetenv("POPPY_TEST_BASE");
+    qunsetenv("POPPY_TEST_EMPTY");
 
     std::cout << "test_variable_resolver PASSED!" << std::endl;
     return 0;

@@ -3,6 +3,7 @@
 #include <QUuid>
 #include <QDateTime>
 #include <QRandomGenerator>
+#include <QtGlobal>
 #include <optional>
 
 namespace poppy::core {
@@ -72,6 +73,19 @@ QString VariableResolver::lookupVariableWithScope(const QString& name, QString* 
         if (outScope) *outScope = "Dynamic ($randomColor)";
         static const QStringList colors = {"#10b981", "#f59e0b", "#3b82f6", "#ef4444", "#8b5cf6", "#06b6d4"};
         return colors.at(QRandomGenerator::global()->bounded(colors.size()));
+    }
+
+    // {{process.env.API_TOKEN}} reads the process environment and nothing else.
+    static const QLatin1String processEnvPrefix("process.env.");
+    if (name.startsWith(processEnvPrefix)) {
+        const QString key = name.mid(processEnvPrefix.size()).trimmed();
+        const QByteArray keyBytes = key.toUtf8();
+        if (!key.isEmpty() && qEnvironmentVariableIsSet(keyBytes.constData())) {
+            if (outScope) *outScope = "Process";
+            return qEnvironmentVariable(keyBytes.constData());
+        }
+        if (outScope) *outScope = "Unresolved";
+        return {};
     }
 
     // Nearest scope wins: runtime, then folder, collection, environment, global.

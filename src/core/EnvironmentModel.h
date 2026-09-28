@@ -43,6 +43,11 @@ public:
 
     QMap<QString, QString> toMap() const;
 
+    // Fill secret variables, and enabled variables whose value is empty, from the
+    // process environment when a variable of the same name is set. File values that
+    // are non-empty and not secret are left unchanged. Returns how many values changed.
+    int applyProcessEnvironment();
+
 private:
     QString m_name;
     QList<EnvironmentVariable> m_variables;

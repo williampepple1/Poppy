@@ -136,10 +136,13 @@ SuiteResult executeCliRequest(
 int main(int argc, char *argv[]) {
     QCoreApplication app(argc, argv);
     app.setApplicationName("poppy-cli");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion("1.4.5");
 
     QCommandLineParser parser;
-    parser.setApplicationDescription("Poppy Headless Collection Runner & Testing CLI");
+    parser.setApplicationDescription(
+        "Poppy Headless Collection Runner & Testing CLI\n"
+        "Credentials stay out of the collection: {{process.env.API_TOKEN}} reads API_TOKEN from the process environment. "
+        "Secret or empty variables in the selected environment are filled the same way when the names match.");
     parser.addHelpOption();
     parser.addVersionOption();
 
@@ -172,6 +175,7 @@ int main(int argc, char *argv[]) {
     const QStringList args = parser.positionalArguments();
     if (args.isEmpty() || (args.size() > 0 && args.at(0) != "run")) {
         std::cout << "Usage: poppy run <path-to-collection> [--env <env-name>] [--reporter cli|json|junit] [--delay <ms>] [--iterations <n>] [--data <file>]" << std::endl;
+        std::cout << "Credentials: use {{process.env.API_TOKEN}} or leave a secret/empty variable for the CI environment to fill." << std::endl;
         return 1;
     }
 
@@ -280,6 +284,7 @@ int main(int argc, char *argv[]) {
             break;
         }
     }
+    const int processCredentials = activeEnv.applyProcessEnvironment();
 
     network::CurlNetworkEngine engine;
     core::ScriptRunner scriptRunner;
@@ -289,6 +294,9 @@ int main(int argc, char *argv[]) {
         std::cout << " Poppy Collection Runner\n";
         std::cout << " Target:      " << collectionPath.toStdString() << "\n";
         std::cout << " Environment: " << (envName.isEmpty() ? "None" : envName.toStdString()) << "\n";
+        if (processCredentials > 0) {
+            std::cout << " Credentials: " << processCredentials << " from the process environment\n";
+        }
         std::cout << " Requests:    " << requestsToRun.size() << "\n";
         if (iterations > 1) {
             std::cout << " Iterations:  " << iterations << "\n";

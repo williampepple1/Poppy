@@ -3,6 +3,7 @@
 #include <QTextStream>
 #include <QFileInfo>
 #include <QRegularExpression>
+#include <QtGlobal>
 
 namespace poppy::core {
 
@@ -112,6 +113,21 @@ QMap<QString, QString> EnvironmentModel::toMap() const {
         }
     }
     return map;
+}
+
+int EnvironmentModel::applyProcessEnvironment() {
+    int filled = 0;
+    for (auto& var : m_variables) {
+        if (!var.enabled || var.name.isEmpty()) continue;
+        if (!var.isSecret && !var.value.isEmpty()) continue;
+        const QByteArray key = var.name.toUtf8();
+        if (!qEnvironmentVariableIsSet(key.constData())) continue;
+        const QString value = qEnvironmentVariable(key.constData());
+        if (var.value == value) continue;
+        var.value = value;
+        ++filled;
+    }
+    return filled;
 }
 
 EnvironmentModel EnvironmentModel::loadFromEnvFile(const QString& filePath, const QString& envName) {
