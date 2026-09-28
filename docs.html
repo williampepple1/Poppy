@@ -1,0 +1,2106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Documentation — Poppy Native API Client & Test Runner</title>
+  <link rel="icon" type="image/png" href="icon.png" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      /* Light Mode */
+      --bg: #f8fafc;
+      --fg: #0f172a;
+      --muted: #64748b;
+      --border: #e2e8f0;
+      --border-subtle: #f1f5f9;
+      --card-bg: #ffffff;
+      --card-hover: #f1f5f9;
+      --accent: #059669;
+      --accent-light: rgba(5, 150, 105, 0.1);
+      --accent-border: rgba(5, 150, 105, 0.25);
+      --accent-blue: #2563eb;
+      --accent-purple: #7c3aed;
+      --accent-amber: #d97706;
+      --code-bg: #0f172a;
+      --code-fg: #e2e8f0;
+      --inline-code-bg: #f1f5f9;
+      --inline-code-fg: #0f172a;
+      --nav-bg: rgba(248, 250, 252, 0.88);
+      --sidebar-bg: #f8fafc;
+      --sidebar-border: #e2e8f0;
+      --hero-heading: linear-gradient(135deg, #0f172a 30%, #475569 100%);
+      --btn-primary-bg: #0f172a;
+      --btn-primary-fg: #f8fafc;
+      --btn-primary-hover: #1e293b;
+      --callout-info-bg: #eff6ff;
+      --callout-info-border: #bfdbfe;
+      --callout-info-text: #1e40af;
+      --callout-tip-bg: #ecfdf5;
+      --callout-tip-border: #a7f3d0;
+      --callout-tip-text: #065f46;
+      --callout-warn-bg: #fffbeb;
+      --callout-warn-border: #fde68a;
+      --callout-warn-text: #92400e;
+      --table-th-bg: #f1f5f9;
+      --kbd-bg: #e2e8f0;
+      --kbd-border: #cbd5e1;
+    }
+
+    [data-theme="dark"] {
+      /* Dark Mode */
+      --bg: #09090b;
+      --fg: #fafafa;
+      --muted: #a1a1aa;
+      --border: #27272a;
+      --border-subtle: #1f1f23;
+      --card-bg: #111114;
+      --card-hover: #18181b;
+      --accent: #10b981;
+      --accent-light: rgba(16, 185, 129, 0.12);
+      --accent-border: rgba(16, 185, 129, 0.3);
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --accent-amber: #f59e0b;
+      --code-bg: #0c0c0e;
+      --code-fg: #f4f4f5;
+      --inline-code-bg: #18181b;
+      --inline-code-fg: #34d399;
+      --nav-bg: rgba(9, 9, 11, 0.92);
+      --sidebar-bg: #0c0c0e;
+      --sidebar-border: #27272a;
+      --hero-heading: linear-gradient(135deg, #fafafa 30%, #a1a1aa 100%);
+      --btn-primary-bg: #fafafa;
+      --btn-primary-fg: #09090b;
+      --btn-primary-hover: #e4e4e7;
+      --callout-info-bg: #172554;
+      --callout-info-border: #1e40af;
+      --callout-info-text: #93c5fd;
+      --callout-tip-bg: #064e3b;
+      --callout-tip-border: #065f46;
+      --callout-tip-text: #6ee7b7;
+      --callout-warn-bg: #451a03;
+      --callout-warn-border: #78350f;
+      --callout-warn-text: #fcd34d;
+      --table-th-bg: #18181b;
+      --kbd-bg: #27272a;
+      --kbd-border: #3f3f46;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 5rem;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.65;
+      -webkit-font-smoothing: antialiased;
+      transition: background-color 0.2s ease, color 0.2s ease;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── TOP NAV ── */
+    nav {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.85rem 2rem;
+      border-bottom: 1px solid var(--border);
+      position: sticky;
+      top: 0;
+      background: var(--nav-bg);
+      backdrop-filter: blur(12px);
+      z-index: 100;
+      gap: 1rem;
+    }
+
+    .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.75rem;
+    }
+
+    nav .logo {
+      font-size: 1.15rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      text-decoration: none;
+      color: var(--fg);
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    nav .logo img {
+      width: 28px;
+      height: 28px;
+    }
+
+    .nav-badge-docs {
+      font-size: 0.72rem;
+      font-weight: 700;
+      background: var(--accent-light);
+      border: 1px solid var(--accent-border);
+      color: var(--accent);
+      padding: 2px 7px;
+      border-radius: 9999px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+
+    .nav-link {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+
+    .nav-link:hover, .nav-link.active {
+      color: var(--fg);
+    }
+
+    .nav-link.active {
+      font-weight: 600;
+    }
+
+    .nav-right {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .search-box-wrapper {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+
+    .search-input {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.45rem 2.2rem 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      color: var(--fg);
+      outline: none;
+      width: 220px;
+      transition: all 0.15s ease;
+    }
+
+    .search-input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-light);
+      width: 260px;
+    }
+
+    .search-shortcut {
+      position: absolute;
+      right: 8px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      background: var(--card-hover);
+      border: 1px solid var(--border);
+      padding: 2px 5px;
+      border-radius: 4px;
+      pointer-events: none;
+    }
+
+    .theme-toggle-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 1.05rem;
+      transition: all 0.15s ease-in-out;
+      user-select: none;
+    }
+
+    .theme-toggle-btn:hover {
+      background: var(--card-hover);
+      border-color: var(--muted);
+      transform: translateY(-1px);
+    }
+
+    .gh-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--fg);
+      text-decoration: none;
+      transition: all 0.15s ease;
+    }
+
+    .gh-btn:hover {
+      background: var(--card-hover);
+      border-color: var(--muted);
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      color: var(--fg);
+      cursor: pointer;
+      font-size: 1.1rem;
+    }
+
+    /* ── DOCS WRAPPER ── */
+    .docs-container {
+      display: flex;
+      flex: 1;
+      width: 100%;
+      max-width: 1540px;
+      margin: 0 auto;
+    }
+
+    /* ── SIDEBAR ── */
+    .sidebar {
+      width: 290px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 57px;
+      height: calc(100vh - 57px);
+      overflow-y: auto;
+      border-right: 1px solid var(--border);
+      padding: 1.5rem 1rem 3rem 1.5rem;
+      background: var(--sidebar-bg);
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+
+    .sidebar::-webkit-scrollbar {
+      width: 6px;
+    }
+    .sidebar::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    .sidebar-filter-input {
+      width: 100%;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0.45rem 0.75rem;
+      font-size: 0.8rem;
+      color: var(--fg);
+      outline: none;
+      margin-bottom: 1.25rem;
+      transition: border-color 0.15s ease;
+    }
+
+    .sidebar-filter-input:focus {
+      border-color: var(--accent);
+    }
+
+    .sidebar-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .sidebar-group-title {
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 0.5rem;
+      padding-left: 0.6rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .sidebar-nav-list {
+      list-style: none;
+    }
+
+    .sidebar-nav-item a {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.42rem 0.65rem;
+      font-size: 0.84rem;
+      color: var(--muted);
+      text-decoration: none;
+      border-radius: 6px;
+      transition: all 0.12s ease;
+      line-height: 1.35;
+    }
+
+    .sidebar-nav-item a:hover {
+      color: var(--fg);
+      background: var(--card-hover);
+    }
+
+    .sidebar-nav-item a.active {
+      color: var(--accent);
+      background: var(--accent-light);
+      font-weight: 600;
+    }
+
+    .sidebar-badge {
+      font-size: 0.65rem;
+      padding: 1px 5px;
+      border-radius: 4px;
+      font-weight: 700;
+      background: var(--border);
+      color: var(--muted);
+    }
+
+    .sidebar-badge.method-get { background: rgba(5, 150, 105, 0.15); color: #10b981; }
+    .sidebar-badge.method-post { background: rgba(37, 99, 235, 0.15); color: #3b82f6; }
+    .sidebar-badge.method-ws { background: rgba(124, 58, 237, 0.15); color: #8b5cf6; }
+
+    /* ── MAIN CONTENT ── */
+    main.docs-main {
+      flex: 1;
+      min-width: 0;
+      padding: 2.5rem 3.5rem 6rem;
+      max-width: 940px;
+    }
+
+    /* ── RIGHT ON-THIS-PAGE TOC ── */
+    .toc-panel {
+      width: 240px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 57px;
+      height: calc(100vh - 57px);
+      overflow-y: auto;
+      padding: 2rem 1.5rem 2rem 0.5rem;
+      font-size: 0.8rem;
+    }
+
+    .toc-title {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+    }
+
+    .toc-list {
+      list-style: none;
+      border-left: 1px solid var(--border);
+    }
+
+    .toc-item a {
+      display: block;
+      padding: 0.3rem 0 0.3rem 0.85rem;
+      color: var(--muted);
+      text-decoration: none;
+      line-height: 1.4;
+      transition: all 0.12s ease;
+      position: relative;
+      margin-left: -1px;
+      border-left: 2px solid transparent;
+    }
+
+    .toc-item a:hover {
+      color: var(--fg);
+    }
+
+    .toc-item a.active {
+      color: var(--accent);
+      border-left-color: var(--accent);
+      font-weight: 600;
+    }
+
+    /* ── TYPOGRAPHY & SECTIONS ── */
+    .doc-section {
+      margin-bottom: 4.5rem;
+      padding-top: 1rem;
+    }
+
+    .doc-header-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      color: var(--accent);
+      background: var(--accent-light);
+      border: 1px solid var(--accent-border);
+      padding: 3px 10px;
+      border-radius: 9999px;
+      margin-bottom: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    h1.doc-title {
+      font-size: 2.4rem;
+      font-weight: 800;
+      letter-spacing: -0.035em;
+      line-height: 1.2;
+      margin-bottom: 1rem;
+    }
+
+    .doc-lead {
+      font-size: 1.12rem;
+      color: var(--muted);
+      line-height: 1.6;
+      margin-bottom: 2rem;
+    }
+
+    h2 {
+      font-size: 1.6rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      margin-top: 2.75rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    h2 a.header-anchor, h3 a.header-anchor {
+      color: var(--muted);
+      text-decoration: none;
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      font-weight: 400;
+      font-size: 0.9em;
+    }
+
+    h2:hover a.header-anchor, h3:hover a.header-anchor {
+      opacity: 0.75;
+    }
+
+    h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.015em;
+      margin-top: 2rem;
+      margin-bottom: 0.75rem;
+    }
+
+    h4 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    p {
+      margin-bottom: 1.15rem;
+      color: var(--fg);
+    }
+
+    ul, ol {
+      margin-bottom: 1.25rem;
+      padding-left: 1.5rem;
+    }
+
+    li {
+      margin-bottom: 0.4rem;
+    }
+
+    strong {
+      font-weight: 700;
+      color: var(--fg);
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: underline;
+      text-underline-offset: 3px;
+    }
+
+    a:hover {
+      opacity: 0.85;
+    }
+
+    /* ── CODE BLOCKS & PRE ── */
+    pre {
+      background: var(--code-bg);
+      color: var(--code-fg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.15rem 1.25rem;
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.85rem;
+      line-height: 1.55;
+      overflow-x: auto;
+      margin-bottom: 1.5rem;
+      position: relative;
+    }
+
+    .code-block-wrapper {
+      position: relative;
+      margin-bottom: 1.5rem;
+    }
+
+    .code-block-wrapper pre {
+      margin-bottom: 0;
+    }
+
+    .code-block-header {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-bottom: none;
+      border-top-left-radius: 8px;
+      border-top-right-radius: 8px;
+      padding: 0.45rem 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .code-block-wrapper.has-header pre {
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(255, 255, 255, 0.1);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #e4e4e7;
+      padding: 3px 8px;
+      font-size: 0.72rem;
+      font-weight: 600;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      backdrop-filter: blur(4px);
+      z-index: 5;
+    }
+
+    .has-header .copy-btn {
+      top: 36px;
+    }
+
+    .copy-btn:hover {
+      background: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    code {
+      font-family: Consolas, Monaco, "Courier New", monospace;
+      font-size: 0.87em;
+      background: var(--inline-code-bg);
+      color: var(--inline-code-fg);
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+    }
+
+    pre code {
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border: none;
+      font-size: 1em;
+    }
+
+    kbd {
+      display: inline-block;
+      padding: 2px 6px;
+      font-family: Consolas, Monaco, monospace;
+      font-size: 0.75rem;
+      background: var(--kbd-bg);
+      border: 1px solid var(--kbd-border);
+      border-bottom: 2px solid var(--kbd-border);
+      border-radius: 4px;
+      box-shadow: 0 1px 1px rgba(0,0,0,0.1);
+      color: var(--fg);
+      line-height: 1;
+    }
+
+    /* ── CALLOUT BOXES ── */
+    .callout {
+      border-left: 4px solid var(--border);
+      padding: 1rem 1.25rem;
+      border-radius: 0 8px 8px 0;
+      margin: 1.5rem 0;
+      font-size: 0.9rem;
+    }
+
+    .callout p:last-child {
+      margin-bottom: 0;
+    }
+
+    .callout-title {
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.45rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .callout-info {
+      background: var(--callout-info-bg);
+      border-color: var(--callout-info-border);
+      color: var(--callout-info-text);
+    }
+
+    .callout-tip {
+      background: var(--callout-tip-bg);
+      border-color: var(--callout-tip-border);
+      color: var(--callout-tip-text);
+    }
+
+    .callout-warn {
+      background: var(--callout-warn-bg);
+      border-color: var(--callout-warn-border);
+      color: var(--callout-warn-text);
+    }
+
+    /* ── TABLES ── */
+    .table-container {
+      overflow-x: auto;
+      margin: 1.5rem 0 2rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+    }
+
+    table.doc-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.88rem;
+      text-align: left;
+    }
+
+    table.doc-table th, table.doc-table td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    table.doc-table th {
+      background: var(--table-th-bg);
+      font-weight: 700;
+      color: var(--fg);
+    }
+
+    table.doc-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    table.doc-table tr:hover td {
+      background: var(--card-hover);
+    }
+
+    /* ── BADGES & METHOD PILLS ── */
+    .pill {
+      display: inline-block;
+      padding: 2px 7px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      border-radius: 4px;
+      font-family: Consolas, Monaco, monospace;
+    }
+
+    .pill-get { background: rgba(5, 150, 105, 0.15); color: #10b981; }
+    .pill-post { background: rgba(37, 99, 235, 0.15); color: #3b82f6; }
+    .pill-put { background: rgba(217, 119, 6, 0.15); color: #f59e0b; }
+    .pill-delete { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+    .pill-ws { background: rgba(124, 58, 237, 0.15); color: #8b5cf6; }
+    .pill-grpc { background: rgba(14, 165, 233, 0.15); color: #0284c7; }
+
+    /* ── CARDS GRID ── */
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1.25rem;
+      margin: 1.5rem 0 2rem;
+    }
+
+    .doc-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 1.25rem;
+      text-decoration: none;
+      color: inherit;
+      transition: all 0.15s ease;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .doc-card:hover {
+      background: var(--card-hover);
+      border-color: var(--muted);
+      transform: translateY(-2px);
+    }
+
+    .doc-card-icon {
+      font-size: 1.4rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .doc-card h4 {
+      margin-top: 0;
+      margin-bottom: 0.4rem;
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--fg);
+    }
+
+    .doc-card p {
+      font-size: 0.84rem;
+      color: var(--muted);
+      margin-bottom: 0;
+      line-height: 1.5;
+    }
+
+    /* ── FOOTER & PAGINATION ── */
+    .docs-footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 0 1rem;
+      margin-top: 4rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .back-to-top-btn {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      padding: 0.4rem 0.85rem;
+      font-size: 0.8rem;
+      border-radius: 6px;
+      color: var(--fg);
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      transition: all 0.15s ease;
+    }
+
+    .back-to-top-btn:hover {
+      background: var(--card-hover);
+      transform: translateY(-1px);
+    }
+
+    /* ── MOBILE DRAWER & RESPONSIVE ── */
+    @media (max-width: 1200px) {
+      .toc-panel { display: none; }
+      main.docs-main { padding: 2rem 2.5rem 5rem; }
+    }
+
+    @media (max-width: 900px) {
+      .sidebar {
+        position: fixed;
+        left: -320px;
+        top: 0;
+        bottom: 0;
+        width: 300px;
+        height: 100vh;
+        z-index: 200;
+        box-shadow: 0 0 25px rgba(0, 0, 0, 0.4);
+        transition: left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        padding-top: 2rem;
+      }
+      .sidebar.open {
+        left: 0;
+      }
+      .sidebar-backdrop {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(4px);
+        z-index: 150;
+      }
+      .sidebar-backdrop.open {
+        display: block;
+      }
+      .mobile-menu-btn {
+        display: inline-flex;
+      }
+      main.docs-main {
+        padding: 1.5rem 1.5rem 4rem;
+      }
+      .search-box-wrapper {
+        display: none;
+      }
+    }
+
+    @media (max-width: 640px) {
+      nav { padding: 0.75rem 1rem; }
+      nav .nav-links { display: none; }
+      h1.doc-title { font-size: 1.85rem; }
+      h2 { font-size: 1.35rem; }
+      .cards-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- TOP NAVIGATION BAR -->
+  <nav>
+    <div class="nav-left">
+      <button id="mobileMenuBtn" class="mobile-menu-btn" aria-label="Toggle Navigation Menu">
+        <span>☰</span>
+      </button>
+      <a class="logo" href="index.html">
+        <img src="icon.png" alt="Poppy Logo" />
+        Poppy
+      </a>
+      <span class="nav-badge-docs">Docs</span>
+      <div class="nav-links">
+        <a class="nav-link" href="index.html">Home</a>
+        <a class="nav-link active" href="docs.html">Documentation</a>
+        <a class="nav-link" href="https://github.com/williampepple1/Poppy/releases/latest" target="_blank" rel="noopener">Releases</a>
+      </div>
+    </div>
+
+    <div class="nav-right">
+      <div class="search-box-wrapper">
+        <input type="text" id="docSearchInput" class="search-input" placeholder="Search documentation..." autocomplete="off" />
+        <span class="search-shortcut">/</span>
+      </div>
+      <button id="themeToggleBtn" class="theme-toggle-btn" aria-label="Toggle Dark/Light Theme" title="Switch to Dark Mode">
+        <span class="theme-icon">🌙</span>
+      </button>
+      <a class="gh-btn" href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">
+        <span>GitHub ↗</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- SIDEBAR BACKDROP FOR MOBILE -->
+  <div id="sidebarBackdrop" class="sidebar-backdrop"></div>
+
+  <!-- MAIN DOCS CONTAINER -->
+  <div class="docs-container">
+
+    <!-- LEFT SIDEBAR NAVIGATION -->
+    <aside id="docSidebar" class="sidebar">
+      <input type="text" id="sidebarFilter" class="sidebar-filter-input" placeholder="Filter topics..." />
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🚀 Getting Started</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#introduction">Introduction &amp; Goals</a></li>
+          <li class="sidebar-nav-item"><a href="#architecture">Architecture &amp; Benchmarks</a></li>
+          <li class="sidebar-nav-item"><a href="#installation">Installation &amp; Setup</a></li>
+          <li class="sidebar-nav-item"><a href="#quickstart">Quickstart Guide</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">📁 Collections &amp; Storage</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#directory-structure">Collection Directory Spec</a></li>
+          <li class="sidebar-nav-item"><a href="#bru-file-format">The <code>.bru</code> File Format</a></li>
+          <li class="sidebar-nav-item"><a href="#git-workflow">Git Collaboration &amp; Sync</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🌐 Protocols &amp; Requests</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#http-rest">REST &amp; HTTP Methods <span class="sidebar-badge method-get">HTTP</span></a></li>
+          <li class="sidebar-nav-item"><a href="#graphql">GraphQL Split Editor</a></li>
+          <li class="sidebar-nav-item"><a href="#websockets">WebSocket Client <span class="sidebar-badge method-ws">WS</span></a></li>
+          <li class="sidebar-nav-item"><a href="#grpc">gRPC &amp; Protobuf Client</a></li>
+          <li class="sidebar-nav-item"><a href="#sse-streaming">Server-Sent Events &amp; LLM</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🔐 Authentication</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#auth-overview">Auth Overview &amp; Scopes</a></li>
+          <li class="sidebar-nav-item"><a href="#auth-bearer-basic">Bearer, Basic &amp; API Key</a></li>
+          <li class="sidebar-nav-item"><a href="#auth-oauth2">OAuth 2.0 Loopback Flow</a></li>
+          <li class="sidebar-nav-item"><a href="#auth-aws-sigv4">AWS Signature V4 (SigV4)</a></li>
+          <li class="sidebar-nav-item"><a href="#auth-mtls">mTLS &amp; Client Certificates</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🌱 Variables &amp; Environments</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#variable-scopes">Variable Hierarchy &amp; Scopes</a></li>
+          <li class="sidebar-nav-item"><a href="#variable-syntax">Interpolation <code>{{var}}</code></a></li>
+          <li class="sidebar-nav-item"><a href="#secret-isolation">Secrets Vault &amp; Masking</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🧪 Scripting &amp; Assertions</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#declarative-assertions">Zero-Code Assertions</a></li>
+          <li class="sidebar-nav-item"><a href="#javascript-engine">JavaScript Runtime (QJSEngine)</a></li>
+          <li class="sidebar-nav-item"><a href="#scripting-api"><code>poppy</code> &amp; <code>bru</code> API Reference</a></li>
+          <li class="sidebar-nav-item"><a href="#chai-mocha-tests">Chai / Mocha Style Tests</a></li>
+          <li class="sidebar-nav-item"><a href="#postman-compat">Postman <code>pm.*</code> Compatibility</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🤖 CLI &amp; CI/CD Automation</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#cli-runner"><code>poppy-cli</code> Command Reference</a></li>
+          <li class="sidebar-nav-item"><a href="#cli-data-fixtures">Data-Driven Testing (CSV/JSON)</a></li>
+          <li class="sidebar-nav-item"><a href="#cli-reporters">Reporters: CLI, JSON, JUnit XML</a></li>
+          <li class="sidebar-nav-item"><a href="#cli-ci-cd">GitHub Actions &amp; GitLab CI</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">🛠️ Advanced Developer Tools</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#mock-server">Embedded Mock Server</a></li>
+          <li class="sidebar-nav-item"><a href="#response-diff">Response Diff Viewer</a></li>
+          <li class="sidebar-nav-item"><a href="#data-visualizer">Response Data Grid &amp; Charts</a></li>
+          <li class="sidebar-nav-item"><a href="#cookie-jar">Cookie Manager &amp; Persistence</a></li>
+          <li class="sidebar-nav-item"><a href="#command-palette">Quick Open (Ctrl+P)</a></li>
+          <li class="sidebar-nav-item"><a href="#global-find">Global Find &amp; Replace</a></li>
+          <li class="sidebar-nav-item"><a href="#interop-exporters">Import, Export &amp; Codegen</a></li>
+        </ul>
+      </div>
+
+      <div class="sidebar-group">
+        <div class="sidebar-group-title">⌨️ Reference</div>
+        <ul class="sidebar-nav-list">
+          <li class="sidebar-nav-item"><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+          <li class="sidebar-nav-item"><a href="#build-from-source">Building from Source</a></li>
+        </ul>
+      </div>
+    </aside>
+
+    <!-- MAIN ARTICLE CONTENT -->
+    <main class="docs-main">
+
+      <!-- SECTION: INTRODUCTION -->
+      <section id="introduction" class="doc-section">
+        <div class="doc-header-tag">Overview</div>
+        <h1 class="doc-title">Poppy Documentation</h1>
+        <p class="doc-lead">
+          Poppy is an ultra-fast, lightweight, offline-first native API testing client and CLI runner built with modern <strong>C++20</strong>, <strong>Qt 6</strong>, and <strong>libcurl</strong>.
+        </p>
+
+        <p>
+          Unlike traditional API clients (such as Postman and Insomnia) which bundle heavy Chromium and Node.js runtimes (Electron) that eat hundreds of megabytes of RAM and require cloud logins, Poppy runs as a single, highly-optimized native executable.
+        </p>
+
+        <div class="cards-grid">
+          <a class="doc-card" href="#quickstart">
+            <span class="doc-card-icon">⚡</span>
+            <h4>Quickstart Guide</h4>
+            <p>Create your first collection, dispatch HTTP requests, and inspect responses in minutes.</p>
+          </a>
+          <a class="doc-card" href="#bru-file-format">
+            <span class="doc-card-icon">📁</span>
+            <h4>The .bru Format</h4>
+            <p>Understand the human-readable plain text format that makes Git versioning seamless.</p>
+          </a>
+          <a class="doc-card" href="#cli-runner">
+            <span class="doc-card-icon">🤖</span>
+            <h4>Headless CLI Runner</h4>
+            <p>Automate test suites in GitHub Actions or GitLab CI with JUnit XML test reporting.</p>
+          </a>
+          <a class="doc-card" href="#scripting-api">
+            <span class="doc-card-icon">🧪</span>
+            <h4>Scripting &amp; Assertions</h4>
+            <p>Write declarative assertions and sandboxed JavaScript tests with familiar expect() syntax.</p>
+          </a>
+        </div>
+      </section>
+
+      <!-- SECTION: ARCHITECTURE -->
+      <section id="architecture" class="doc-section">
+        <h2>Architecture &amp; Performance Benchmarks <a class="header-anchor" href="#architecture">#</a></h2>
+        <p>
+          Poppy is engineered from the ground up for extreme developer velocity and low resource consumption.
+        </p>
+
+        <div class="table-container">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Metric</th>
+                <th>Postman / Insomnia</th>
+                <th>Bruno</th>
+                <th>Poppy (Native C++/Qt)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><strong>Technology</strong></td>
+                <td>Electron (Chromium + Node.js)</td>
+                <td>Electron (Chromium + Node.js)</td>
+                <td><strong>Modern C++20 + Qt 6 + libcurl</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Cold Startup Time</strong></td>
+                <td>2.5s – 5.0s</td>
+                <td>1.5s – 3.0s</td>
+                <td><strong>&lt; 100 ms (Instantaneous)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Idle RAM Footprint</strong></td>
+                <td>250 MB – 500 MB</td>
+                <td>150 MB – 300 MB</td>
+                <td><strong>&lt; 30 MB</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Distribution Size</strong></td>
+                <td>150 MB – 250 MB</td>
+                <td>100 MB – 180 MB</td>
+                <td><strong>Portable Single Binary</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Storage Paradigm</strong></td>
+                <td>Proprietary Cloud Sync</td>
+                <td>Local Filesystem (<code>.bru</code>)</td>
+                <td><strong>100% Local Filesystem (<code>.bru</code>)</strong></td>
+              </tr>
+              <tr>
+                <td><strong>Account / Login</strong></td>
+                <td>Mandatory / Cloud-first</td>
+                <td>Offline-first</td>
+                <td><strong>Zero Tracking / Completely Offline</strong></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout callout-tip">
+          <div class="callout-title">💡 Why libcurl?</div>
+          <p>
+            By relying directly on <code>libcurl</code>, Poppy bypasses browser networking stacks, providing exact microsecond DNS/TCP/TLS handshakes, HTTP/2 multiplexing, native proxying (SOCKS5/HTTP), mTLS client certificates, and true protocol fidelity.
+          </p>
+        </div>
+      </section>
+
+      <!-- SECTION: INSTALLATION -->
+      <section id="installation" class="doc-section">
+        <h2>Installation &amp; Setup <a class="header-anchor" href="#installation">#</a></h2>
+        <p>
+          Official pre-compiled binaries are published on GitHub for Windows, Linux, and macOS for every release.
+        </p>
+
+        <h3>Windows (x64)</h3>
+        <ul>
+          <li>
+            <strong>Setup Installer (Recommended):</strong> Download <code>Poppy-windows-x64-setup.exe</code>. The setup wizard creates Start Menu entries, Desktop shortcuts, file associations for <code>.bru</code> files, and adds <code>poppy-cli</code> to your system PATH.
+          </li>
+          <li>
+            <strong>Portable Archive:</strong> Download <code>Poppy-windows-x64.zip</code>. Extract anywhere and launch <code>poppy.exe</code> directly. No registry keys or administrative privileges required.
+          </li>
+        </ul>
+
+        <h3>Linux (x64)</h3>
+        <p>Download <code>Poppy-linux-x64.tar.gz</code> and unpack the binaries:</p>
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>Bash</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code># Extract archive
+tar -xzf Poppy-linux-x64.tar.gz
+cd Poppy-linux-x64
+
+# Run desktop GUI
+./poppy
+
+# Or run headless CLI
+./poppy-cli --help</code></pre>
+        </div>
+
+        <h3>macOS (Apple Silicon &amp; Intel)</h3>
+        <p>
+          Download <code>Poppy-macos.dmg</code>, open the image, and drag <code>Poppy.app</code> into your <code>/Applications</code> directory.
+        </p>
+      </section>
+
+      <!-- SECTION: QUICKSTART -->
+      <section id="quickstart" class="doc-section">
+        <h2>Quickstart Guide <a class="header-anchor" href="#quickstart">#</a></h2>
+
+        <h3>1. Create or Open a Collection</h3>
+        <p>
+          In Poppy, click <strong>File &rarr; New Collection</strong> or press <kbd>Ctrl+N</kbd>. Select an empty folder on your hard drive (e.g. <code>~/api-tests</code>). Poppy will generate a lightweight <code>poppy.json</code> collection descriptor.
+        </p>
+
+        <h3>2. Add a Request</h3>
+        <p>
+          Right-click your collection or any subfolder in the sidebar, select <strong>New Request</strong>, enter a name (e.g. <code>Get Users</code>), and pick your HTTP verb (e.g. <code>GET</code>).
+        </p>
+
+        <h3>3. Configure Parameters &amp; Send</h3>
+        <p>
+          In the top URL bar, type:
+        </p>
+        <div class="code-block-wrapper">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>https://jsonplaceholder.typicode.com/users</code></pre>
+        </div>
+        <p>
+          Press <kbd>Ctrl+Enter</kbd> or click <strong>Send</strong>. In under 100 milliseconds, the response viewer will display formatted JSON, status code, latency breakdown, headers, and response size.
+        </p>
+      </section>
+
+      <!-- SECTION: COLLECTIONS & BRU FORMAT -->
+      <section id="directory-structure" class="doc-section">
+        <h2>Collection Directory Architecture <a class="header-anchor" href="#directory-structure">#</a></h2>
+        <p>
+          Poppy collections map 1-to-1 to ordinary folders on your local disk. There are no hidden binary databases, proprietary exports, or cloud repositories.
+        </p>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>Filesystem Layout</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>my-api-collection/
+├── poppy.json                 # Collection name, version, and global metadata
+├── environments/
+│   ├── dev.env                # Committed environment variables
+│   ├── dev.secret.env         # Git-ignored environment secrets (.gitignore)
+│   ├── staging.env
+│   └── prod.env
+├── auth/
+│   ├── folder.bru             # Folder-scoped variables and folder settings
+│   ├── login.bru              # Bru request file
+│   └── refresh-token.bru
+└── users/
+    ├── list-users.bru
+    └── create-user.bru</code></pre>
+        </div>
+
+        <div class="callout callout-info">
+          <div class="callout-title">ℹ️ poppy.json Descriptor</div>
+          <p>
+            The root <code>poppy.json</code> defines basic collection metadata:
+          </p>
+          <pre><code>{
+  "name": "Acme Commerce API",
+  "version": "1.0.0",
+  "description": "Public and internal REST endpoints."
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- SECTION: BRU FORMAT SPEC -->
+      <section id="bru-file-format" class="doc-section">
+        <h2>The <code>.bru</code> File Format <a class="header-anchor" href="#bru-file-format">#</a></h2>
+        <p>
+          Poppy is fully compatible with the popular open-source <strong>Bru DSL</strong> specification. Requests are stored as plain text with clean human-readable blocks.
+        </p>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>users/get-user.bru</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>meta {
+  name: Get User Details
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/:userId
+  body: none
+  auth: bearer
+}
+
+params:query {
+  include_orders: true
+  fields: id,name,email
+}
+
+params:path {
+  userId: 42
+}
+
+headers {
+  Accept: application/json
+  X-Request-Source: poppy-client
+}
+
+auth:bearer {
+  token: {{authToken}}
+}
+
+assertions {
+  res.status eq 200
+  res.responseTime lt 800
+  res.body.id eq 42
+  res.body.email contains "@example.com"
+}
+
+tests {
+  test("Response schema contains required fields", function() {
+    var data = res.getBody();
+    expect(data).to.have.property('name');
+    expect(data.id).to.equal(42);
+  });
+}</code></pre>
+        </div>
+      </section>
+
+      <!-- SECTION: GIT WORKFLOW -->
+      <section id="git-workflow" class="doc-section">
+        <h2>Git Collaboration &amp; Sync <a class="header-anchor" href="#git-workflow">#</a></h2>
+        <p>
+          Because every request, environment, and assertion lives as human-readable plain text, versioning your API tests is as easy as versioning your application source code.
+        </p>
+        <ul>
+          <li><strong>Zero Merge Hell:</strong> Each request is an isolated file. Developers working on different endpoints never create merge conflicts.</li>
+          <li><strong>Pull Request Reviews:</strong> Review API contract changes, assertions, and test scripts directly in GitHub or GitLab PR diffs.</li>
+          <li><strong>Integrated Git Dialog (<kbd>Ctrl+Shift+G</kbd>):</strong> Inspect working tree branch status, stage collection changes, commit with messages, pull, and push directly from Poppy without switching to an external terminal.</li>
+        </ul>
+      </section>
+
+      <!-- SECTION: PROTOCOLS -->
+      <section id="http-rest" class="doc-section">
+        <h2>Protocols &amp; Request Types <a class="header-anchor" href="#http-rest">#</a></h2>
+
+        <h3>REST / HTTP Methods</h3>
+        <p>
+          Poppy supports all HTTP verbs: <span class="pill pill-get">GET</span>, <span class="pill pill-post">POST</span>, <span class="pill pill-put">PUT</span>, <span class="pill pill-delete">DELETE</span>, <span class="pill">PATCH</span>, <span class="pill">HEAD</span>, and <span class="pill">OPTIONS</span> over HTTP/1.1 and HTTP/2.
+        </p>
+
+        <h4>Path &amp; Query Parameters</h4>
+        <ul>
+          <li><strong>Path Variables:</strong> Use <code>:parameterName</code> in the URL (e.g. <code>/users/:id/orders/:orderId</code>). Poppy automatically binds values from the <em>Params &rarr; Path</em> tab.</li>
+          <li><strong>Query Parameters:</strong> Manage key-value pairs with individual enable/disable checkboxes and description notes.</li>
+        </ul>
+
+        <h4>Request Body Formats</h4>
+        <ul>
+          <li><strong>JSON:</strong> Real-time syntax highlighting, automatic error flagging with byte offsets, one-click <em>Prettify</em> and <em>Minify</em>.</li>
+          <li><strong>Multipart Form-Data:</strong> Send text fields alongside file attachments with automatic MIME type resolution.</li>
+          <li><strong>Form URL-Encoded:</strong> Standard key-value encoding for web form endpoints.</li>
+          <li><strong>Raw &amp; Binary:</strong> Upload raw strings, XML, HTML, or arbitrary binary files.</li>
+        </ul>
+
+        <!-- GRAPHQL -->
+        <h3 id="graphql">GraphQL Split Editor <a class="header-anchor" href="#graphql">#</a></h3>
+        <p>
+          Select the <strong>GraphQL</strong> body tab for a dual-pane editor:
+        </p>
+        <ul>
+          <li><strong>Query Pane:</strong> Write queries, mutations, and fragments with GraphQL syntax highlighting.</li>
+          <li><strong>Variables Pane:</strong> Write JSON variables (e.g. <code>{"limit": 10}</code>) with variable expansion support.</li>
+          <li><strong>Schema Introspection:</strong> One-click introspection fetches the remote GraphQL schema for query inspection.</li>
+        </ul>
+
+        <!-- WEBSOCKETS -->
+        <h3 id="websockets">WebSocket Client (<code>ws://</code> &amp; <code>wss://</code>) <a class="header-anchor" href="#websockets">#</a></h3>
+        <p>
+          Native RFC 6455 duplex communication:
+        </p>
+        <ul>
+          <li>Interactive handshake with custom headers and protocols.</li>
+          <li>Real-time timeline displaying sent (<span style="color:var(--accent);">▲ SENT</span>) and received (<span style="color:var(--accent-blue);">▼ RECV</span>) frames.</li>
+          <li>Support for Text, Binary, Ping, and Pong frames with automatic Pong replies.</li>
+          <li>Integrated JSON message inspector with syntax formatting.</li>
+        </ul>
+
+        <!-- GRPC -->
+        <h3 id="grpc">gRPC &amp; Protobuf Client <a class="header-anchor" href="#grpc">#</a></h3>
+        <p>
+          Native HTTP/2 unary gRPC execution:
+        </p>
+        <ul>
+          <li><strong>Proto Parser:</strong> Load <code>.proto</code> schema files directly from disk without compiling <code>protoc</code> plugins.</li>
+          <li><strong>Service &amp; Method Selector:</strong> Poppy parses packages and lists available services and methods in dropdowns.</li>
+          <li><strong>Automated JSON Template:</strong> Generates starter JSON payloads based on proto field definitions.</li>
+          <li><strong>5-Byte Frame Decoding:</strong> Encodes and decodes standard gRPC compression flags and length prefixes with full <code>grpc-status</code> and trailer header inspection.</li>
+        </ul>
+
+        <!-- SSE -->
+        <h3 id="sse-streaming">Server-Sent Events (SSE) &amp; LLM Streaming <a class="header-anchor" href="#sse-streaming">#</a></h3>
+        <p>
+          Available via <strong>Tools &rarr; Server-Sent Events...</strong>:
+        </p>
+        <ul>
+          <li>Connects to <code>text/event-stream</code> feeds with sub-millisecond timeline logging.</li>
+          <li>Parses <code>event</code>, <code>data</code>, <code>id</code>, and <code>retry</code> fields into an interactive event table.</li>
+          <li><strong>LLM Token Accumulator:</strong> Automatically captures and streams OpenAI/ChatGPT/Anthropic style <code>delta.content</code> chunks into a unified live markdown text pane.</li>
+        </ul>
+      </section>
+
+      <!-- SECTION: AUTHENTICATION -->
+      <section id="auth-overview" class="doc-section">
+        <h2>Authentication Suite <a class="header-anchor" href="#auth-overview">#</a></h2>
+        <p>
+          Authentication can be configured at the individual request level, or inherited seamlessly from a parent folder or collection.
+        </p>
+
+        <h3 id="auth-bearer-basic">Bearer, Basic &amp; API Key</h3>
+        <ul>
+          <li><strong>Bearer Token:</strong> Standard <code>Authorization: Bearer &lt;token&gt;</code> with dynamic variable substitution like <code>{{authToken}}</code>.</li>
+          <li><strong>Basic Auth:</strong> Username and password, automatically Base64-encoded into <code>Authorization: Basic &lt;credentials&gt;</code>.</li>
+          <li><strong>API Key:</strong> Custom key/value pair sent either as a custom Header (e.g. <code>X-API-Key</code>) or Query Parameter.</li>
+        </ul>
+
+        <h3 id="auth-oauth2">Interactive OAuth 2.0 Loopback Flow</h3>
+        <p>
+          Poppy features an embedded lightweight OAuth loopback server (running on <code>127.0.0.1:8089/callback</code>):
+        </p>
+        <ol>
+          <li>Configure your <strong>Auth URL</strong>, <strong>Token URL</strong>, <strong>Client ID</strong>, and <strong>Scopes</strong>.</li>
+          <li>Click <strong>Authorize in Browser</strong>. Poppy launches your default web browser to the identity provider.</li>
+          <li>Upon successful user authentication, the provider redirects to <code>127.0.0.1:8089/callback</code>.</li>
+          <li>Poppy intercepts the authorization code, completes the token exchange, extracts <code>access_token</code> and <code>refresh_token</code>, and automatically injects the Bearer token for subsequent requests.</li>
+        </ol>
+
+        <h3 id="auth-aws-sigv4">AWS Signature Version 4 (SigV4)</h3>
+        <p>
+          Native HMAC-SHA256 canonical request signing for Amazon Web Services:
+        </p>
+        <ul>
+          <li>Configurable Access Key ID, Secret Access Key, Session Token (for STS), AWS Region, and Service Name (e.g. <code>s3</code>, <code>execute-api</code>).</li>
+          <li>Automatically calculates <code>x-amz-date</code> and <code>Authorization: AWS4-HMAC-SHA256 Credential=...</code> headers.</li>
+        </ul>
+
+        <h3 id="auth-mtls">Mutual TLS (mTLS) &amp; Client Certificates</h3>
+        <p>
+          Authenticate against zero-trust APIs using client SSL certificates (<code>.pem</code> / <code>.crt</code>) and private keys with optional passphrase protection.
+        </p>
+      </section>
+
+      <!-- SECTION: VARIABLES & ENVIRONMENTS -->
+      <section id="variable-scopes" class="doc-section">
+        <h2>Variables &amp; Environments <a class="header-anchor" href="#variable-scopes">#</a></h2>
+
+        <h3>Variable Hierarchy &amp; Resolution Precedence</h3>
+        <p>
+          Poppy evaluates variables using a scoped hierarchical lookup. When a variable token like <code>{{baseUrl}}</code> is encountered, Poppy checks scopes in the following order (narrowest to broadest):
+        </p>
+        <ol>
+          <li><strong>Runtime Variables:</strong> Values injected dynamically by pre-request scripts or data fixture loops.</li>
+          <li><strong>Folder Variables:</strong> Defined in a parent directory's <code>folder.bru</code>.</li>
+          <li><strong>Collection Variables:</strong> Defined globally in the collection settings.</li>
+          <li><strong>Environment Variables:</strong> Defined in the currently active <code>.env</code> file (e.g. <code>dev.env</code> or <code>prod.env</code>).</li>
+          <li><strong>Process Environment Variables:</strong> Fallback to system environment variables using <code>{{process.env.VARIABLE_NAME}}</code>.</li>
+        </ol>
+
+        <h3 id="variable-syntax">Templating Syntax &amp; Developer Ergonomics</h3>
+        <p>
+          Wrap variable names in double curly brackets: <code>{{variableName}}</code>.
+        </p>
+        <ul>
+          <li><strong>URL Bar Autocomplete:</strong> Type <code>{{</code> anywhere in the URL bar to bring up instant autocomplete suggestions showing variable names and current values.</li>
+          <li><strong>Hover Inspection:</strong> Hover over any <code>{{variable}}</code> in the URL bar to display an inspection tooltip revealing its resolved value and originating scope.</li>
+          <li><strong>Dynamic Generators:</strong> Built-in system variables like <code>{{$guid}}</code>, <code>{{$timestamp}}</code>, and <code>{{$randomInt}}</code>.</li>
+        </ul>
+
+        <h3 id="secret-isolation">Secrets Vault &amp; Masking</h3>
+        <p>
+          To prevent credentials from being committed to public Git repositories:
+        </p>
+        <ul>
+          <li>Sensitive environment variables are persisted into separate <code>&lt;env&gt;.secret.env</code> files, which are automatically included in <code>.gitignore</code>.</li>
+          <li>The UI features an interactive <strong>Show / Hide Secrets</strong> toggle that masks secret values with bullet dots (<code>••••••••</code>) during presentations or screencasts.</li>
+        </ul>
+      </section>
+
+      <!-- SECTION: SCRIPTING & ASSERTIONS -->
+      <section id="declarative-assertions" class="doc-section">
+        <h2>Scripting &amp; Assertions Engine <a class="header-anchor" href="#declarative-assertions">#</a></h2>
+
+        <h3>Declarative Zero-Code Assertions</h3>
+        <p>
+          Declarative assertions allow you to validate response status, latency, headers, and payload values without writing any JavaScript code:
+        </p>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>assertions block</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>assertions {
+  res.status eq 200
+  res.responseTime lt 500
+  res.size lte 20480
+  res.header('content-type') contains "application/json"
+  res.body.users[0].role eq "admin"
+  res.body.error not_contains "unauthorized"
+}</code></pre>
+        </div>
+
+        <div class="table-container">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Operator</th>
+                <th>Description</th>
+                <th>Example</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>eq</code></td>
+                <td>Equal to (numeric or string equality)</td>
+                <td><code>res.status eq 200</code></td>
+              </tr>
+              <tr>
+                <td><code>neq</code></td>
+                <td>Not equal to</td>
+                <td><code>res.status neq 500</code></td>
+              </tr>
+              <tr>
+                <td><code>gt</code> / <code>gte</code></td>
+                <td>Greater than / Greater than or equal to</td>
+                <td><code>res.body.count gte 1</code></td>
+              </tr>
+              <tr>
+                <td><code>lt</code> / <code>lte</code></td>
+                <td>Less than / Less than or equal to</td>
+                <td><code>res.responseTime lt 1000</code></td>
+              </tr>
+              <tr>
+                <td><code>contains</code></td>
+                <td>String contains substring (case-insensitive)</td>
+                <td><code>res.body.status contains "active"</code></td>
+              </tr>
+              <tr>
+                <td><code>not_contains</code></td>
+                <td>String does not contain substring</td>
+                <td><code>res.body.message not_contains "error"</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- JAVASCRIPT SANDBOX -->
+        <h3 id="javascript-engine">JavaScript Sandbox (QJSEngine)</h3>
+        <p>
+          Poppy integrates Qt's high-performance <code>QJSEngine</code> ECMAScript runtime. Scripts execute securely in an isolated sandbox with configurable watchdog timeouts (default: 8,000ms) to prevent infinite loops.
+        </p>
+
+        <h3 id="scripting-api"><code>poppy</code> &amp; <code>bru</code> API Reference</h3>
+        <p>
+          Both <code>poppy</code> and <code>bru</code> global namespaces expose the same methods:
+        </p>
+
+        <div class="table-container">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Method</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>poppy.getEnvVar(name)</code></td>
+                <td>Retrieves the current value of an environment variable.</td>
+              </tr>
+              <tr>
+                <td><code>poppy.setEnvVar(name, value)</code></td>
+                <td>Sets or updates an environment variable for subsequent requests.</td>
+              </tr>
+              <tr>
+                <td><code>poppy.getVar(name)</code></td>
+                <td>Retrieves a scoped runtime or collection variable.</td>
+              </tr>
+              <tr>
+                <td><code>poppy.setVar(name, value)</code></td>
+                <td>Sets a runtime variable accessible across tests.</td>
+              </tr>
+              <tr>
+                <td><code>poppy.setNextRequest(requestName)</code></td>
+                <td>Controls collection runner workflow by specifying the next request to execute.</td>
+              </tr>
+              <tr>
+                <td><code>poppy.sleep(milliseconds)</code></td>
+                <td>Pauses execution synchronously (up to 10,000 ms).</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h4>Request &amp; Response Objects</h4>
+        <ul>
+          <li><strong><code>req</code>:</strong> Access <code>req.url</code>, <code>req.method</code>, and <code>req.body</code>.</li>
+          <li><strong><code>res</code>:</strong> In post-response scripts and tests, access:
+            <ul>
+              <li><code>res.getStatus()</code> or <code>res.status</code> (e.g. <code>200</code>)</li>
+              <li><code>res.getBody()</code> (parsed JSON object or raw string)</li>
+              <li><code>res.getHeader(name)</code></li>
+              <li><code>res.responseTime</code> (latency in ms)</li>
+            </ul>
+          </li>
+        </ul>
+
+        <!-- CHAI MOCHA TESTS -->
+        <h3 id="chai-mocha-tests">Chai / Mocha Style Tests</h3>
+        <p>
+          In the <strong>Tests</strong> tab, write unit tests using familiar assertion syntax:
+        </p>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>tests block</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>tests {
+  test("Status code is 200 OK", function() {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("User authentication token received", function() {
+    var data = res.getBody();
+    expect(data).to.have.property("token");
+    expect(data.token).to.be.a("string");
+    
+    // Automatically persist token for subsequent requests
+    poppy.setEnvVar("authToken", data.token);
+  });
+}</code></pre>
+        </div>
+
+        <h3 id="postman-compat">Postman <code>pm.*</code> Compatibility Shim</h3>
+        <p>
+          To make migrating existing scripts from Postman frictionless, Poppy includes a built-in <code>pm.*</code> compatibility layer:
+        </p>
+        <div class="code-block-wrapper">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>// These standard Postman script commands work out-of-the-box:
+pm.environment.set("session_id", res.getBody().id);
+var currentEnv = pm.environment.get("baseUrl");
+pm.variables.set("tempKey", "12345");</code></pre>
+        </div>
+      </section>
+
+      <!-- SECTION: CLI & CI/CD -->
+      <section id="cli-runner" class="doc-section">
+        <h2>CLI Runner &amp; CI/CD Automation <a class="header-anchor" href="#cli-runner">#</a></h2>
+        <p>
+          The standalone <code>poppy-cli</code> binary runs entire collections headlessly inside CI/CD environments with zero GUI dependencies.
+        </p>
+
+        <h3>Basic Usage</h3>
+        <div class="code-block-wrapper">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>poppy-cli run &lt;path-to-collection-or-bru&gt; [options]</code></pre>
+        </div>
+
+        <div class="table-container">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Option</th>
+                <th>Short</th>
+                <th>Default</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>--env &lt;name&gt;</code></td>
+                <td><code>-e</code></td>
+                <td>None</td>
+                <td>Target environment name (e.g. <code>staging</code> maps to <code>environments/staging.env</code>)</td>
+              </tr>
+              <tr>
+                <td><code>--reporter &lt;format&gt;</code></td>
+                <td><code>-r</code></td>
+                <td><code>cli</code></td>
+                <td>Output format: <code>cli</code>, <code>json</code>, or <code>junit</code></td>
+              </tr>
+              <tr>
+                <td><code>--iterations &lt;n&gt;</code></td>
+                <td><code>-i</code></td>
+                <td><code>1</code></td>
+                <td>Number of consecutive iteration runs to execute</td>
+              </tr>
+              <tr>
+                <td><code>--concurrency &lt;n&gt;</code></td>
+                <td><code>-c</code></td>
+                <td><code>1</code></td>
+                <td>Number of multithreaded worker threads to run requests concurrently</td>
+              </tr>
+              <tr>
+                <td><code>--delay &lt;ms&gt;</code></td>
+                <td>—</td>
+                <td><code>0</code></td>
+                <td>Delay between requests in milliseconds (useful for rate-limiting)</td>
+              </tr>
+              <tr>
+                <td><code>--data &lt;file&gt;</code></td>
+                <td><code>-d</code></td>
+                <td>None</td>
+                <td>Path to CSV or JSON fixture file for data-driven testing</td>
+              </tr>
+              <tr>
+                <td><code>--output &lt;file&gt;</code></td>
+                <td><code>-o</code></td>
+                <td>stdout</td>
+                <td>Save output report directly to a file</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3 id="cli-data-fixtures">Data-Driven Testing (CSV &amp; JSON Fixtures)</h3>
+        <p>
+          Execute your test suite across multiple data rows. Poppy maps each row's columns into <code>{{variable}}</code> placeholders for each cycle:
+        </p>
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>users.csv</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>username,expectedRole,expectedStatus
+ada_lovelace,admin,200
+alan_turing,developer,200
+anonymous_guest,guest,403</code></pre>
+        </div>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>CLI Command</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>poppy-cli run ./my-collection --env staging --data ./users.csv</code></pre>
+        </div>
+
+        <h3 id="cli-reporters">Reporters &amp; JUnit XML</h3>
+        <p>
+          Export standard JUnit XML reports to integrate with CI test dashboards:
+        </p>
+        <div class="code-block-wrapper">
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>poppy-cli run ./my-collection --env ci --reporter junit --output junit-results.xml</code></pre>
+        </div>
+
+        <h3 id="cli-ci-cd">GitHub Actions &amp; GitLab CI Recipes</h3>
+
+        <h4>GitHub Actions Workflow</h4>
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>.github/workflows/api-tests.yml</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code>name: API Regression Suite
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Download Poppy CLI
+        run: |
+          curl -sL https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-linux-x64.tar.gz | tar -xz
+          sudo mv Poppy-linux-x64/poppy-cli /usr/local/bin/
+
+      - name: Run Collection Tests
+        env:
+          API_SECRET_TOKEN: ${{ secrets.PROD_API_TOKEN }}
+        run: |
+          poppy-cli run ./tests/api-collection \
+            --env production \
+            --reporter junit \
+            --output test-results.xml
+
+      - name: Publish Test Results
+        uses: EnricoMi/publish-unit-test-result-action@v2
+        if: always()
+        with:
+          files: test-results.xml</code></pre>
+        </div>
+      </section>
+
+      <!-- SECTION: ADVANCED TOOLS -->
+      <section id="mock-server" class="doc-section">
+        <h2>Advanced Developer Tools <a class="header-anchor" href="#mock-server">#</a></h2>
+
+        <h3>Embedded Local Mock Server</h3>
+        <p>
+          Simulate backend APIs without writing boilerplate mock code. Accessible via <strong>Tools &rarr; Mock Server...</strong>:
+        </p>
+        <ul>
+          <li>Bind to any local port (e.g. <code>8080</code>, <code>3000</code>).</li>
+          <li>Configure routes with exact HTTP method, URL path, custom response headers, HTTP status codes, and JSON response bodies.</li>
+          <li><strong>Simulated Latency:</strong> Add configurable delay (in ms) to test frontend loading spinners and timeout handling.</li>
+          <li><strong>One-Click Collection Import:</strong> Instantly populate mock endpoints from all requests in your active collection.</li>
+          <li><strong>Live Logging:</strong> Inspect incoming requests, payloads, and client headers in real time.</li>
+        </ul>
+
+        <h3 id="response-diff">Side-by-Side Response Diff Viewer</h3>
+        <p>
+          Compare API responses across environments or revisions via <strong>Tools &rarr; Response Diff Viewer</strong>:
+        </p>
+        <ul>
+          <li>Interactive dual-pane visual difference viewer.</li>
+          <li>Synchronized line scrolling, line number alignment, and additions/deletions coloring.</li>
+          <li>Load responses directly from current editor tabs, past execution history, or saved files on disk.</li>
+        </ul>
+
+        <h3 id="data-visualizer">Response Visualizer &amp; Data Grid</h3>
+        <p>
+          Under the response section, switch to the <strong>Visualize</strong> tab:
+        </p>
+        <ul>
+          <li><strong>Interactive Data Grid:</strong> Transforms JSON arrays into sortable, filterable tables with column resizing.</li>
+          <li><strong>Bar Chart Generator:</strong> Automatically renders comparative bar charts for numeric metrics against text keys.</li>
+          <li><strong>Property Inspector:</strong> Visualizes nested objects with key, type, and value inspection.</li>
+        </ul>
+
+        <h3 id="cookie-jar">Cookie Manager &amp; Persistence (<kbd>Ctrl+K</kbd>)</h3>
+        <p>
+          Poppy includes a built-in Netscape-compatible cookie engine:
+        </p>
+        <ul>
+          <li>Captures and stores cross-request session cookies automatically via <code>Set-Cookie</code> headers.</li>
+          <li>Press <kbd>Ctrl+K</kbd> to inspect, search, edit, or delete stored cookies by domain and path.</li>
+          <li>The response pane features a dedicated <strong>Cookies</strong> tab displaying all cookies set by the executed endpoint.</li>
+        </ul>
+
+        <h3 id="command-palette">Quick Open Command Palette (<kbd>Ctrl+P</kbd>)</h3>
+        <p>
+          Instantly jump to any request in your collection. Press <kbd>Ctrl+P</kbd>, start typing, and use arrow keys to navigate. Shows colored HTTP method pills and directory breadcrumbs.
+        </p>
+
+        <h3 id="global-find">Global Find &amp; Replace (<kbd>Ctrl+Shift+F</kbd>)</h3>
+        <p>
+          Search across your entire collection: request names, URLs, headers, request bodies, assertions, and test scripts. Supports case-sensitive matching, regex, and selective or batch replacement.
+        </p>
+
+        <h3 id="interop-exporters">Interoperability, Migration &amp; Codegen</h3>
+        <ul>
+          <li><strong>cURL Paste Auto-Detect:</strong> Paste any <code>curl ...</code> command directly into the URL bar. Poppy parses method, headers, parameters, and bodies automatically.</li>
+          <li><strong>Postman v2.1:</strong> Two-way import and export between Postman collections and Poppy collections.</li>
+          <li><strong>Insomnia v4 &amp; OpenAPI 3.0:</strong> Import OpenAPI 3.0 specs into collections or export collections to OpenAPI 3.0 JSON.</li>
+          <li><strong>HTTP Archive (.har):</strong> Export collections to HAR format for sharing with web devtools.</li>
+          <li><strong>Multi-Language Code Generation:</strong> Export any request with one click to production-ready code in <strong>Python</strong>, <strong>JavaScript (Fetch &amp; Axios)</strong>, <strong>Go</strong>, <strong>Rust</strong>, <strong>C#</strong>, <strong>Java</strong>, <strong>PHP</strong>, <strong>Ruby</strong>, and <strong>C++ (libcurl)</strong>.</li>
+        </ul>
+      </section>
+
+      <!-- SECTION: KEYBOARD SHORTCUTS -->
+      <section id="keyboard-shortcuts" class="doc-section">
+        <h2>Keyboard Shortcuts Reference <a class="header-anchor" href="#keyboard-shortcuts">#</a></h2>
+        <div class="table-container">
+          <table class="doc-table">
+            <thead>
+              <tr>
+                <th>Shortcut</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><kbd>Ctrl+Enter</kbd> / <kbd>Cmd+Enter</kbd></td>
+                <td>Send current request</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+P</kbd> / <kbd>Cmd+P</kbd></td>
+                <td>Quick Open Command Palette (fuzzy switcher)</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+F</kbd> / <kbd>Cmd+F</kbd></td>
+                <td>In-response search and JSONPath evaluation</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+Shift+F</kbd></td>
+                <td>Global Find &amp; Replace across collection</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+Shift+G</kbd></td>
+                <td>Open Git Version Control &amp; Sync dialog</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+K</kbd> / <kbd>Cmd+K</kbd></td>
+                <td>Open Cookie Jar &amp; Manager dialog</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+T</kbd> / <kbd>Cmd+T</kbd></td>
+                <td>Toggle Dark / Light UI theme</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+S</kbd> / <kbd>Cmd+S</kbd></td>
+                <td>Save active request to disk</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+W</kbd> / <kbd>Cmd+W</kbd></td>
+                <td>Close active tab</td>
+              </tr>
+              <tr>
+                <td><kbd>Ctrl+N</kbd> / <kbd>Cmd+N</kbd></td>
+                <td>New request dialog</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- SECTION: BUILD FROM SOURCE -->
+      <section id="build-from-source" class="doc-section">
+        <h2>Building from Source <a class="header-anchor" href="#build-from-source">#</a></h2>
+        <p>
+          Poppy uses CMake and requires a modern C++20 compiler and Qt 6.
+        </p>
+
+        <h3>Prerequisites</h3>
+        <ul>
+          <li><strong>CMake</strong> (&gt;= 3.20)</li>
+          <li><strong>C++20 Compiler:</strong> GCC 11+, Clang 14+, or MSVC 2022+</li>
+          <li><strong>Qt 6:</strong> Core, Gui, Widgets, Network, Qml</li>
+          <li><strong>Ninja:</strong> Recommended build system</li>
+        </ul>
+
+        <div class="code-block-wrapper has-header">
+          <div class="code-block-header"><span>Build Commands</span></div>
+          <button class="copy-btn" onclick="copyCode(this)">Copy</button>
+          <pre><code># 1. Clone repository
+git clone https://github.com/williampepple1/Poppy.git
+cd Poppy
+
+# 2. Configure with CMake
+cmake -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+# 3. Compile GUI and CLI
+cmake --build build
+
+# 4. Run automated test suites (13 suites)
+ctest --test-dir build --output-on-failure</code></pre>
+        </div>
+      </section>
+
+      <!-- FOOTER -->
+      <footer class="docs-footer">
+        <p>&copy; 2026 Poppy. Open source under the MIT License.</p>
+        <div style="display: flex; gap: 1rem; align-items: center;">
+          <a class="back-to-top-btn" href="#">&uarr; Back to Top</a>
+          <a href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">GitHub</a>
+        </div>
+      </footer>
+
+    </main>
+
+    <!-- RIGHT ON-THIS-PAGE TABLE OF CONTENTS -->
+    <aside class="toc-panel">
+      <div class="toc-title">On this page</div>
+      <ul class="toc-list" id="onThisPageToc">
+        <li class="toc-item"><a href="#introduction">Overview</a></li>
+        <li class="toc-item"><a href="#architecture">Architecture &amp; Benchmarks</a></li>
+        <li class="toc-item"><a href="#installation">Installation &amp; Setup</a></li>
+        <li class="toc-item"><a href="#quickstart">Quickstart Guide</a></li>
+        <li class="toc-item"><a href="#directory-structure">Collection Directory Spec</a></li>
+        <li class="toc-item"><a href="#bru-file-format">The .bru File Format</a></li>
+        <li class="toc-item"><a href="#git-workflow">Git Collaboration</a></li>
+        <li class="toc-item"><a href="#http-rest">Protocols &amp; REST</a></li>
+        <li class="toc-item"><a href="#graphql">GraphQL Split Editor</a></li>
+        <li class="toc-item"><a href="#websockets">WebSocket Client</a></li>
+        <li class="toc-item"><a href="#grpc">gRPC &amp; Protobuf</a></li>
+        <li class="toc-item"><a href="#sse-streaming">SSE &amp; LLM Streams</a></li>
+        <li class="toc-item"><a href="#auth-overview">Authentication Suite</a></li>
+        <li class="toc-item"><a href="#variable-scopes">Variables &amp; Scopes</a></li>
+        <li class="toc-item"><a href="#declarative-assertions">Scripting &amp; Assertions</a></li>
+        <li class="toc-item"><a href="#cli-runner">CLI &amp; CI/CD Automation</a></li>
+        <li class="toc-item"><a href="#mock-server">Advanced Tools</a></li>
+        <li class="toc-item"><a href="#keyboard-shortcuts">Keyboard Shortcuts</a></li>
+        <li class="toc-item"><a href="#build-from-source">Building from Source</a></li>
+      </ul>
+    </aside>
+
+  </div>
+
+  <script>
+    // ── Theme toggle handling (Light Mode by default) ──
+    (function () {
+      var themeBtn = document.getElementById('themeToggleBtn');
+      var themeIcon = themeBtn ? themeBtn.querySelector('.theme-icon') : null;
+
+      function applyTheme(theme) {
+        if (theme === 'dark') {
+          document.documentElement.setAttribute('data-theme', 'dark');
+          if (themeIcon) themeIcon.textContent = '☀️';
+          if (themeBtn) themeBtn.title = 'Switch to Light Mode';
+        } else {
+          document.documentElement.removeAttribute('data-theme');
+          if (themeIcon) themeIcon.textContent = '🌙';
+          if (themeBtn) themeBtn.title = 'Switch to Dark Mode';
+        }
+      }
+
+      var savedTheme = localStorage.getItem('poppy-theme');
+      if (savedTheme === 'dark') {
+        applyTheme('dark');
+      } else {
+        applyTheme('light');
+      }
+
+      if (themeBtn) {
+        themeBtn.addEventListener('click', function () {
+          var current = document.documentElement.getAttribute('data-theme');
+          var next = current === 'dark' ? 'light' : 'dark';
+          applyTheme(next);
+          localStorage.setItem('poppy-theme', next);
+        });
+      }
+    })();
+
+    // ── Copy Code Snippets ──
+    function copyCode(btn) {
+      var pre = btn.parentElement.querySelector('pre');
+      if (!pre) return;
+      var text = pre.innerText;
+      navigator.clipboard.writeText(text).then(function() {
+        var original = btn.textContent;
+        btn.textContent = 'Copied!';
+        btn.style.color = '#10b981';
+        setTimeout(function() {
+          btn.textContent = original;
+          btn.style.color = '';
+        }, 2000);
+      });
+    }
+
+    // ── Mobile Drawer Toggle ──
+    var mobileBtn = document.getElementById('mobileMenuBtn');
+    var sidebar = document.getElementById('docSidebar');
+    var backdrop = document.getElementById('sidebarBackdrop');
+
+    function toggleMobileMenu() {
+      var isOpen = sidebar.classList.contains('open');
+      if (isOpen) {
+        sidebar.classList.remove('open');
+        backdrop.classList.remove('open');
+      } else {
+        sidebar.classList.add('open');
+        backdrop.classList.add('open');
+      }
+    }
+
+    if (mobileBtn) mobileBtn.addEventListener('click', toggleMobileMenu);
+    if (backdrop) backdrop.addEventListener('click', toggleMobileMenu);
+
+    // Close mobile sidebar on link click
+    if (sidebar) {
+      sidebar.querySelectorAll('a').forEach(function(link) {
+        link.addEventListener('click', function() {
+          if (window.innerWidth <= 900) {
+            sidebar.classList.remove('open');
+            backdrop.classList.remove('open');
+          }
+        });
+      });
+    }
+
+    // ── Sidebar Topic Filter ──
+    var filterInput = document.getElementById('sidebarFilter');
+    if (filterInput) {
+      filterInput.addEventListener('input', function() {
+        var val = this.value.toLowerCase().trim();
+        var items = document.querySelectorAll('.sidebar-nav-item');
+        var groups = document.querySelectorAll('.sidebar-group');
+
+        items.forEach(function(item) {
+          var text = item.textContent.toLowerCase();
+          if (text.indexOf(val) !== -1) {
+            item.style.display = '';
+          } else {
+            item.style.display = 'none';
+          }
+        });
+
+        // Hide empty groups
+        groups.forEach(function(group) {
+          var visibleItems = group.querySelectorAll('.sidebar-nav-item:not([style*="display: none"])');
+          if (visibleItems.length === 0 && val !== '') {
+            group.style.display = 'none';
+          } else {
+            group.style.display = '';
+          }
+        });
+      });
+    }
+
+    // ── Global Search Input & '/' Keyboard Shortcut ──
+    var searchInput = document.getElementById('docSearchInput');
+    window.addEventListener('keydown', function(e) {
+      if (e.key === '/' && document.activeElement !== searchInput && document.activeElement.tagName !== 'INPUT') {
+        e.preventDefault();
+        if (searchInput) searchInput.focus();
+      }
+    });
+
+    if (searchInput) {
+      searchInput.addEventListener('input', function() {
+        var query = this.value.toLowerCase().trim();
+        if (filterInput) {
+          filterInput.value = query;
+          filterInput.dispatchEvent(new Event('input'));
+        }
+      });
+    }
+
+    // ── Scroll Spy for Active Navigation Links ──
+    (function () {
+      var sections = document.querySelectorAll('section.doc-section, h2[id], h3[id]');
+      var sidebarLinks = document.querySelectorAll('.sidebar-nav-item a');
+      var tocLinks = document.querySelectorAll('.toc-item a');
+
+      function updateActive() {
+        var scrollPos = window.scrollY + 100;
+        var currentSectionId = '';
+
+        sections.forEach(function(sec) {
+          var top = sec.offsetTop;
+          var height = sec.offsetHeight;
+          var id = sec.getAttribute('id');
+          if (id && scrollPos >= top && scrollPos < top + height) {
+            currentSectionId = id;
+          }
+        });
+
+        if (currentSectionId) {
+          sidebarLinks.forEach(function(link) {
+            if (link.getAttribute('href') === '#' + currentSectionId) {
+              link.classList.add('active');
+            } else {
+              link.classList.remove('active');
+            }
+          });
+
+          tocLinks.forEach(function(link) {
+            if (link.getAttribute('href') === '#' + currentSectionId) {
+              link.classList.add('active');
+            } else {
+              link.classList.remove('active');
+            }
+          });
+        }
+      }
+
+      window.addEventListener('scroll', updateActive, { passive: true });
+      updateActive();
+    })();
+  </script>
+</body>
+</html>

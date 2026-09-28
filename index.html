@@ -116,6 +116,26 @@
       width: 28px;
       height: 28px;
     }
+    nav .nav-left {
+      display: flex;
+      align-items: center;
+      gap: 1.75rem;
+    }
+    nav .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 1.25rem;
+    }
+    nav a.nav-link {
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.15s ease;
+    }
+    nav a.nav-link:hover {
+      color: var(--fg);
+    }
     nav .nav-right {
       display: flex;
       align-items: center;
@@ -660,6 +680,7 @@
     }
 
     @media (max-width: 640px) {
+      nav .nav-links { display: none; }
       .hero-icon { width: 68px; height: 68px; margin-bottom: 1.25rem; }
       .downloads { flex-direction: column; width: 100%; max-width: 380px; margin: 0 auto 1.5rem; }
       .downloads .btn { width: 100%; justify-content: center; }
@@ -690,10 +711,17 @@
 <body>
 
   <nav>
-    <a class="logo" href="#">
-      <img src="icon.png" alt="Poppy Logo" />
-      Poppy
-    </a>
+    <div class="nav-left">
+      <a class="logo" href="#">
+        <img src="icon.png" alt="Poppy Logo" />
+        Poppy
+      </a>
+      <div class="nav-links">
+        <a class="nav-link" href="#features">Features</a>
+        <a class="nav-link" href="#cli">CLI</a>
+        <a class="nav-link" href="docs.html">Documentation</a>
+      </div>
+    </div>
     <div class="nav-right">
       <button id="themeToggleBtn" class="theme-toggle-btn" aria-label="Toggle Dark/Light Theme" title="Switch to Dark Mode">
         <span class="theme-icon">🌙</span>
@@ -738,6 +766,10 @@
          href="https://github.com/williampepple1/Poppy/releases/latest/download/Poppy-linux-x64.tar.gz"
          download>
         <span>🐧 Linux (.tar.gz)</span>
+      </a>
+      <a class="btn"
+         href="docs.html">
+        <span>📖 Documentation</span>
       </a>
       <a class="btn"
          href="https://github.com/williampepple1/Poppy/releases"
@@ -982,7 +1014,7 @@
   </section>
 
   <!-- FULL FEATURE MATRIX -->
-  <section class="features">
+  <section class="features" id="features">
     <h2>Everything You Need. Nothing Extra.</h2>
     <div class="feature-grid">
 
@@ -1080,7 +1112,7 @@
   </section>
 
   <!-- CLI SECTION -->
-  <section class="cli-section">
+  <section class="cli-section" id="cli">
     <h2>Automate with Standalone CLI</h2>
     <p>Run your entire test suite headless in GitHub Actions, GitLab CI, or Jenkins with zero dependencies.</p>
     <div class="cli-box">
@@ -1091,6 +1123,7 @@
   <footer>
     <p>© 2026 Poppy. Open source under the MIT license.</p>
     <p>
+      <a href="docs.html">Documentation</a> &bull;
       <a href="https://github.com/williampepple1/Poppy" target="_blank" rel="noopener">View on GitHub</a>
     </p>
   </footer>

@@ -1,0 +1,13 @@
+{
+  "name": "poppy-commerce-backend",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Local demo backend for the Poppy Commerce Demo API collection.",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
