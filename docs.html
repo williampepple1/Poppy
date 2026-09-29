@@ -960,7 +960,7 @@
         <ul class="sidebar-nav-list">
           <li class="sidebar-nav-item"><a href="#variable-scopes">Variable Hierarchy &amp; Scopes</a></li>
           <li class="sidebar-nav-item"><a href="#variable-syntax">Interpolation <code>{{var}}</code></a></li>
-          <li class="sidebar-nav-item"><a href="#secret-isolation">Secrets Vault &amp; Masking</a></li>
+          <li class="sidebar-nav-item"><a href="#secret-isolation">Secrets Vault &amp; Git Safety</a></li>
         </ul>
       </div>
 
@@ -1423,14 +1423,40 @@ tests {
           <li><strong>Dynamic Generators:</strong> Built-in system variables like <code>{{$guid}}</code>, <code>{{$timestamp}}</code>, and <code>{{$randomInt}}</code>.</li>
         </ul>
 
-        <h3 id="secret-isolation">Secrets Vault &amp; Masking</h3>
+        <h3 id="secret-isolation">Keeping Secrets Safe in Git</h3>
         <p>
-          To prevent credentials from being committed to public Git repositories:
+          Plain text collection files make your API requests and tests versionable and reviewable in the same Pull Request as your application code. Poppy ensures sensitive credentials (API tokens, passwords, private keys) are never leaked into Git:
+        </p>
+
+        <h4>1. Automatic Dual-File Separation (<code>.env</code> vs <code>.secret.env</code>)</h4>
+        <p>
+          When you configure environment variables, Poppy automatically separates public configuration from private credentials:
         </p>
         <ul>
-          <li>Sensitive environment variables are persisted into separate <code>&lt;env&gt;.secret.env</code> files, which are automatically included in <code>.gitignore</code>.</li>
-          <li>The UI features an interactive <strong>Show / Hide Secrets</strong> toggle that masks secret values with bullet dots (<code>••••••••</code>) during presentations or screencasts.</li>
+          <li><strong>Shared Configuration (<code>environments/&lt;name&gt;.env</code>):</strong> Stores non-secret variables (e.g. <code>BASE_URL=https://api.example.com</code>, <code>API_VERSION=v1</code>). Safe to commit and share with your team.</li>
+          <li><strong>Local Secrets (<code>environments/&lt;name&gt;.secret.env</code>):</strong> Variables marked as <em>Secret</em> are stored in an isolated secret file that remains exclusively on your local machine.</li>
         </ul>
+
+        <h4>2. Automated Git Defense &amp; Pathspec Filtering</h4>
+        <ul>
+          <li><strong>Auto <code>.gitignore</code>:</strong> Poppy automatically appends <code>*.secret.env</code> to your repository's <code>.gitignore</code>.</li>
+          <li><strong>Negative Pathspec Protection:</strong> The built-in Git Sync tool explicitly excludes secret files at the Git command line (<code>git add -- . ":(exclude)*.secret.env"</code>), ensuring secrets are never accidentally staged even if <code>.gitignore</code> is missing.</li>
+          <li><strong>UI Masking:</strong> The environment editor features an interactive <strong>Show / Hide Secrets</strong> toggle that masks secret values with bullet dots (<code>••••••••</code>) during presentations or screencasts.</li>
+        </ul>
+
+        <h4>3. CI/CD Environment Variable Overlays (Zero Secrets on Disk)</h4>
+        <p>
+          In automated CI pipelines (GitHub Actions, GitLab CI, Jenkins), your build runners never need physical secret files committed to Git:
+        </p>
+        <ul>
+          <li><strong>Automatic Secret Overlay:</strong> Commit your environment file with secret variables left empty. In CI, inject matching environment variables (e.g., <code>API_TOKEN</code>). When <code>poppy-cli</code> runs, it automatically binds them to your requests.</li>
+          <li><strong>Direct Process Environment:</strong> Use <code>{{process.env.VARIABLE_NAME}}</code> directly in request headers, URLs, or bodies to read runner environment variables with zero configuration.</li>
+        </ul>
+
+        <h4>4. Execution History Redaction</h4>
+        <p>
+          Bearer tokens, passwords, API keys, and AWS Secret Access Keys are automatically redacted before session history is saved to <code>.history.json</code>, preventing accidental commits of past request logs.
+        </p>
       </section>
 
       <!-- SECTION: SCRIPTING & ASSERTIONS -->

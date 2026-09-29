@@ -122,9 +122,11 @@
 - **Instant Formatting**: Directly in the Body editor, click **Prettify** to re-indent and align JSON payloads or **Minify** to strip whitespace for compact wire transmission.
 - **Real-Time Syntax Validation**: As you type, dynamic validation highlights valid JSON or points out syntax error details with exact byte offset indicators.
 
-### 🔐 Environment Secrets Vault & Value Masking
+### 🔐 Git-Safe Secrets Vault & Masking
 - **Secret Value Masking**: Toggle sensitive environment variables (API tokens, passwords, private keys) with `••••••••` masking and an interactive `👁 Show Secrets` / `🔒 Hide Secrets` switch.
-- **Secure File Isolation**: Secret variables are isolated and persisted into `.env.secret` files to prevent accidental leakage into public Git repositories.
+- **Automatic File Isolation**: Secret variables are routed into separate `.secret.env` files, completely isolated from committed `.env` files.
+- **Automated Git Defense**: `.gitignore` is automatically configured to ignore `*.secret.env`, and built-in Git Push enforces negative pathspecs (`:(exclude)*.secret.env`) so secrets can never be staged or committed.
+- **CI/CD Process Overlays**: In headless CI environments, `poppy-cli` automatically overlays secrets from system environment variables without requiring secret files on disk.
 
 ### 📈 Session Network Telemetry & Bandwidth Tracker
 - **Status Bar Live Telemetry**: Persistent status bar widget (`⚡ N reqs | 📦 N KB | ⏱ avg N ms`) continuously tracks request volume, received byte throughput, and average response latency.
@@ -240,6 +242,28 @@ tests {
   });
 }
 ```
+
+---
+
+## Keeping Secrets Safe in Git
+
+Plain files allow your API collections and automated tests to be reviewed in the exact same Pull Request as your application source code. Poppy keeps environment secrets completely out of those files through a four-tier defense model:
+
+1. **Dual-File Separation (`.env` vs `.secret.env`)**:
+   - Safe configurations (`BASE_URL`, endpoints, timeouts) are stored in `environments/<name>.env` and committed to Git for the team.
+   - Secret variables marked with the *Secret* flag are automatically routed to `environments/<name>.secret.env` and kept strictly on the developer's local machine.
+
+2. **Automated Git Defense & Pathspec Filtering**:
+   - Poppy automatically appends `*.secret.env` to the project's `.gitignore`.
+   - The built-in Git Push tool enforces negative pathspecs (`git add -- . ":(exclude)*.secret.env"`), ensuring secret files are never accidentally staged even if `.gitignore` is missing or edited.
+
+3. **Zero-Disk Secrets in CI/CD**:
+   - In CI runners (GitHub Actions, GitLab CI, Jenkins), commit environment templates with secret tokens left empty (`API_TOKEN=""`).
+   - At runtime, `poppy-cli` automatically overlays values from matching process environment variables (`export API_TOKEN=...`).
+   - Alternatively, reference runner secrets directly via `{{process.env.VARIABLE_NAME}}`.
+
+4. **Automatic History Redaction**:
+   - All execution history saved to disk automatically redacts Bearer tokens, Basic Auth passwords, and AWS secret access keys, preventing accidental credential leaks from logs.
 
 ---
 
